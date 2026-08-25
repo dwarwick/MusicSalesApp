@@ -3,338 +3,518 @@
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
 @using MusicSalesApp.Models
-@using Syncfusion.Blazor.Notifications
 @attribute [Authorize(Policy = Permissions.ValidatedUser)]
 @inherits CreatorSettingsModel
 
-<PageTitle>Creator / Artist Settings</PageTitle>
+<PageTitle>Creator settings</PageTitle>
 
+@*
+    The same kind of surface as Manage Account, so it uses the same settings-* vocabulary
+    rather than a parallel creator-* one. What is genuinely creator-specific - status tiles,
+    numbered steps, payout headings, persona rows - is added beside it, not instead of it.
+
+    Payout setup is TWO requirements, not a sequence: IsPayoutReady is IsPayoutPayPalReady &&
+    IsPayoutTaxReady. The two sections are numbered for reference and can be done in either
+    order.
+*@
 <SfToast @ref="_toastRef" ShowCloseButton="true" NewestOnTop="true" ShowProgressBar="true" Timeout="5000">
     <ToastPosition X="Right" Y="Top"></ToastPosition>
 </SfToast>
 
-<div class="creator-settings-page">
-    <div class="creator-settings-shell">
-        @if (_loading)
-        {
-            <div class="creator-settings-loading">
-                <div class="spinner-border" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
+<div class="settings-page">
+    @if (_loading)
+    {
+        <div class="settings-loading" role="status">
+            <span class="settings-spinner" aria-hidden="true"></span>
+            <span>Loading your creator account&hellip;</span>
+        </div>
+    }
+    else if (!_isAuthenticated)
+    {
+        <div class="settings-main">
+            <div class="settings-alert settings-alert-warn" role="alert">
+                <svg class="settings-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                <span>You must be logged in to manage creator settings.</span>
             </div>
-        }
-        else if (!_isAuthenticated)
+        </div>
+    }
+    else
+    {
+        @* Fragment-only hrefs navigate to the home page here - Blazor resolves them against
+           <base href="/">. The route has to be spelled out. *@
+        @if (_isActiveCreator)
         {
-            <SfMessage Severity="MessageSeverity.Warning">You must be logged in to manage creator settings.</SfMessage>
+            <nav class="settings-nav" aria-label="Sections on this page">
+                <p class="settings-nav-heading">On this page</p>
+                <a href="@SectionLink("status")" class="settings-nav-link">Status</a>
+                @if (HasOutstandingSteps)
+                {
+                    <a href="@SectionLink("next-steps")" class="settings-nav-link">Next steps</a>
+                }
+                <a href="@SectionLink("catalogue")" class="settings-nav-link">Your catalogue</a>
+                <a href="@SectionLink("payouts")" class="settings-nav-link">Payouts</a>
+                <a href="@SectionLink("profile")" class="settings-nav-link">Profile</a>
+                <a href="@SectionLink("personas")" class="settings-nav-link">Personas</a>
+                <a href="@SectionLink("stop")" class="settings-nav-link settings-nav-link-danger">Stop being a creator</a>
+            </nav>
         }
-        else
-        {
-            <div class="creator-settings-topline">
-                <div class="creator-settings-title">
-                    <h2>Creator / Artist Settings</h2>
-                    <p>Account Email: @_userEmail</p>
-                </div>                
+
+        <div class="settings-main">
+            <div class="settings-head">
+                <p class="settings-head-eyebrow">Creator</p>
+                <h1 class="settings-head-title">Creator &amp; artist settings</h1>
+                <p class="settings-head-note">Signed in as <strong class="settings-head-email">@_userEmail</strong></p>
             </div>
 
             @if (!string.IsNullOrEmpty(_successMessage))
             {
-                <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>
+                <div class="settings-alert settings-alert-info" role="status">
+                    <svg class="settings-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                    <span>@_successMessage</span>
+                </div>
             }
 
             @if (!string.IsNullOrEmpty(_errorMessage))
             {
-                <SfMessage Severity="MessageSeverity.Error">@_errorMessage</SfMessage>
+                <div class="settings-alert settings-alert-warn" role="alert">
+                    <svg class="settings-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                    <span>@_errorMessage</span>
+                </div>
             }
 
-            @if (!_isActiveCreator)
-            {
-                <SfCard CssClass="creator-settings-card creator-settings-hero-card">
-                    <CardContent>
-                        <p class="creator-settings-kicker">Creator activation</p>
-                        <h3>Become a creator</h3>
-                        <p>Review and accept the Creator Agreement to enable creator tools for your account.</p>
+            <div class="settings-column">
 
-                        <div class="creator-agreement-box">
-                            <SfCheckBox @bind-Checked="_creatorAgreementAccepted" TChecked="bool" />
-                            <label>
-                                I have read and agree to the
-                                <a href="@AppPageRoutes.CreatorAgreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a>.
-                            </label>
+                @if (!_isActiveCreator)
+                {
+                    <section class="settings-card" id="activation">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Creator activation</p>
+                                <h2 class="settings-title">Become a creator</h2>
+                                <p class="settings-note">Review and accept the Creator Agreement to enable creator tools for your account.</p>
+                            </div>
                         </div>
 
-                        <div class="creator-settings-actions">
+                        @* Bordered rather than sitting loose above the button: this one checkbox is
+                           the whole gate between an account and creator tools. *@
+                        <div class="settings-consent">
+                            <SfCheckBox @bind-Checked="_creatorAgreementAccepted" TChecked="bool" />
+                            <span>
+                                I have read and agree to the
+                                <a href="@AppPageRoutes.CreatorAgreement" target="_blank" rel="noopener noreferrer" class="settings-link">Creator Agreement</a>.
+                            </span>
+                        </div>
+
+                        <div class="settings-actions">
                             @if (!_startingOnboarding)
                             {
-                                <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta" Content="Become a Creator" OnClick="StartCreatorOnboarding" Disabled="@(!CanStartOnboarding)" IconCss="streamtunes-button-icon streamtunes-button-icon-creator" />
-                                <span class="creator-settings-hint">
+                                <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="Become a Creator" OnClick="StartCreatorOnboarding" Disabled="@(!CanStartOnboarding)" />
+                                <span class="settings-inline-status">
                                     @(CanStartOnboarding ? "Your acceptance will be saved to your account." : "You must accept the agreement to continue.")
                                 </span>
                             }
                             else
                             {
-                                <span class="creator-settings-hint">Activating your creator account...</span>
+                                <span class="settings-working">Activating your creator account&hellip;</span>
                             }
                         </div>
-                    </CardContent>
-                </SfCard>
-            }
-            else
-            {
-                <SfCard CssClass="creator-settings-card">
-                    <CardContent>
-                        @if (_showActivationSuccess)
-                        {
-                            <div class="creator-success-hero">
-                                <div class="creator-success-icon" aria-hidden="true">✓</div>
-                                <div>
-                                    <p class="creator-settings-kicker">Creator account activated</p>
-                                    <h3>Congratulations - you're now a creator.</h3>
-                                    <p>You can upload your music immediately and start managing your creator catalog.</p>
-                                    <div class="creator-settings-actions">
-                                        <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta" Content="Upload Music" OnClick="NavigateToUpload" IconCss="streamtunes-button-icon streamtunes-button-icon-upload-music" />
-                                        <SfButton Content="Go to Creator Dashboard" OnClick="NavigateToDashboard" IconCss="streamtunes-button-icon streamtunes-button-icon-dashboard" />
+                    </section>
+                }
+                else
+                {
+                    @if (_showActivationSuccess)
+                    {
+                        <section class="settings-card" id="activated">
+                            <div class="settings-hero">
+                                <span class="settings-hero-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                                </span>
+                                <div class="settings-hero-body">
+                                    <p class="settings-eyebrow">Creator account activated</p>
+                                    <h2 class="settings-title">You are a creator.</h2>
+                                    <p class="settings-prose">You can upload your music immediately and start managing your creator catalogue. Payout setup comes later &mdash; it is only needed before your first payment.</p>
+                                    <div class="settings-actions">
+                                        <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="Upload Music" OnClick="NavigateToUpload" />
+                                        <SfButton CssClass="e-btn settings-btn" Content="Go to Creator Dashboard" OnClick="NavigateToDashboard" />
                                     </div>
                                 </div>
                             </div>
+                        </section>
+                    }
 
+                    <section class="settings-card" id="status">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Status</p>
+                                <h2 class="settings-title">Where you stand</h2>
+                            </div>
+                        </div>
+                        @* Each state is a pill with a dot and a word, so it survives being read in
+                           greyscale. The page used to print "Active" in green and "Required before
+                           payout" in amber, with nothing but hue separating them. *@
+                        <div class="status-tiles">
+                            <div class="status-tile">
+                                <span class="status-tile-label">Creator role</span>
+                                <span class="status-pill"><span class="status-pill-dot"></span>Active</span>
+                            </div>
+                            <div class="status-tile">
+                                <span class="status-tile-label">Music uploads</span>
+                                <span class="status-pill"><span class="status-pill-dot"></span>Enabled</span>
+                            </div>
+                            <div class="status-tile">
+                                <span class="status-tile-label">Payout setup</span>
+                                <span class="status-pill @(IsPayoutReady ? "" : "status-pill-warn")"><span class="status-pill-dot"></span>@(IsPayoutReady ? "Complete" : "Needed before payout")</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    @if (HasOutstandingSteps)
+                    {
+                        <section class="settings-card" id="next-steps">
+                            <div class="settings-section-head">
+                                <div>
+                                    <p class="settings-eyebrow">Next steps</p>
+                                    <h2 class="settings-title">Getting paid, in three steps</h2>
+                                    <p class="settings-note">You can upload and earn straight away. Payout setup only has to be done before the first payment leaves.</p>
+                                </div>
+                            </div>
+                            @* Every step reflects something the page actually knows, so the number
+                               becomes a tick when the step is genuinely done. It used to be three
+                               static cards that never changed state at all. *@
+                            <div class="steps">
+                                <div class="step">
+                                    <span class="step-badge @(HasUploadedMusic ? "step-badge-done" : "")" aria-hidden="true">
+                                        @if (HasUploadedMusic)
+                                        {
+                                            <svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                                        }
+                                        else
+                                        {
+                                            <text>1</text>
+                                        }
+                                    </span>
+                                    <span class="step-detail">
+                                        <span class="step-title">Upload your music</span>
+                                        <span class="step-body">Add songs and cover art.</span>
+                                    </span>
+                                </div>
+                                <div class="step">
+                                    <span class="step-badge @(IsPayoutPayPalReady ? "step-badge-done" : "")" aria-hidden="true">
+                                        @if (IsPayoutPayPalReady)
+                                        {
+                                            <svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                                        }
+                                        else
+                                        {
+                                            <text>2</text>
+                                        }
+                                    </span>
+                                    <span class="step-detail">
+                                        <span class="step-title">Add a PayPal payout email</span>
+                                        <span class="step-body">The account we send your earnings to. You confirm you own it or are authorised to use it.</span>
+                                    </span>
+                                </div>
+                                <div class="step">
+                                    <span class="step-badge @(IsPayoutTaxReady ? "step-badge-done" : "")" aria-hidden="true">
+                                        @if (IsPayoutTaxReady)
+                                        {
+                                            <svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                                        }
+                                        else
+                                        {
+                                            <text>3</text>
+                                        }
+                                    </span>
+                                    <span class="step-detail">
+                                        <span class="step-title">Complete your tax form</span>
+                                        <span class="step-body">A W-9 or W-8 is required before any payment can leave StreamTunes.</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </section>
+                    }
+
+                    <section class="settings-card" id="catalogue">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Your catalogue</p>
+                                <h2 class="settings-title">Manage your music</h2>
+                                <p class="settings-note">@CatalogueNote</p>
+                            </div>
+                        </div>
+                        <div class="settings-actions">
+                            <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="Upload Music" OnClick="NavigateToUpload" />
+                            <SfButton CssClass="e-btn settings-btn" Content="Manage My Songs" OnClick="NavigateToManageSongs" />
+                            <SfButton CssClass="e-btn settings-btn" Content="View Earnings" OnClick="NavigateToDashboard" />
+                        </div>
+                    </section>
+
+                    <section class="settings-card" id="payouts">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Payouts</p>
+                                <h2 class="settings-title">@(IsPayoutReady ? "Manage payout information" : "Payout setup")</h2>
+                                <p class="settings-note">Two things are needed before your first payment: a PayPal address we can send to, and a tax form. They can be done in either order.</p>
+                            </div>
+                        </div>
+
+                        @if (!_showPayoutSetup)
+                        {
                             @if (!IsPayoutReady)
                             {
-                                <div class="creator-info-strip">
-                                    <span class="streamtunes-button-icon streamtunes-button-icon-payout" aria-hidden="true"></span>
-                                    <div>
-                                        <strong>Payout setup comes later</strong>
-                                        <p>Once your balance reaches the minimum payout threshold, you will need to complete the required tax form and add an owned or authorized PayPal payout email before StreamTunes can send a payout.</p>
-                                    </div>
+                                <div class="info-strip info-strip-warn">
+                                    <svg class="info-strip-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" /></svg>
+                                    <span>Payout setup is not complete. Your earnings still accrue &mdash; nothing is lost while this is outstanding.</span>
                                 </div>
                             }
+                            <div class="settings-actions">
+                                <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="@(IsPayoutReady ? "Manage Payout Info" : "Set Up Payouts")" OnClick="TogglePayoutSetup" />
+                            </div>
                         }
                         else
                         {
-                            <p class="creator-settings-kicker">Creator status</p>
-                            <h3>Your creator account is active</h3>
-                            <p>Upload music now. Payout details are required before StreamTunes can send earnings.</p>
-                        }
-
-                        <div class="creator-status-grid">
-                            <div class="creator-status-card">
-                                <div class="creator-status-label">Creator role</div>
-                                <div class="creator-status-value good">Active</div>
-                            </div>
-                            <div class="creator-status-card">
-                                <div class="creator-status-label">Music uploads</div>
-                                <div class="creator-status-value good">Enabled</div>
-                            </div>
-                            <div class="creator-status-card">
-                                <div class="creator-status-label">Payout setup</div>
-                                <div class="creator-status-value @(IsPayoutReady ? "good" : "pending")">
-                                    @(IsPayoutReady ? "Complete" : "Required before payout")
-                                </div>
-                            </div>
-                        </div>
-
-                        @if (!IsPayoutReady)
-                        {
-                            <div class="creator-checklist">
-                                <div class="creator-checklist-item">
-                                    <div class="creator-checklist-icon">1</div>
-                                    <div><strong>Upload your music</strong><span> Add songs and cover art.</span></div>
-                                </div>
-                                <div class="creator-checklist-item">
-                                    <div class="creator-checklist-icon">2</div>
-                                    <div><strong>Reach the payout threshold</strong><span> Earnings can accrue before payout setup is complete.</span></div>
-                                </div>
-                                <div class="creator-checklist-item">
-                                    <div class="creator-checklist-icon">3</div>
-                                    <div><strong>Complete payout setup</strong><span> Submit the required tax form and provide an owned or authorized PayPal email before your first payout.</span></div>
-                                </div>
-                            </div>
-                        }
-
-                        <div class="creator-settings-actions">
-                            <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta" Content="Upload Music" OnClick="NavigateToUpload" IconCss="streamtunes-button-icon streamtunes-button-icon-upload-music" />
-                            <SfButton Content="Manage My Songs" OnClick="NavigateToManageSongs" IconCss="streamtunes-button-icon streamtunes-button-icon-song-list" />
-                            <SfButton Content="View Earnings" OnClick="NavigateToDashboard" IconCss="streamtunes-button-icon streamtunes-button-icon-earnings" />
-                            <SfButton Content='@(IsPayoutReady ? "Manage Payout Info" : "Set Up Payouts")' OnClick="TogglePayoutSetup" CssClass="e-secondary" IconCss="streamtunes-button-icon streamtunes-button-icon-payout" />
-                        </div>
-                    </CardContent>
-                </SfCard>
-
-                @if (_showPayoutSetup)
-                {
-                    <SfCard CssClass="creator-settings-card">
-                        <CardContent>
-                            <p class="creator-settings-kicker">Payout setup</p>
-                            <h3>@(IsPayoutReady ? "Manage payout information" : "Set up payouts")</h3>
-                            <p>Provide a PayPal email you own, control, or are authorized to use and complete the required tax form before payouts can be sent.</p>
-
-                            <div class="creator-payout-grid">
-                                <section class="creator-payout-section">
-                                    <div class="creator-section-heading">
-                                        <span class="creator-checklist-icon">1</span>
-                                        <div>
-                                            <strong>PayPal payout email</strong>
-                                            <span class="@(IsPayoutPayPalReady ? "creator-status-text-good" : "creator-status-text-pending")">
-                                                @(IsPayoutPayPalReady ? "Confirmed" : "Needed before payout")
-                                            </span>
-                                        </div>
+                            <div class="payout-sections">
+                                <section class="payout-section">
+                                    <div class="payout-heading">
+                                        <span class="payout-num" aria-hidden="true">1</span>
+                                        <span class="payout-heading-title">PayPal payout email</span>
+                                        <span class="status-pill @(IsPayoutPayPalReady ? "" : "status-pill-warn")"><span class="status-pill-dot"></span>@(IsPayoutPayPalReady ? "Confirmed" : "Needed before payout")</span>
                                     </div>
 
-                                    <div class="creator-settings-field">
-                                        <label for="paypalEmail" class="e-label">PayPal Email Address</label>
+                                    <div class="settings-field">
+                                        <label for="paypalEmail" class="settings-label">PayPal email address</label>
                                         <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
-                                        <small>Enter the email address for a PayPal account owned or controlled by you or your authorized creator business.</small>
+                                        <p class="settings-hint">The email address for a PayPal account owned or controlled by you, or by your authorised creator business.</p>
                                     </div>
-                                    <div class="creator-settings-checkbox">
+
+                                    <div class="settings-consent">
                                         <SfCheckBox @bind-Checked="_paypalAccountAffirmed" TChecked="bool" />
-                                        <span>I affirm that I own or am authorized to use this PayPal account for creator payouts, and that it is in good standing and can receive payouts.</span>
+                                        <span>I affirm that I own or am authorised to use this PayPal account for creator payouts, and that it is in good standing and can receive payouts.</span>
                                     </div>
-                                    <div class="creator-settings-actions creator-settings-save-row">
-                                        <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta"
-                                                  Content="@(_savingPayPalEmail ? "Saving..." : "Save PayPal Email")"
+
+                                    <div class="settings-actions">
+                                        <SfButton CssClass="e-btn settings-btn settings-btn-violet"
+                                                  Content="@(_savingPayPalEmail ? "Saving..." : "Save Payout Email")"
                                                   Disabled="@_savingPayPalEmail"
-                                                  OnClick="SavePayPalEmail"
-                                                  IconCss="streamtunes-button-icon streamtunes-button-icon-save" />
+                                                  OnClick="SavePayPalEmail" />
                                         @if (!string.IsNullOrWhiteSpace(_payoutEmailMessage))
                                         {
-                                            <SfMessage Severity="@(_payoutEmailSaveSuccess ? MessageSeverity.Success : MessageSeverity.Error)" CssClass="creator-settings-inline-message">@_payoutEmailMessage</SfMessage>
+                                            <span class="settings-inline-status @(_payoutEmailSaveSuccess ? "" : "settings-inline-status-bad")" role="status">@_payoutEmailMessage</span>
                                         }
                                     </div>
                                 </section>
 
-                                <section class="creator-payout-section">
-                                    <div class="creator-section-heading">
-                                        <span class="creator-checklist-icon">2</span>
-                                        <div>
-                                            <strong>Tax form</strong>
-                                            <span class="@(IsPayoutTaxReady ? "creator-status-text-good" : "creator-status-text-pending")">
-                                                @(IsPayoutTaxReady ? "Completed" : "Needed before payout")
-                                            </span>
-                                        </div>
+                                <section class="payout-section">
+                                    <div class="payout-heading">
+                                        <span class="payout-num" aria-hidden="true">2</span>
+                                        <span class="payout-heading-title">Tax form</span>
+                                        <span class="status-pill @(IsPayoutTaxReady ? "" : "status-pill-warn")"><span class="status-pill-dot"></span>@TaxFormStatusLabel</span>
                                     </div>
 
                                     @if (_showMaintenanceWarning)
                                     {
-                                        <div class="creator-settings-alert creator-settings-alert-warning">
-                                            Tax form updates may be unavailable during the Tax Bandits maintenance window (@_maintenanceStartLocal - @_maintenanceEndLocal @_maintenanceTimeZoneAbbreviation).
+                                        <div class="info-strip info-strip-warn">
+                                            <svg class="info-strip-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                                            <span>Tax form updates may be unavailable during the Tax Bandits maintenance window (@_maintenanceStartLocal - @_maintenanceEndLocal @_maintenanceTimeZoneAbbreviation).</span>
                                         </div>
                                     }
 
                                     @if (_creatorTaxFormStatus == TaxFormStatus.Completed.ToString())
                                     {
-                                        <p>Your tax form is complete for payout purposes.</p>
-                                        <SfButton Content="Update W-9/W-8 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" IconCss="streamtunes-button-icon streamtunes-button-icon-tax-form" />
+                                        <p class="settings-prose">Your tax form is on file. You only need to send a new one if your details change.</p>
+                                        <div class="settings-actions">
+                                            <SfButton CssClass="e-btn settings-btn" Content="Update W-9/W-8 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" />
+                                        </div>
                                     }
                                     else if (_creatorTaxFormStatus == TaxFormStatus.Pending.ToString())
                                     {
                                         @if (!string.IsNullOrWhiteSpace(_lastTaxFormErrorMessage))
                                         {
-                                            <div class="creator-settings-alert creator-settings-alert-danger" role="alert" aria-live="assertive">
-                                                <strong>Your previous tax form submission had an error:</strong>
-                                                <br />@_lastTaxFormErrorMessage
-                                                <br /><small>Please correct the issue and resubmit your tax form.</small>
+                                            <div class="info-strip info-strip-warn" role="alert" aria-live="assertive">
+                                                <svg class="info-strip-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                                                <span>Your previous tax form submission had an error: @_lastTaxFormErrorMessage Please correct the issue and resubmit your tax form.</span>
                                             </div>
                                         }
                                         else
                                         {
-                                            <p>Your tax form is pending. Continue the W-9 or W-8 form to finish payout setup.</p>
+                                            <div class="info-strip">
+                                                <svg class="info-strip-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" /></svg>
+                                                <span>Your tax form is pending. Continue the W-9 or W-8 form to finish payout setup.</span>
+                                            </div>
                                         }
-                                        <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta" Content="Complete W-9/W-8 Tax Form" OnClick="NavigateToTaxForm" IconCss="streamtunes-button-icon streamtunes-button-icon-tax-form" />
+                                        <div class="settings-actions">
+                                            <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="Complete W-9/W-8 Tax Form" OnClick="NavigateToTaxForm" />
+                                        </div>
                                     }
                                     else if (_creatorTaxFormStatus == TaxFormStatus.TinMatchInProgress.ToString())
                                     {
-                                        <div class="creator-settings-alert creator-settings-alert-info">
-                                            Your tax form was submitted successfully. IRS TIN verification is in progress and may take up to 1 hour.
+                                        <div class="info-strip">
+                                            <svg class="info-strip-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" /></svg>
+                                            <span>Your tax form was submitted successfully. IRS TIN verification is in progress and may take up to 1 hour.</span>
                                         </div>
+                                        <p class="settings-hint">You can leave this page. The status updates on its own.</p>
                                     }
                                     else if (_creatorTaxFormStatus == TaxFormStatus.Failed.ToString())
                                     {
-                                        <div class="creator-settings-alert creator-settings-alert-danger">
-                                            TIN verification failed. Please double-check that your TIN and name match IRS records.
+                                        <div class="info-strip info-strip-warn">
+                                            <svg class="info-strip-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                                            <span>TIN verification failed. The name and taxpayer ID you gave did not match IRS records. Check both and submit again.</span>
                                         </div>
                                         @if (_tinMatchCooldownRemaining.HasValue && _tinMatchCooldownRemaining.Value > TimeSpan.Zero)
                                         {
-                                            <p class="creator-settings-hint">Retry available in @_tinMatchCooldownRemaining.Value.ToString(@"hh\:mm\:ss").</p>
+                                            @* Not a disabled button. There is nothing to press yet, and a greyed
+                                               control invites pressing it to find out why. *@
+                                            <div class="settings-actions">
+                                                <span class="retry-window">Retry available in @_tinMatchCooldownRemaining.Value.ToString(@"hh\:mm\:ss")</span>
+                                            </div>
+                                            <p class="settings-hint">The IRS allows one check every 24 hours, so the retry is held until the window opens.</p>
                                         }
                                         else
                                         {
-                                            <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta" Content="Retry W-9/W-8 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" IconCss="streamtunes-button-icon streamtunes-button-icon-retry" />
+                                            <div class="settings-actions">
+                                                <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="Retry W-9/W-8 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" />
+                                            </div>
                                         }
                                     }
                                     else
                                     {
-                                        <p>Complete your W-9 or W-8 tax form before your first payout.</p>
-                                        <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta" Content="Complete W-9/W-8 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" IconCss="streamtunes-button-icon streamtunes-button-icon-tax-form" />
+                                        <p class="settings-prose">A W-9 or W-8 is required before any payment leaves StreamTunes. It takes a few minutes and is handled by our tax provider.</p>
+                                        <div class="settings-actions">
+                                            <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="Complete W-9/W-8 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" />
+                                        </div>
                                     }
                                 </section>
                             </div>
-                        </CardContent>
-                    </SfCard>
-                }
 
-                <SfCard CssClass="creator-settings-card">
-                    <CardContent>
-                        <p class="creator-settings-kicker">Creator profile</p>
-                        <h3>Public creator details</h3>
-                        <div class="creator-settings-form-grid">
-                            <div class="creator-settings-field">
-                                <label for="editCreatorDisplayName" class="e-label">Display Name (max 20 characters)</label>
-                                <SfTextBox @bind-Value="_editCreatorDisplayName" ID="editCreatorDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" MaxLength="20" />
-                                <small>This name will be shown on your song cards.</small>
+                            @* The way back out. Without it the panel opens and stays open,
+                               which is what the first draft of this rebuild shipped. *@
+                            <div class="settings-actions">
+                                <SfButton CssClass="e-btn settings-btn" Content="Hide Payout Setup" OnClick="TogglePayoutSetup" />
                             </div>
-                            <div class="creator-settings-field">
-                                <label for="editCreatorBio" class="e-label">Bio (optional)</label>
-                                <SfTextBox @bind-Value="_editCreatorBio" ID="editCreatorBio" Placeholder="Tell your listeners about yourself..." CssClass="e-outline" Multiline="true" MaxLength="1000" />
+                        }
+                    </section>
+
+                    <section class="settings-card" id="profile">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Profile</p>
+                                <h2 class="settings-title">How you appear to listeners</h2>
                             </div>
                         </div>
-                        <div class="creator-settings-actions">
-                            <SfButton CssClass="cta-secondary hero-secondary-cta creator-settings-cta" Content="Save Profile" OnClick="SaveCreatorProfile" Disabled="@_savingCreatorProfile" IconCss="streamtunes-button-icon streamtunes-button-icon-save" />
+
+                        <div class="settings-field">
+                            <label for="editCreatorDisplayName" class="settings-label">Display name</label>
+                            <SfTextBox @bind-Value="_editCreatorDisplayName" ID="editCreatorDisplayName" Placeholder="Your artist or band name" CssClass="e-outline" MaxLength="20" />
+                            <p class="settings-hint">Shown on your song cards when a song has no persona. Maximum 20 characters.</p>
+                        </div>
+
+                        <div class="settings-field">
+                            @* The counter is here rather than in the hint because a 1,000-character
+                               limit with no visible count is only ever discovered by hitting it. *@
+                            <div class="settings-label-row">
+                                <label for="editCreatorBio" class="settings-label">Bio <span class="settings-optional">(optional)</span></label>
+                                <span class="settings-count">@BioLength / 1000</span>
+                            </div>
+                            <SfTextBox @bind-Value="_editCreatorBio" ID="editCreatorBio" Placeholder="Tell your listeners about yourself..." CssClass="e-outline" Multiline="true" MaxLength="1000" />
+                        </div>
+
+                        <div class="settings-actions">
+                            <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="Save Profile" OnClick="SaveCreatorProfile" Disabled="@_savingCreatorProfile" />
                             @if (!string.IsNullOrEmpty(_creatorProfileMessage))
                             {
-                                <span class="@(_creatorProfileSuccess ? "creator-status-text-good" : "creator-status-text-danger")">@_creatorProfileMessage</span>
+                                <span class="settings-inline-status @(_creatorProfileSuccess ? "" : "settings-inline-status-bad")" role="status">@_creatorProfileMessage</span>
                             }
                         </div>
-                    </CardContent>
-                </SfCard>
+                    </section>
 
-                <SfCard CssClass="creator-settings-card creator-settings-danger-zone">
-                    <CardContent>
-                        <p class="creator-settings-kicker">Creator account</p>
-                        <h3>Stop being a creator</h3>
-                        <p>If you no longer want to share your music on StreamTunes, you can stop being a creator. This removes your uploaded music from the platform and deletes your song files from storage.</p>
-                        <div class="creator-settings-actions">
+                    @* Nothing on this page linked to /creator/personas before - the only route in
+                       was the nav menu, which is a poor place to discover that the artist name a
+                       listener sees is not the display name set two sections above. *@
+                    <section class="settings-card" id="personas">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Personas</p>
+                                <h2 class="settings-title">Your artist identities</h2>
+                                <p class="settings-note">A persona overrides your display name on the songs linked to it, and brings its own image, bio and website.</p>
+                            </div>
+                        </div>
+
+                        @if (_personas.Count == 0)
+                        {
+                            <div class="settings-empty">
+                                <span class="settings-empty-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>
+                                </span>
+                                <p class="settings-empty-title">No personas yet</p>
+                                <p class="settings-empty-body">@NoPersonasBody</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="persona-rows">
+                                @foreach (var persona in _personas)
+                                {
+                                    <div class="persona-row">
+                                        <span class="persona-avatar" aria-hidden="true">@PersonaInitial(persona.Name)</span>
+                                        <span class="persona-detail">
+                                            <span class="persona-name">@persona.Name</span>
+                                            <span class="persona-bio">@(string.IsNullOrWhiteSpace(persona.Bio) ? "No bio" : persona.Bio)</span>
+                                            <span class="persona-meta">@SongCountLabel(persona.SongCount) &middot; @(string.IsNullOrWhiteSpace(persona.WebsiteUrl) ? "No website" : persona.WebsiteUrl)</span>
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <div class="settings-actions">
+                            <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="@(_personas.Count == 0 ? "Create a Persona" : "Manage Personas")" OnClick="NavigateToPersonas" />
+                        </div>
+                    </section>
+
+                    <section class="settings-card settings-card-danger" id="stop">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Creator account</p>
+                                <h2 class="settings-title">Stop being a creator</h2>
+                            </div>
+                        </div>
+                        <p class="settings-prose">If you no longer want to share your music on StreamTunes, you can stop being a creator. <strong>This removes your uploaded music from the platform and deletes your song files from storage.</strong></p>
+                        <div class="settings-actions">
                             @if (!_stoppingCreatorStatus)
                             {
-                                <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ShowStopSellingConfirmation" IconCss="streamtunes-button-icon streamtunes-button-icon-warning" />
+                                <SfButton CssClass="e-btn settings-btn settings-btn-danger" Content="Stop Being a Creator" OnClick="ShowStopSellingConfirmation" />
                             }
                             else
                             {
-                                <span class="creator-settings-hint">Processing...</span>
+                                <span class="settings-working">Processing&hellip;</span>
                             }
                         </div>
-                    </CardContent>
-                </SfCard>
-            }
-        }
-    </div>
+                    </section>
+                }
+            </div>
+        </div>
+    }
 </div>
 
-<SfDialog @ref="_stopSellingDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false" Header="Stop Being a Creator">
+@* The typed-email guard is the same mechanic the account-closure flow uses, and stays. What
+   changes is that the dialog now names what actually goes: the count of songs, and the fact
+   that the audio files themselves are deleted rather than just delisted. *@
+<SfDialog @ref="_stopSellingDialog" Width="470px" IsModal="true" ShowCloseIcon="true" Visible="false" Header="Stop being a creator" CssClass="settings-dialog">
     <DialogTemplates>
         <Content>
-            <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
-            <p>By stopping your creator account:</p>
-            <ul>
-                <li>All your uploaded music will be permanently removed from the platform</li>
-                <li>All your song files will be deleted from storage</li>
-                <li>Your music will no longer be available for purchase or streaming</li>
-                <li><strong>Users who previously purchased your music will no longer be able to access it</strong></li>
-            </ul>
-            <p>To confirm, please type your email address below:</p>
-            <SfTextBox @bind-Value="_stopSellingConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+            <p class="settings-prose">This will remove <strong>@SongCountLabel(_songCount)</strong> from StreamTunes and delete the audio files from storage. Listeners will lose them from their playlists.</p>
+            <div class="info-strip info-strip-warn">
+                <svg class="info-strip-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                <span>This cannot be undone. Re-uploading means uploading the original files again.</span>
+            </div>
+            <div class="settings-field">
+                <label for="stopSellingConfirmEmail" class="settings-label">To confirm, type @_userEmail below</label>
+                <SfTextBox @bind-Value="_stopSellingConfirmEmail" ID="stopSellingConfirmEmail" Placeholder="Type your email to confirm" CssClass="e-outline" />
+            </div>
         </Content>
         <FooterTemplate>
-            <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ConfirmStopSelling" Disabled="@(!CanConfirmStopSelling)" IconCss="streamtunes-button-icon streamtunes-button-icon-warning" />
-            <SfButton Content="Cancel" OnClick="CloseStopSellingDialog" IconCss="streamtunes-button-icon streamtunes-button-icon-cancel" />
+            <SfButton CssClass="e-btn settings-btn" Content="Keep My Creator Account" OnClick="CloseStopSellingDialog" />
+            <SfButton CssClass="e-btn settings-btn settings-btn-danger" Content="Stop Being a Creator" OnClick="ConfirmStopSelling" Disabled="@(!CanConfirmStopSelling)" />
         </FooterTemplate>
     </DialogTemplates>
 </SfDialog>

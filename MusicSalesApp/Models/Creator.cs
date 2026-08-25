@@ -222,6 +222,34 @@ public class Creator
     /// The UTC date and time of the last failed Instant TIN Match.
     /// Used to enforce the 24-hour cooldown period between TIN match attempts.
     /// </summary>
+    /// <summary>
+    /// When the one-time "you are a creator" celebration was shown for the CURRENT activation,
+    /// or null while it is still owed.
+    ///
+    /// <para>
+    /// This exists because activation ends in a full page reload through /refresh-signin - the
+    /// user has just been given the Creator role and their auth cookie has to be reissued - which
+    /// destroys the Blazor circuit and every field on the page. Something durable has to carry
+    /// "this arrival is the end of the activation flow" across that boundary. It used to be a URL
+    /// parameter, which meant anyone could replay the celebration, its analytics event and its
+    /// user-history row by typing the address.
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="CreatorService.ActivateCreatorAsync"/> sets it back to null, so a creator who
+    /// leaves and comes back is congratulated again - it tracks the current activation, not
+    /// whether one ever happened.
+    /// </para>
+    /// </summary>
+    public DateTime? ActivationAnnouncedAt { get; set; }
+
+    /// <summary>
+    /// The deactivation counterpart of <see cref="ActivationAnnouncedAt"/>. Cleared by
+    /// <see cref="CreatorService.StopBeingCreatorAsync"/>, which ends in the same forced reload
+    /// for the same reason - the Creator role is being taken away.
+    /// </summary>
+    public DateTime? DeactivationAnnouncedAt { get; set; }
+
     public DateTime? LastTinMatchFailedAt { get; set; }
 
     /// <summary>

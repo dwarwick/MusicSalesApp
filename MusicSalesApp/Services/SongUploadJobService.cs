@@ -9,6 +9,36 @@ using MusicSalesApp.Models;
 namespace MusicSalesApp.Services;
 
 /// <summary>What the caller supplies to start one song's processing.</summary>
+/// <summary>
+/// What a creator sets about a song on the upload page, carried from the review step through
+/// staging and transcoding to the published record.
+///
+/// <para>
+/// It travels on the job rather than being applied afterwards because there is no "afterwards"
+/// the page can reach: the song does not exist until the Function has transcoded the audio and
+/// the API has assembled it, minutes later and on a different machine. Genre is the reason this
+/// exists at all - it is required, and until now it could only be set on /creator/songs, one
+/// dialog at a time, after the song was already published.
+/// </para>
+/// </summary>
+public sealed record SongPublishMetadata
+{
+    /// <summary>The genre name, matching <see cref="SongMetadata.Genre"/>, which is a string
+    /// rather than a foreign key.</summary>
+    public string? Genre { get; init; }
+
+    /// <summary>The persona whose name listeners see, or null to fall back to the artist name
+    /// and then the creator display name. Null is a normal case: most creators have none.</summary>
+    public int? PersonaId { get; init; }
+
+    public bool IsAiGenerated { get; init; }
+    public bool IsAiVocals { get; init; }
+    public bool IsAiLyrics { get; init; }
+
+    /// <summary>Nothing set. What every caller outside the upload page passes.</summary>
+    public static SongPublishMetadata None { get; } = new();
+}
+
 public sealed class SongUploadJobRequest
 {
     public required Stream AudioStream { get; init; }
@@ -24,6 +54,8 @@ public sealed class SongUploadJobRequest
     /// while the browser stream is still being written to Azure.
     /// </summary>
     public IProgress<double>? StagingProgress { get; init; }
+
+    public SongPublishMetadata Metadata { get; init; } = SongPublishMetadata.None;
 }
 
 /// <summary>
@@ -43,6 +75,8 @@ public sealed class StagedSongUploadRequest
     public required string SongTitle { get; init; }
     public required int CreatorId { get; init; }
     public string? AlbumName { get; init; }
+
+    public SongPublishMetadata Metadata { get; init; } = SongPublishMetadata.None;
 
     public string? CoverArtFileName { get; init; }
 
@@ -312,6 +346,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
             coverPath,
             coverArtFileName is null ? null : Path.GetFileName(coverArtFileName),
             coverExtension,
+            request.Metadata,
             cancellationToken);
     }
 
@@ -472,6 +507,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
             coverPath,
             coverArtFileName is null ? null : Path.GetFileName(coverArtFileName),
             coverExtension,
+            request.Metadata,
             cancellationToken);
     }
 
@@ -497,6 +533,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
         string? coverPath,
         string? coverArtFileName,
         string? coverExtension,
+        SongPublishMetadata metadata,
         CancellationToken cancellationToken)
     {
         var job = new SongUploadJob
@@ -505,6 +542,14 @@ public sealed class SongUploadJobService : ISongUploadJobService
             CreatorId = creatorId,
             SongTitle = songTitle,
             AlbumName = albumName ?? string.Empty,
+
+            // Carried, not applied: the song row does not exist yet. The assembly step copies
+            // these onto it once the Function has finished with the audio.
+            Genre = metadata.Genre,
+            PersonaId = metadata.PersonaId,
+            IsAiGenerated = metadata.IsAiGenerated,
+            IsAiVocals = metadata.IsAiVocals,
+            IsAiLyrics = metadata.IsAiLyrics,
             SourceBlobPath = sourcePath,
             SourceFileName = sourceFileName,
             SourceExtension = audioExtension,

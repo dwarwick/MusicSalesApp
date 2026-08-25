@@ -236,7 +236,11 @@ public class UploadFilesProgressTests
         var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
 
         Assert.That(markup, Does.Contain("_awaitingTitleConfirmation"));
-        Assert.That(markup, Does.Contain("@bind-Value=\"item.SongTitle\""));
+        // Not @bind-Value any more: the box reports through OnTitleChanged, because editing a
+        // title is how a creator says they have looked at it. Two-way binding would set the
+        // value and tell the page nothing.
+        Assert.That(markup, Does.Contain("ValueChanged=\"@((string v) => OnTitleChanged(item, v))\""));
+        Assert.That(markup, Does.Contain("Value=\"@item.SongTitle\""));
         Assert.That(markup, Does.Contain("StartUploadAsync"));
         Assert.That(markup, Does.Contain("CancelPendingBatchAsync"));
 
@@ -249,7 +253,7 @@ public class UploadFilesProgressTests
         // is a guess, could never be corrected at all.
         Assert.That(
             codeBehind,
-            Does.Not.Contain("if (await PendingTitlesNeedAttentionAsync())\n        {\n            _awaitingTitleConfirmation = true;"),
+            Does.Not.Contain("if (await MarkInvalidPendingTitlesAsync())\n        {\n            _awaitingTitleConfirmation = true;"),
             "Reaching the review step must not depend on a title being wrong.");
         Assert.That(markup, Does.Contain("Review Before Uploading"));
 

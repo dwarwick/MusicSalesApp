@@ -6,6 +6,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System;
 using System.Collections.Generic;
@@ -47,6 +48,43 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private CancellationTokenSource _uploadCts = new CancellationTokenSource();
 
     protected List<UploadPairItem> _uploadItems = new List<UploadPairItem>();
+
+    // The review step collects genre, persona and the AI flags, so it needs the lists to
+    // choose from. Loaded once when the page opens rather than when the step appears: by then
+    // the creator is waiting, and a batch that has finished decoding should not then stall on
+    // two lookups.
+    protected List<Genre> _genres = new();
+    protected List<CreatorPersona> _personas = new();
+    protected string _creatorDisplayName = string.Empty;
+
+    // Apply-to-all. Deliberately overwrites rows the creator has already filled: the
+    // alternative - only filling blanks - would do different things depending on state that is
+    // not visible, and someone who genuinely wants one genre across fifty songs would have to
+    // clear rows first. Every row visibly changes, and any row can be changed back.
+    protected string _applyAllGenre = string.Empty;
+    protected int? _applyAllPersonaId;
+
+    // The AI disclosure in bulk is the same two-group choice as a row, not a shortcut for one
+    // side of it: a batch is usually one release, so "this whole EP has AI vocals" is as normal
+    // an answer as "all of it is original".
+    protected bool _applyAllOriginal;
+    protected bool _applyAllAiMusic;
+    protected bool _applyAllAiVocals;
+    protected bool _applyAllAiLyrics;
+
+    // Inline creation. Neither may navigate: leaving /upload-files drops the live FileList and
+    // with it the whole batch, which the creator has already waited through a decode for.
+    protected bool _showAddGenre;
+    protected string _newGenreName = string.Empty;
+    protected string _addGenreError = string.Empty;
+    protected bool _addingGenre;
+    protected UploadPairItem _addGenreForRow;
+
+    protected bool _showAddPersona;
+    protected string _newPersonaName = string.Empty;
+    protected string _addPersonaError = string.Empty;
+    protected bool _addingPersona;
+    protected UploadPairItem _addPersonaForRow;
     protected List<InitialUploadProgressItem> _initialUploadItems = new List<InitialUploadProgressItem>();
     protected string _initialUploadStatusMessage = string.Empty;
     protected int _initialUploadBatchProgress = 0;
@@ -174,7 +212,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// they would rather have no artwork.
     /// </para>
     /// </summary>
-    protected bool _matchCoverArtBeforeUpload = true;
 
     /// <summary>
     /// Where the preference is remembered.
@@ -185,7 +222,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// unchecks it once instead of once per batch.
     /// </para>
     /// </summary>
-    private const string MatchCoverArtPreferenceKey = "streamtunes.upload.matchCoverArt";
 
     /// <summary>
     /// The cover image the creator is currently moving, or null.
@@ -299,21 +335,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         => _isUploading || _isProcessingFiles || _awaitingTitleConfirmation || IsBatchProcessing;
 
     /// <summary>
-    /// Whether the cover-art review choice is on screen.
-    ///
-    /// <para>
-    /// Everything the drop box hides for <em>except</em> the review step. Hiding it there was a
-    /// mistake with two costs: the setting is still live at that point - unticking it takes the
-    /// re-pairing interface away - and more importantly the review step is exactly where a creator
-    /// discovers they did not want it. Taking the switch off screen at the moment it becomes
-    /// relevant also made its state unknowable, which is how a report of "it paused anyway" became
-    /// impossible to tell apart from "the box was still ticked".
-    /// </para>
-    /// </summary>
-    protected bool ShowMatchCoverArtChoice
-        => !_isUploading && !_isProcessingFiles && !IsBatchProcessing;
-
-    /// <summary>
     /// Batch progress, 0-100. Terminal songs count as complete - a failed song will not progress
     /// further, and treating it as unfinished would strand this below 100 forever.
     /// </summary>
@@ -339,6 +360,118 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// The upload button's text. Held in one place because the progress message names it, and an
     /// instruction that names a button which says something else is worse than no instruction.
     /// </summary>
+    /// <summary>How many rows still need a look, for the message beside the upload button.</summary>
+    protected int UnconfirmedTitleCount => _uploadItems.Count(item => !item.TitleConfirmed);
+
+    protected int MissingGenreCount => _uploadItems.Count(item => string.IsNullOrWhiteSpace(item.Genre));
+
+    protected int UndeclaredAiCount => _uploadItems.Count(item => !item.AiDeclared);
+
+    protected bool ReviewIsComplete =>
+        UnconfirmedTitleCount == 0 && MissingGenreCount == 0 && UndeclaredAiCount == 0;
+
+    /// <summary>
+    /// What is still outstanding, in one sentence, or empty when nothing is.
+    /// </summary>
+    protected string ReviewOutstandingMessage
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (UnconfirmedTitleCount == 1)
+            {
+                parts.Add("1 title still needs a look");
+            }
+            else if (UnconfirmedTitleCount > 1)
+            {
+                parts.Add($"{UnconfirmedTitleCount} titles still need a look");
+            }
+
+            if (MissingGenreCount == 1)
+            {
+                parts.Add("1 song needs a genre");
+            }
+            else if (MissingGenreCount > 1)
+            {
+                parts.Add($"{MissingGenreCount} songs need a genre");
+            }
+
+            if (UndeclaredAiCount == 1)
+            {
+                parts.Add("1 song needs an AI answer");
+            }
+            else if (UndeclaredAiCount > 1)
+            {
+                parts.Add($"{UndeclaredAiCount} songs need an AI answer");
+            }
+
+            return parts.Count == 0 ? string.Empty : string.Join(", and ", parts) + ".";
+        }
+    }
+
+    /// <summary>
+    /// The name a listener will actually see on this song.
+    ///
+    /// <para>
+    /// Persona, then the creator display name. The chain already exists in the data; the upload
+    /// page just has to show it, so that choosing no persona is an informed choice rather than
+    /// a blank.
+    /// </para>
+    /// </summary>
+    protected string ArtistNameFor(UploadPairItem item)
+    {
+        if (item.PersonaId is int personaId)
+        {
+            var persona = _personas.FirstOrDefault(p => p.Id == personaId);
+            if (persona != null)
+            {
+                return persona.Name;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(_creatorDisplayName) ? "your display name" : _creatorDisplayName;
+    }
+
+    /// <summary>
+    /// Whether a title still reads like the filename it came from.
+    ///
+    /// <para>
+    /// Only used to decide how loudly a row asks to be checked - the confirmation is required
+    /// either way. The rule is deliberately narrow: a leading track number, a trailing version
+    /// word, or a run of digits long enough to be a timestamp. Guessing more aggressively would
+    /// nag people who name their files properly.
+    /// </para>
+    /// </summary>
+    /// <remarks>Internal, like ShouldPauseForReview, so the rule can be tested directly: which
+    /// titles it does and does not flag is the whole of it, and none of that is observable from
+    /// the rendered markup.</remarks>
+    internal static bool TitleLooksLikeAFileName(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var trimmed = title.Trim();
+
+        // A leading number alone is NOT enough: "99 Red Balloons" and "4 Minutes" are songs.
+        // What marks a track number is being zero-padded, or carrying a separator after it.
+        if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^0\d")
+            || System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{1,3}\s*[-_.]\s*\S"))
+        {
+            return true;
+        }
+
+        if (System.Text.RegularExpressions.Regex.IsMatch(
+                trimmed, @"\b(final|copy|mix|master|v\d+|take\s?\d+|untitled|track)\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            return true;
+        }
+
+        return System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"\d{6,}");
+    }
+
     protected string UploadButtonLabel
         => _uploadItems.Count == 1 ? "Upload 1 Song" : $"Upload {_uploadItems.Count} Songs";
 
@@ -393,7 +526,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _hasLoadedCreatorId = true;
             await LoadCreatorIdAsync();
             await LoadMaxAudioFileSizeAsync();
-            await LoadMatchCoverArtPreferenceAsync();
+
+            // Before any files arrive rather than when the review step opens: by then the
+            // creator is already waiting, and a batch that has finished decoding should not
+            // then stall on two lookups.
+            await LoadReviewChoicesAsync();
 
             UploadProgressHubClient.OnProgress += ApplyProgressAsync;
             UploadProgressHubClient.OnMatchProgress += ApplyMatchProgressAsync;
@@ -925,6 +1062,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             var uploadItem = new UploadPairItem
             {
                 SongTitle = SongTitleHelper.FromFileName(pair.AudioFileName),
+                TitleSourceFileName = pair.AudioFileName,
                 AudioFileName = audioFileMeta.Name,
                 AudioFileSize = audioFileMeta.Size,
                 Status = UploadStatus.Pending,
@@ -982,9 +1120,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         //
         // Titles are checked either way, so anything broken is already highlighted if the step does
         // appear. A batch with no artwork at all has nothing to show and does not stop.
-        var titlesNeedAttention = await PendingTitlesNeedAttentionAsync();
+        var titlesNeedAttention = await MarkInvalidPendingTitlesAsync();
 
-        if (!ShouldPauseForReview(titlesNeedAttention, coverArtFilesByName.Count > 0, _matchCoverArtBeforeUpload))
+        if (!ShouldPauseForReview())
         {
             await InvokeAsync(StateHasChanged);
             await RunPendingUploadsAsync();
@@ -1062,7 +1200,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// <summary>True when this batch has cover art the creator can move around.</summary>
     protected bool CanRepairCoverArt
         => _awaitingTitleConfirmation
-            && _matchCoverArtBeforeUpload
             && (_unmatchedCoverArtFiles.Count > 0 || _uploadItems.Any(item => item.HasCoverArt));
 
     /// <summary>
@@ -1088,68 +1225,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// to check, no pool to drag from, and the step would be a confirmation dialog wearing a table.
     /// </para>
     /// </summary>
-    internal static bool ShouldPauseForReview(
-        bool titlesNeedAttention,
-        bool batchHasCoverArt,
-        bool matchCoverArtBeforeUpload)
-        => titlesNeedAttention || (batchHasCoverArt && matchCoverArtBeforeUpload);
-
-    /// <summary>Remembers the creator's choice in their browser, and reads it back on a later visit.</summary>
-    private async Task LoadMatchCoverArtPreferenceAsync()
-    {
-        try
-        {
-            var stored = await JS.InvokeAsync<string>("uploadFilesHelper.readPreference", MatchCoverArtPreferenceKey);
-
-            // Absent means never chosen, which is the default rather than "off".
-            _matchCoverArtBeforeUpload = !string.Equals(stored, "false", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (JSDisconnectedException) { }
-        catch (TaskCanceledException) { }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Could not read the cover-art review preference; defaulting to on.");
-        }
-    }
-
     /// <summary>
-    /// Applies the choice. Split from persisting it so the state change is testable on its own -
-    /// writing to localStorage is interop, and what matters here is what the page does afterwards.
+    /// Whether the batch stops so the creator can check it before anything publishes.
+    ///
+    /// <para>
+    /// It always does now, and the parameters are kept because they still say WHY. A song
+    /// cannot publish without a genre, and the review step is the only place on this page a
+    /// genre can be set - so skipping it would trade one pause for a batch the server would
+    /// reject. The cover-art checkbox still decides whether the re-pairing controls appear
+    /// within the step; it no longer decides whether the step happens.
+    /// </para>
     /// </summary>
-    protected void ApplyMatchCoverArtPreference(bool enabled)
-    {
-        _matchCoverArtBeforeUpload = enabled;
-
-        if (!enabled)
-        {
-            // Nothing can be mid-gesture once the interface is gone, or the next batch starts
-            // holding a file from the last one.
-            _heldCoverArt = null;
-        }
-    }
-
-    /// <summary>Bridges Syncfusion's ValueChange event onto the preference.</summary>
-    protected Task OnMatchCoverArtChanged(Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> args)
-        => SetMatchCoverArtBeforeUploadAsync(args.Checked);
-
-    protected async Task SetMatchCoverArtBeforeUploadAsync(bool enabled)
-    {
-        ApplyMatchCoverArtPreference(enabled);
-
-        try
-        {
-            await JS.InvokeVoidAsync(
-                "uploadFilesHelper.writePreference",
-                MatchCoverArtPreferenceKey,
-                enabled ? "true" : "false");
-        }
-        catch (JSDisconnectedException) { }
-        catch (TaskCanceledException) { }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Could not save the cover-art review preference.");
-        }
-    }
+    internal static bool ShouldPauseForReview() => true;
 
     /// <summary>The image the creator picked up, so the UI can highlight it and every drop target.</summary>
     protected string HeldCoverArt => _heldCoverArt;
@@ -1403,10 +1490,396 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             : null;
 
     /// <summary>
-    /// Checks the titles taken from the filenames and marks any that the creator has to fix.
-    /// Returns true when the batch cannot upload as-is.
+    /// Loads the genre and persona lists, and the display name a song falls back to.
+    ///
+    /// <para>
+    /// Failure is not fatal to the page: the creator can still fix titles and re-pair artwork.
+    /// An empty genre list does block the upload, because a song genuinely cannot publish without
+    /// one - but it says so rather than presenting an empty picker.
+    /// </para>
     /// </summary>
-    private async Task<bool> PendingTitlesNeedAttentionAsync()
+    private async Task LoadReviewChoicesAsync()
+    {
+        try
+        {
+            _genres = await GenreService.GetActiveGenresAsync() ?? new();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to load genres.");
+            _genres = new();
+        }
+
+        if (!_currentCreatorId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var personas = await CreatorPersonaService.GetPersonasByCreatorIdAsync(_currentCreatorId.Value);
+
+            // Disabled personas are hidden here even though the management page shows them: this is
+            // a choice about what to publish under, and a disabled persona is not publishable.
+            _personas = personas.Where(p => p.IsEnabled).OrderBy(p => p.Name).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to load personas.");
+            _personas = new();
+        }
+
+        try
+        {
+            var creator = await CreatorService.GetCreatorByIdAsync(_currentCreatorId.Value);
+            _creatorDisplayName = creator?.DisplayName ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to load creator display name.");
+        }
+    }
+
+    /// <summary>Editing a title is how a creator says they have looked at it.</summary>
+    protected void OnTitleChanged(UploadPairItem item, string value)
+    {
+        item.SongTitle = value;
+        item.TitleConfirmed = true;
+        item.TitleError = null;
+    }
+
+    protected void ConfirmTitle(UploadPairItem item, bool confirmed) => item.TitleConfirmed = confirmed;
+
+    protected void ConfirmAllTitles()
+    {
+        // For creators who name their files properly. Making them tick fifty boxes to prove it
+        // would be a tax on the good behaviour this step is trying to encourage.
+        foreach (var item in _uploadItems)
+        {
+            item.TitleConfirmed = true;
+        }
+    }
+
+    /// <summary>
+    /// The AI disclosure is two groups that exclude each other: one or more of the three AI
+    /// answers, or "all original". Ticking either side clears the other.
+    ///
+    /// <para>
+    /// It is a required choice rather than three optional boxes because three unticked boxes said
+    /// two different things at once - "none of this is AI" and "nobody answered" - and only one of
+    /// those is a disclosure.
+    /// </para>
+    /// </summary>
+    internal void SetAllOriginal(UploadPairItem item, bool allOriginal)
+    {
+        item.AllOriginal = allOriginal;
+
+        if (allOriginal)
+        {
+            item.IsAiGenerated = false;
+            item.IsAiVocals = false;
+            item.IsAiLyrics = false;
+        }
+
+        item.AiError = null;
+    }
+
+    internal void SetAiMusic(UploadPairItem item, bool value) => SetAiFlag(item, () => item.IsAiGenerated = value, value);
+    internal void SetAiVocals(UploadPairItem item, bool value) => SetAiFlag(item, () => item.IsAiVocals = value, value);
+    internal void SetAiLyrics(UploadPairItem item, bool value) => SetAiFlag(item, () => item.IsAiLyrics = value, value);
+
+    private static void SetAiFlag(UploadPairItem item, Action assign, bool value)
+    {
+        assign();
+
+        if (value)
+        {
+            item.AllOriginal = false;
+        }
+
+        item.AiError = null;
+    }
+
+    /// <summary>
+    /// The bulk half of the disclosure. Holds the same exclusivity as a row - ticking either
+    /// side clears the other - and then writes the whole answer onto every song.
+    /// </summary>
+    internal void ApplyAllOriginal(bool value)
+    {
+        _applyAllOriginal = value;
+
+        if (value)
+        {
+            _applyAllAiMusic = false;
+            _applyAllAiVocals = false;
+            _applyAllAiLyrics = false;
+        }
+
+        PushAiAnswerToEveryRow();
+    }
+
+    internal void ApplyAllAiMusic(bool value)
+    {
+        _applyAllAiMusic = value;
+        ClearApplyAllOriginalIf(value);
+        PushAiAnswerToEveryRow();
+    }
+
+    internal void ApplyAllAiVocals(bool value)
+    {
+        _applyAllAiVocals = value;
+        ClearApplyAllOriginalIf(value);
+        PushAiAnswerToEveryRow();
+    }
+
+    internal void ApplyAllAiLyrics(bool value)
+    {
+        _applyAllAiLyrics = value;
+        ClearApplyAllOriginalIf(value);
+        PushAiAnswerToEveryRow();
+    }
+
+    private void ClearApplyAllOriginalIf(bool value)
+    {
+        if (value)
+        {
+            _applyAllOriginal = false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the bulk answer over every row, including rows already answered - the same rule
+    /// the genre and persona controls follow, and for the same reason: a control that behaves
+    /// differently depending on state you cannot see is worse than one that plainly overwrites.
+    ///
+    /// <para>
+    /// Unticking the last bulk answer leaves every row undeclared rather than silently original,
+    /// which matches what unticking the last answer on a row does.
+    /// </para>
+    /// </summary>
+    private void PushAiAnswerToEveryRow()
+    {
+        foreach (var item in _uploadItems)
+        {
+            item.AllOriginal = _applyAllOriginal;
+            item.IsAiGenerated = _applyAllAiMusic;
+            item.IsAiVocals = _applyAllAiVocals;
+            item.IsAiLyrics = _applyAllAiLyrics;
+            item.AiError = null;
+        }
+    }
+
+    protected void SetRowGenre(UploadPairItem item, string genre)
+    {
+        item.Genre = genre ?? string.Empty;
+        item.GenreError = null;
+    }
+
+    protected void ApplyGenreToAll()
+    {
+        if (string.IsNullOrWhiteSpace(_applyAllGenre))
+        {
+            return;
+        }
+
+        foreach (var item in _uploadItems)
+        {
+            SetRowGenre(item, _applyAllGenre);
+        }
+    }
+
+    protected void ApplyPersonaToAll()
+    {
+        foreach (var item in _uploadItems)
+        {
+            item.PersonaId = _applyAllPersonaId;
+        }
+    }
+
+    // ---------------------------------------------------------- inline create
+
+    protected void BeginAddGenre(UploadPairItem row)
+    {
+        _addGenreForRow = row;
+        _newGenreName = string.Empty;
+        _addGenreError = string.Empty;
+        _showAddGenre = true;
+    }
+
+    protected void CancelAddGenre()
+    {
+        _showAddGenre = false;
+        _addGenreForRow = null;
+        _newGenreName = string.Empty;
+        _addGenreError = string.Empty;
+    }
+
+    /// <summary>
+    /// Creates a genre without leaving the page, and selects it where the creator was working.
+    ///
+    /// <para>
+    /// AddGenreAsync returns null when the name already exists, case-insensitively. That is not an
+    /// error worth stopping for: the thing the creator wanted is there, so say so and select it.
+    /// </para>
+    /// </summary>
+    protected async Task ConfirmAddGenreAsync()
+    {
+        var name = (_newGenreName ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            _addGenreError = "Enter a name for the new genre.";
+            return;
+        }
+
+        _addingGenre = true;
+        _addGenreError = string.Empty;
+
+        try
+        {
+            var existing = _genres.FirstOrDefault(g =>
+                string.Equals(g.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            if (existing == null)
+            {
+                var created = await GenreService.AddGenreAsync(name, _currentUserEmail);
+                if (created == null)
+                {
+                    // Already in the table but not in the list we loaded - a disabled genre, or one
+                    // added by someone else since this page opened. Reload rather than insist.
+                    _genres = await GenreService.GetActiveGenresAsync() ?? _genres;
+                    existing = _genres.FirstOrDefault(g =>
+                        string.Equals(g.Name, name, StringComparison.OrdinalIgnoreCase));
+
+                    if (existing == null)
+                    {
+                        _addGenreError = $"\u2018{name}\u2019 already exists but is not available to choose.";
+                        return;
+                    }
+                }
+                else
+                {
+                    _genres.Add(created);
+                    _genres = _genres.OrderBy(g => g.Name).ToList();
+                    existing = created;
+                }
+            }
+
+            if (_addGenreForRow != null)
+            {
+                SetRowGenre(_addGenreForRow, existing.Name);
+            }
+
+            // Offered for the whole batch, because a batch is usually one release.
+            _applyAllGenre = existing.Name;
+            CancelAddGenre();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to add genre {GenreName}.", name);
+            _addGenreError = "The genre could not be added. Please try again.";
+        }
+        finally
+        {
+            _addingGenre = false;
+        }
+    }
+
+    protected void BeginAddPersona(UploadPairItem row)
+    {
+        _addPersonaForRow = row;
+        _newPersonaName = string.Empty;
+        _addPersonaError = string.Empty;
+        _showAddPersona = true;
+    }
+
+    protected void CancelAddPersona()
+    {
+        _showAddPersona = false;
+        _addPersonaForRow = null;
+        _newPersonaName = string.Empty;
+        _addPersonaError = string.Empty;
+    }
+
+    /// <summary>
+    /// Creates a persona from a name alone. Image, bio and website come later on Manage personas.
+    ///
+    /// <para>
+    /// Unlike genres, a duplicate here is refused rather than reused: two personas with the same
+    /// name are indistinguishable on a song card, so CreatePersonaAsync throws and the message it
+    /// throws with is the one worth showing.
+    /// </para>
+    /// </summary>
+    protected async Task ConfirmAddPersonaAsync()
+    {
+        var name = (_newPersonaName ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            _addPersonaError = "Enter a name for the new persona.";
+            return;
+        }
+
+        if (!_currentCreatorId.HasValue)
+        {
+            _addPersonaError = "Your creator account could not be found.";
+            return;
+        }
+
+        _addingPersona = true;
+        _addPersonaError = string.Empty;
+
+        try
+        {
+            var created = await CreatorPersonaService.CreatePersonaAsync(
+                _currentCreatorId.Value, name, null, null);
+
+            _personas.Add(created);
+            _personas = _personas.OrderBy(x => x.Name).ToList();
+
+            if (_addPersonaForRow != null)
+            {
+                _addPersonaForRow.PersonaId = created.Id;
+            }
+
+            _applyAllPersonaId = created.Id;
+            CancelAddPersona();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _addPersonaError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to add persona {PersonaName}.", name);
+            _addPersonaError = "The persona could not be added. Please try again.";
+        }
+        finally
+        {
+            _addingPersona = false;
+        }
+    }
+
+    /// <summary>
+    /// Checks everything the review step is responsible for, and marks what the creator has to
+    /// fix. Returns true when the batch cannot upload as-is.
+    ///
+    /// <para>
+    /// Three separate things, reported together because a creator would rather see all of them
+    /// at once than be sent back three times: the title has to be valid, it has to have been
+    /// looked at, and the song has to have a genre.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Marks every title that is genuinely unusable - empty, too long, or colliding - and
+    /// returns whether any were.
+    ///
+    /// <para>
+    /// Deliberately says nothing about whether a title has been LOOKED at. This runs before the
+    /// review step is shown, to decide whether it needs to be, and reporting "nothing has been
+    /// checked" at that point would scold the creator for not having seen a screen they have
+    /// not been given yet.
+    /// </para>
+    /// </summary>
+    private async Task<bool> MarkInvalidPendingTitlesAsync()
     {
         foreach (var pending in _pendingUploads)
         {
@@ -1456,13 +1929,89 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return true;
         }
 
-        var problems = _pendingUploads.Count(pending => pending.Item.TitleError != null);
-        if (problems == 0)
+        return _pendingUploads.Any(pending => pending.Item.TitleError != null);
+    }
+
+    /// <summary>
+    /// Checks everything the review step is responsible for, and marks what the creator has to
+    /// fix. Returns true when the batch cannot upload as-is.
+    ///
+    /// <para>
+    /// Three separate things, reported together because a creator would rather see all of them
+    /// at once than be sent back three times: the title has to be valid, it has to have been
+    /// looked at, and the song has to have a genre.
+    /// </para>
+    /// </summary>
+    private async Task<bool> PendingBatchNeedsAttentionAsync()
+    {
+        await MarkInvalidPendingTitlesAsync();
+
+        // A genre is required for a song to publish at all, so this is not a preference the
+        // batch can proceed without.
+        foreach (var pending in _pendingUploads)
+        {
+            pending.Item.GenreError = string.IsNullOrWhiteSpace(pending.Item.Genre)
+                ? "Choose a genre."
+                : null;
+        }
+
+        // A disclosure nobody made is not a disclosure. Leaving it optional made silence mean
+        // "no AI", which is the one reading a creator never actually chose.
+        foreach (var pending in _pendingUploads)
+        {
+            pending.Item.AiError = pending.Item.AiDeclared
+                ? null
+                : "Say whether any of this is AI.";
+        }
+
+        var badTitles = _pendingUploads.Count(pending => pending.Item.TitleError != null);
+        var unchecked_ = _pendingUploads.Count(pending => pending.Item.TitleError == null
+            && !pending.Item.TitleConfirmed);
+        var missingGenres = _pendingUploads.Count(pending => pending.Item.GenreError != null);
+        var missingAi = _pendingUploads.Count(pending => pending.Item.AiError != null);
+
+        if (badTitles == 0 && unchecked_ == 0 && missingGenres == 0 && missingAi == 0)
             return false;
 
-        _validationErrorMessage = problems == 1
-            ? "One song needs a different title before this batch can upload. It is highlighted below."
-            : $"{problems} songs need different titles before this batch can upload. They are highlighted below.";
+        var problems = new List<string>();
+        if (badTitles == 1)
+        {
+            problems.Add("one song needs a different title");
+        }
+        else if (badTitles > 1)
+        {
+            problems.Add($"{badTitles} songs need different titles");
+        }
+
+        if (unchecked_ == 1)
+        {
+            problems.Add("one title has not been checked");
+        }
+        else if (unchecked_ > 1)
+        {
+            problems.Add($"{unchecked_} titles have not been checked");
+        }
+
+        if (missingGenres == 1)
+        {
+            problems.Add("one song needs a genre");
+        }
+        else if (missingGenres > 1)
+        {
+            problems.Add($"{missingGenres} songs need a genre");
+        }
+
+        if (missingAi == 1)
+        {
+            problems.Add("one song needs an AI answer");
+        }
+        else if (missingAi > 1)
+        {
+            problems.Add($"{missingAi} songs need an AI answer");
+        }
+
+        _validationErrorMessage =
+            $"Nothing was uploaded: {string.Join(", and ", problems)}. They are highlighted below.";
         return true;
     }
 
@@ -1476,7 +2025,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         ClearValidationError();
 
-        if (await PendingTitlesNeedAttentionAsync())
+        if (await PendingBatchNeedsAttentionAsync())
         {
             await InvokeAsync(StateHasChanged);
             return;
@@ -1620,6 +2169,65 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>Discards a reviewed-but-not-yet-uploaded batch.</summary>
+    /// <summary>
+    /// Drops one song from the batch, leaving the rest to upload.
+    ///
+    /// <para>
+    /// The case this exists for is a duplicate title. Before it, a creator who dropped in three
+    /// songs and found one already in their catalogue had two options - rename a song they did not
+    /// want to rename, or cancel all three and start again with a different selection. Neither is
+    /// what they wanted, which was to upload the other two.
+    /// </para>
+    ///
+    /// <para>
+    /// Its artwork goes back to the pool rather than being discarded: the image may well belong to
+    /// one of the songs that is staying, and this is exactly the moment a creator discovers that.
+    /// The audio temp file is deleted here rather than left to the batch sweep, because the batch
+    /// may now run for several more minutes and nothing else will come back for it.
+    /// </para>
+    /// </summary>
+    protected async Task RemoveFromBatchAsync(UploadPairItem item)
+    {
+        if (item is null || !_awaitingTitleConfirmation)
+        {
+            return;
+        }
+
+        ClearCoverArt(item);
+
+        var pending = _pendingUploads.FirstOrDefault(p => ReferenceEquals(p.Item, item));
+        if (pending != null)
+        {
+            _pendingUploads.Remove(pending);
+
+            if (!string.IsNullOrEmpty(pending.AudioTempPath))
+            {
+                TempFileHelper.TryDelete(pending.AudioTempPath, Logger);
+                _pendingTempFiles.Remove(pending.AudioTempPath);
+            }
+        }
+
+        _uploadItems.Remove(item);
+
+        // Removing the last one is a cancel by another route, and has to tear down the same way -
+        // otherwise the page sits on an empty review step with an upload button that does nothing.
+        if (_uploadItems.Count == 0)
+        {
+            await CancelPendingBatchAsync();
+            return;
+        }
+
+        // The summary was counting a row that no longer exists. Re-running the check rather than
+        // decrementing keeps one description of what is outstanding instead of two.
+        ClearValidationError();
+        if (_uploadItems.Any(row => row.TitleError != null || row.GenreError != null))
+        {
+            await PendingBatchNeedsAttentionAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
     protected async Task CancelPendingBatchAsync()
     {
         if (!_awaitingTitleConfirmation)
@@ -2229,6 +2837,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                     AudioStream = audioFileStream,
                     AudioFileName = uploadItem.AudioFileName,
                     SongTitle = uploadItem.SongTitle,
+                    Metadata = uploadItem.ToPublishMetadata(),
                     CreatorId = _currentCreatorId.Value,
                     StagingProgress = BuildStagingProgress(uploadItem)
                 },
@@ -2313,6 +2922,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                     CoverArtStream = coverArtFileStream,
                     CoverArtFileName = uploadItem.CoverArtFileName,
                     SongTitle = uploadItem.SongTitle,
+                    Metadata = uploadItem.ToPublishMetadata(),
                     CreatorId = _currentCreatorId.Value,
                     StagingProgress = BuildStagingProgress(uploadItem)
                 },
@@ -2474,6 +3084,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                     MediaGuid = mediaGuid,
                     AudioFileName = uploadItem.AudioFileName,
                     SongTitle = uploadItem.SongTitle,
+                    Metadata = uploadItem.ToPublishMetadata(),
                     CreatorId = _currentCreatorId.Value,
                     CoverArtFileName = coverArtStagedPath is null ? null : uploadItem.CoverArtFileName,
                     CoverArtStagedPath = coverArtStagedPath
@@ -3404,6 +4015,64 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         /// rows the creator has to correct.
         /// </summary>
         public string TitleError { get; set; }
+
+        /// <summary>
+        /// Whether the creator has actually looked at this title.
+        ///
+        /// <para>
+        /// A title is never empty - SongTitleHelper.FromFileName always produces something -
+        /// so a required field would catch nothing. "track 03 final FINAL" passes every
+        /// validation rule there is and publishes exactly as written. What catches it is
+        /// having to confirm, and editing a title counts as confirming it.
+        /// </para>
+        /// </summary>
+        public bool TitleConfirmed { get; set; }
+
+        /// <summary>The filename the title was derived from, so a row can say where a bad one
+        /// came from rather than just objecting to it.</summary>
+        public string TitleSourceFileName { get; set; } = string.Empty;
+
+        /// <summary>Required before a song can publish. Empty until the creator picks one.</summary>
+        public string Genre { get; set; } = string.Empty;
+
+        /// <summary>Why this row cannot upload as-is, or null. Separate from TitleError because
+        /// they are fixed in different columns.</summary>
+        public string GenreError { get; set; }
+
+        /// <summary>Null is a first-class choice, not an empty state: most creators have no
+        /// persona and their songs carry the display name instead.</summary>
+        public int? PersonaId { get; set; }
+
+        public bool IsAiGenerated { get; set; }
+        public bool IsAiVocals { get; set; }
+        public bool IsAiLyrics { get; set; }
+
+        /// <summary>
+        /// The creator has said none of it is AI.
+        ///
+        /// <para>
+        /// Not persisted, and it does not need to be - what reaches the song is the three flags
+        /// above, all false. It exists so the review step can tell "declared original" apart
+        /// from "has not answered yet", which three unticked boxes cannot.
+        /// </para>
+        /// </summary>
+        public bool AllOriginal { get; set; }
+
+        /// <summary>Whether the disclosure has been answered at all, either way.</summary>
+        public bool AiDeclared => AllOriginal || IsAiGenerated || IsAiVocals || IsAiLyrics;
+
+        /// <summary>Why this row cannot upload as-is, or null.</summary>
+        public string AiError { get; set; }
+
+        /// <summary>Everything the creator set here, in the shape the job carries it.</summary>
+        public SongPublishMetadata ToPublishMetadata() => new()
+        {
+            Genre = string.IsNullOrWhiteSpace(Genre) ? null : Genre.Trim(),
+            PersonaId = PersonaId,
+            IsAiGenerated = IsAiGenerated,
+            IsAiVocals = IsAiVocals,
+            IsAiLyrics = IsAiLyrics,
+        };
 
         public string AudioFileName { get; set; } = string.Empty;
         public long AudioFileSize { get; set; }

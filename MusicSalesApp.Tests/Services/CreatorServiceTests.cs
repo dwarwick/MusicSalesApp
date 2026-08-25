@@ -476,6 +476,130 @@ public class CreatorServiceTests
     }
 
     [Test]
+    public async Task ActivateCreatorAsync_RearmsTheActivationNotice()
+    {
+        // Someone who stops being a creator and comes back is activating again, and should be
+        // told so again.
+        var user = new ApplicationUser { UserName = "rearm@test.com", Email = "rearm@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, ActivationAnnouncedAt = DateTime.UtcNow.AddDays(-30) };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        await _service.ActivateCreatorAsync(creator.Id);
+
+        await using var verify = await _contextFactory.CreateDbContextAsync();
+        var saved = await verify.Creators.SingleAsync(c => c.Id == creator.Id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.IsActive, Is.True);
+            Assert.That(saved.ActivationAnnouncedAt, Is.Null, "a fresh activation owes a fresh notice");
+        });
+    }
+
+    [Test]
+    public async Task StopBeingCreatorAsync_RearmsTheDeactivationNotice()
+    {
+        var user = new ApplicationUser { UserName = "stop@test.com", Email = "stop@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            IsActive = true,
+            DeactivationAnnouncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        await _service.StopBeingCreatorAsync(user.Id);
+
+        await using var verify = await _contextFactory.CreateDbContextAsync();
+        var saved = await verify.Creators.SingleAsync(c => c.Id == creator.Id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.IsActive, Is.False);
+            Assert.That(saved.DeactivationAnnouncedAt, Is.Null);
+        });
+    }
+    [Test]
+    public async Task GetCreatorSongCountAsync_CountsOnlyThisCreatorsActiveSongs()
+    {
+        // The settings page shows this number in three places - the checklist, the catalogue
+        // note, and the "this deletes N songs" warning on the way out - so counting a
+        // deactivated song, or someone else's, is user-visible and wrong in the worst spot.
+        var mine = new Creator { DisplayName = "Mine" };
+        var theirs = new Creator { DisplayName = "Theirs" };
+        _context.Creators.AddRange(mine, theirs);
+        await _context.SaveChangesAsync();
+
+        var a = Guid.NewGuid();
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            MediaGuid = a,
+            SongTitle = "Kept One",
+            CreatorId = mine.Id,
+            Mp3BlobPath = SongMediaPaths.Playback(a),
+            OriginalAudioBlobPath = SongMediaPaths.OriginalAudio(a, ".wav"),
+            ImageBlobPath = SongMediaPaths.CoverArt(a, ".png"),
+            OriginalCoverArtBlobPath = SongMediaPaths.OriginalCoverArt(a, ".png"),
+        });
+        var b = Guid.NewGuid();
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            MediaGuid = b,
+            SongTitle = "Kept Two",
+            CreatorId = mine.Id,
+            Mp3BlobPath = SongMediaPaths.Playback(b),
+            OriginalAudioBlobPath = SongMediaPaths.OriginalAudio(b, ".wav"),
+            ImageBlobPath = SongMediaPaths.CoverArt(b, ".png"),
+            OriginalCoverArtBlobPath = SongMediaPaths.OriginalCoverArt(b, ".png"),
+        });
+        var c = Guid.NewGuid();
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            MediaGuid = c,
+            SongTitle = "Deactivated",
+            CreatorId = mine.Id,
+            Mp3BlobPath = SongMediaPaths.Playback(c),
+            OriginalAudioBlobPath = SongMediaPaths.OriginalAudio(c, ".wav"),
+            ImageBlobPath = SongMediaPaths.CoverArt(c, ".png"),
+            OriginalCoverArtBlobPath = SongMediaPaths.OriginalCoverArt(c, ".png"),
+            IsActive = false,
+        });
+        var d = Guid.NewGuid();
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            MediaGuid = d,
+            SongTitle = "Someone Else",
+            CreatorId = theirs.Id,
+            Mp3BlobPath = SongMediaPaths.Playback(d),
+            OriginalAudioBlobPath = SongMediaPaths.OriginalAudio(d, ".wav"),
+            ImageBlobPath = SongMediaPaths.CoverArt(d, ".png"),
+            OriginalCoverArtBlobPath = SongMediaPaths.OriginalCoverArt(d, ".png"),
+        });
+        await _context.SaveChangesAsync();
+
+        var count = await _service.GetCreatorSongCountAsync(mine.Id);
+
+        Assert.That(count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetCreatorSongCountAsync_ReturnsZero_WhenNothingUploaded()
+    {
+        var creator = new Creator { DisplayName = "Empty" };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        Assert.That(await _service.GetCreatorSongCountAsync(creator.Id), Is.EqualTo(0));
+    }
+    [Test]
     public async Task UpdateCreatorPayoutEmailAsync_ReturnsNull_WhenCreatorDoesNotExist()
     {
         var result = await _service.UpdateCreatorPayoutEmailAsync(999, "new@paypal.com", true);

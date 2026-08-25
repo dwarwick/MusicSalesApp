@@ -69,7 +69,7 @@ public class RefreshSignInPageTests
     [Test]
     public async Task OnGetAsync_RefreshesSignInAndRedirectsToLocalReturnUrl()
     {
-        var returnUrl = $"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorActivated}=true";
+        var returnUrl = AppPageRoutes.CreatorSettings;
         _mockUrlHelper.Setup(x => x.IsLocalUrl(returnUrl)).Returns(true);
 
         var result = await _pageModel.OnGetAsync(returnUrl);

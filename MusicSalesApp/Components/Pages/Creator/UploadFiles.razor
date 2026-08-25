@@ -13,7 +13,7 @@
 <div class="d-flex flex-row align-items-center mb-2">
     <h3 class="me-2 mb-0">Upload Music Files</h3>
     
-    <SfButton CssClass="cta-primary" IconCss="fas fa-circle-info" OnClick=@(() => NavigationManager.NavigateTo("/uploadhelp"))>How does this work?</SfButton>
+    <SfButton CssClass="cta-primary" OnClick=@(() => NavigationManager.NavigateTo("/uploadhelp"))>How does this work?</SfButton>
 </div>
 
 <SfMessage Severity="MessageSeverity.Info" CssClass="mb-3">
@@ -23,34 +23,6 @@
 </SfMessage>
 
 <div class="container-fluid">
-
-    @* Stays visible through the review step, unlike the drop box. The setting is still live there -
-       unticking it takes the re-pairing interface away - and the review step is exactly where a
-       creator discovers they did not want it. Hiding it at that moment also made its state
-       unknowable, which turned "it paused anyway" into an unanswerable bug report. *@
-    @if (ShowMatchCoverArtChoice)
-    {
-        <div class="mb-3">
-            <SfCheckBox TChecked="bool"
-                        Label="Match cover art to songs before uploading"
-                        Checked="@_matchCoverArtBeforeUpload"
-                        ValueChange="@OnMatchCoverArtChanged" />
-            <small class="text-muted d-block ms-4 ps-1">
-                Pauses once your files are ready so you can check each pairing and drag artwork
-                onto the right song. Cover art is still matched automatically either way, and
-                batches with no artwork never pause.
-                @if (_awaitingTitleConfirmation)
-                {
-                    @* It does NOT wait for the next batch. Unticking it here removes the pairing
-                       controls from the batch on screen, and saying otherwise would strand any
-                       image the creator had not placed yet. *@
-                    <strong class="d-block mt-1">
-                        Unticking this now also removes the cover art controls from the batch below.
-                    </strong>
-                }
-            </small>
-        </div>
-    }
 
     <label class="upload-box @(HideUploadBox ? "upload-box-disabled" : "") mb-2"
            style="display: @(HideUploadBox ? "none" : "flex")">
@@ -63,7 +35,8 @@
                    multiple />
 
         <div class="upload-content" style="display: @(_isUploading ? "none" : "block")">
-            <i class="fa-solid fa-cloud-arrow-up"></i>
+            @* Inline SVG with fill="currentColor". A glyph font cannot follow the theme. *@
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13a5 5 0 0 0 .35-9.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
             <div class="mt-2 fw-semibold">Drag & drop files here</div>
             <div class="text-muted small">or click to browse</div>
             <div class="text-muted small mt-2">Audio formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</div>
@@ -207,11 +180,15 @@
                     <h5 class="mb-0">@(_awaitingTitleConfirmation ? "Review Before Uploading" : "Processing Progress")</h5>
                     @if (_awaitingTitleConfirmation)
                     {
-                        <div class="d-flex gap-2">
-                            <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <SfButton CssClass="cta-primary e-large" OnClick="StartUploadAsync">
                                 @UploadButtonLabel
                             </SfButton>
                             <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
+                            @if (!ReviewIsComplete)
+                            {
+                                <span class="review-outstanding">@ReviewOutstandingMessage</span>
+                            }
                         </div>
                     }
                 </div>
@@ -223,7 +200,7 @@
                         @if (SongsWithoutCoverArtCount > 0)
                         {
                             <span class="d-block mt-1">
-                                <i class="fa-solid fa-circle-info"></i>
+                                <svg class="inline-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/></svg>
                                 @(SongsWithoutCoverArtCount == 1
                                     ? "1 song has no cover art"
                                     : $"{SongsWithoutCoverArtCount} songs have no cover art")
@@ -231,6 +208,76 @@
                             </span>
                         }
                     </p>
+
+                    @* Most batches are one release, so one genre and one persona across the whole
+                       thing is the common case rather than the exception - which is the entire
+                       reason this row exists.
+
+                       It overwrites rows already filled in, deliberately. Only filling blanks
+                       sounds safer and is worse: the control would do different things depending
+                       on state the creator cannot see, and anyone who genuinely wants one genre
+                       across fifty songs would have to clear rows first. *@
+                    @if (_uploadItems.Count > 1)
+                    {
+                        <div class="apply-all">
+                            <span class="apply-all-label">Apply to all @_uploadItems.Count</span>
+
+                            <div class="apply-all-field">
+                                <label class="form-label" for="applyAllTitles">Titles</label>
+                                <SfButton ID="applyAllTitles" CssClass="e-small e-outline" Content="All titles look right" OnClick="ConfirmAllTitles" />
+                            </div>
+
+                            <div class="apply-all-field">
+                                <label class="form-label" for="applyAllGenre">Genre</label>
+                                <select id="applyAllGenre" class="form-select review-select"
+                                        @onchange="@(e => { _applyAllGenre = e.Value?.ToString() ?? string.Empty; ApplyGenreToAll(); })">
+                                    <option value="" selected="@string.IsNullOrEmpty(_applyAllGenre)">Choose a genre</option>
+                                    @foreach (var genre in _genres)
+                                    {
+                                        <option value="@genre.Name" selected="@(string.Equals(genre.Name, _applyAllGenre, StringComparison.OrdinalIgnoreCase))">@genre.Name</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="apply-all-field apply-all-field-wide">
+                                <label class="form-label">AI disclosure</label>
+                                @* The same two-group choice a row has, not a shortcut for one side of
+                                   it. A batch is usually one release, so "this whole EP has AI vocals"
+                                   is as normal an answer as "all of it is original". *@
+                                <div class="ai-declare">
+                                    <SfCheckBox TChecked="bool" Label="All original"
+                                                Checked="@_applyAllOriginal"
+                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllOriginal(a.Checked))" />
+
+                                    <span class="ai-declare-or">or say which parts are AI</span>
+
+                                    <div class="ai-flags">
+                                        <SfCheckBox TChecked="bool" Label="AI music"
+                                                    Checked="@_applyAllAiMusic"
+                                                    ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllAiMusic(a.Checked))" />
+                                        <SfCheckBox TChecked="bool" Label="AI vocals"
+                                                    Checked="@_applyAllAiVocals"
+                                                    ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllAiVocals(a.Checked))" />
+                                        <SfCheckBox TChecked="bool" Label="AI lyrics"
+                                                    Checked="@_applyAllAiLyrics"
+                                                    ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllAiLyrics(a.Checked))" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="apply-all-field">
+                                <label class="form-label" for="applyAllPersona">Artist persona</label>
+                                <select id="applyAllPersona" class="form-select review-select"
+                                        @onchange="@(e => { _applyAllPersonaId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : int.Parse(e.Value.ToString()); ApplyPersonaToAll(); })">
+                                    <option value="" selected="@(_applyAllPersonaId == null)">No persona</option>
+                                    @foreach (var persona in _personas)
+                                    {
+                                        <option value="@persona.Id" selected="@(_applyAllPersonaId == persona.Id)">@persona.Name</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    }
 
                     @* Shown only when it holds something, or while the creator is mid-gesture and
                        needs somewhere to let go. An empty dashed box above a table where every
@@ -291,11 +338,14 @@
                                 @* Wording from a creator who could not work out where to drop.
                                    Names the column, names the gesture for both mouse and touch, and
                                    tells them what to look for - the box only appears as a target,
-                                   so "look for the green dashed box" is the reliable landmark. *@
+                                   so "look for the dashed box" is the reliable landmark.
+                                   Named by shape rather than colour: the green had no token behind
+                                   it, and a creator who cannot separate green from grey was left
+                                   without the one instruction that mattered. *@
                                 <small class="text-muted d-block mt-2">
                                     Drag one image onto a song row in the <strong>Cover Art</strong> column,
                                     or tap the image and then tap the song row's Cover Art column.
-                                    Look for the <span class="cover-art-hint-swatch">green dashed box</span>
+                                    Look for the <span class="cover-art-hint-swatch">dashed box</span>
                                     on the song row — that is where you tap or drop.
                                 </small>
                             }
@@ -303,24 +353,46 @@
                     }
                 }
                 <div class="table-responsive">
-                    <table class="table table-striped">
+                    @* review-table is what the breakpoint sheets key the card treatment off.
+                       Six columns do not fit a phone, so below 992px each row becomes a card and
+                       every cell grows a label from its data-label. Only while reviewing: the
+                       progress view has four columns and reads fine as a table. *@
+                    <table class="table table-striped @(_awaitingTitleConfirmation ? "review-table" : "")">
                         <thead>
                             <tr>
                                 <th>Song Title</th>
-                                <th>Audio File</th>
+                                @if (_awaitingTitleConfirmation)
+                                {
+                                    <th>Genre</th>
+                                    <th>Artist persona</th>
+                                    <th>AI disclosure</th>
+                                }
+                                else
+                                {
+                                    <th>Audio File</th>
+                                }
                                 <th>Cover Art</th>
                                 <th>Status</th>
-                                <th>Progress</th>
+                                @if (!_awaitingTitleConfirmation)
+                                {
+                                    <th>Progress</th>
+                                }
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var item in _uploadItems)
                             {
                                 <tr class="@(item.TitleError != null ? "table-warning" : "")">
-                                    <td style="min-width: 16rem;">
+                                    <td style="min-width: 18rem;" data-label="Song title">
                                         @if (_awaitingTitleConfirmation)
                                         {
-                                            <SfTextBox @bind-Value="item.SongTitle"
+                                            @* Every title arrives pre-filled from its filename, so a
+                                               required field would catch nothing - "track 03 final FINAL"
+                                               passes every rule there is. What catches it is having to
+                                               confirm, and typing here counts as confirming. *@
+                                            <SfTextBox Value="@item.SongTitle"
+                                                       ValueChanged="@((string v) => OnTitleChanged(item, v))"
+                                                       ValueExpression="@(() => item.SongTitle)"
                                                        MaxLength="200"
                                                        Placeholder="Song title"
                                                        aria-label="@($"Song title for {item.AudioFileName}")" />
@@ -328,23 +400,142 @@
                                             {
                                                 <small class="text-danger d-block mt-1">@item.TitleError</small>
                                             }
+                                            <div class="title-check">
+                                                <SfCheckBox TChecked="bool" Label="Looks right"
+                                                            Checked="@item.TitleConfirmed"
+                                                            ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ConfirmTitle(item, a.Checked))" />
+                                                <small class="@(!item.TitleConfirmed && TitleLooksLikeAFileName(item.SongTitle) ? "title-source-warn" : "text-muted")">
+                                                    @if (!item.TitleConfirmed && TitleLooksLikeAFileName(item.SongTitle))
+                                                    {
+                                                        <text>Taken from <strong>@item.TitleSourceFileName</strong>. Listeners see this exactly as written.</text>
+                                                    }
+                                                    else
+                                                    {
+                                                        <text>From @item.TitleSourceFileName</text>
+                                                    }
+                                                </small>
+                                            </div>
                                         }
                                         else
                                         {
                                             @item.SongTitle
                                         }
                                     </td>
-                                    <td>
-                                        @item.AudioFileName
-                                        <br />
+                                    @if (_awaitingTitleConfirmation)
+                                    {
+                                        <td style="min-width: 12rem;" data-label="Genre">
+                                            @* Genre is REQUIRED for a song to publish, and until now it
+                                               could only be set on /creator/songs, after publishing. *@
+                                            <select class="form-select review-select @(item.GenreError != null ? "is-invalid" : "")"
+                                                    @onchange="@(e => SetRowGenre(item, e.Value?.ToString()))"
+                                                    aria-label="@($"Genre for {item.SongTitle}")">
+                                                <option value="" selected="@string.IsNullOrEmpty(item.Genre)">Choose a genre</option>
+                                                @foreach (var genre in _genres)
+                                                {
+                                                    <option value="@genre.Name" selected="@(string.Equals(genre.Name, item.Genre, StringComparison.OrdinalIgnoreCase))">@genre.Name</option>
+                                                }
+                                            </select>
+                                            @if (item.GenreError != null)
+                                            {
+                                                <small class="text-danger d-block mt-1">@item.GenreError</small>
+                                            }
+                                            @* A textbox, not a page: leaving /upload-files drops the live
+                                               FileList and with it the whole batch. *@
+                                            @if (_showAddGenre && _addGenreForRow == item)
+                                            {
+                                                <div class="inline-create">
+                                                    <SfTextBox @bind-Value="_newGenreName" MaxLength="50" Placeholder="New genre name" />
+                                                    <div class="inline-create-actions">
+                                                        <SfButton CssClass="e-small cta-secondary hero-secondary-cta" Content="@(_addingGenre ? "Adding..." : "Add")" Disabled="@_addingGenre" OnClick="ConfirmAddGenreAsync" />
+                                                        <SfButton CssClass="e-small e-outline" Content="Cancel" OnClick="CancelAddGenre" />
+                                                    </div>
+                                                    @if (!string.IsNullOrEmpty(_addGenreError))
+                                                    {
+                                                        <small class="text-danger d-block mt-1">@_addGenreError</small>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="inline-create-link" @onclick="@(() => BeginAddGenre(item))">+ New genre</button>
+                                            }
+                                        </td>
+                                        <td style="min-width: 13rem;" data-label="Artist persona">
+                                            @* Never required. Most creators have none, so no persona is a
+                                               first-class choice and the row says which name gets used. *@
+                                            <select class="form-select review-select"
+                                                    @onchange="@(e => item.PersonaId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : int.Parse(e.Value.ToString()))"
+                                                    aria-label="@($"Artist persona for {item.SongTitle}")">
+                                                <option value="" selected="@(item.PersonaId == null)">No persona</option>
+                                                @foreach (var persona in _personas)
+                                                {
+                                                    <option value="@persona.Id" selected="@(item.PersonaId == persona.Id)">@persona.Name</option>
+                                                }
+                                            </select>
+                                            <small class="text-muted d-block mt-1">Will show as <strong>@ArtistNameFor(item)</strong></small>
+                                            @if (_showAddPersona && _addPersonaForRow == item)
+                                            {
+                                                <div class="inline-create">
+                                                    <SfTextBox @bind-Value="_newPersonaName" MaxLength="100" Placeholder="Artist or band name" />
+                                                    <div class="inline-create-actions">
+                                                        <SfButton CssClass="e-small cta-secondary hero-secondary-cta" Content="@(_addingPersona ? "Adding..." : "Add")" Disabled="@_addingPersona" OnClick="ConfirmAddPersonaAsync" />
+                                                        <SfButton CssClass="e-small e-outline" Content="Cancel" OnClick="CancelAddPersona" />
+                                                    </div>
+                                                    @if (!string.IsNullOrEmpty(_addPersonaError))
+                                                    {
+                                                        <small class="text-danger d-block mt-1">@_addPersonaError</small>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="inline-create-link" @onclick="@(() => BeginAddPersona(item))">+ New persona</button>
+                                            }
+                                        </td>
+                                        <td style="min-width: 12rem;" data-label="AI disclosure">
+                                            @* Two groups that exclude each other, and one of them has to
+                                               be answered. As three optional boxes, all-unticked meant
+                                               both "none of this is AI" and "nobody answered" - and only
+                                               one of those is a disclosure. *@
+                                            <div class="ai-declare @(item.AiError != null ? "ai-declare-invalid" : "")">
+                                                <SfCheckBox TChecked="bool" Label="All original"
+                                                            Checked="@item.AllOriginal"
+                                                            ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAllOriginal(item, a.Checked))" />
 
-                                        <small class="text-muted">@FormatFileSize(item.AudioFileSize)</small>
-                                    </td>
+                                                <span class="ai-declare-or">or say which parts are AI</span>
+
+                                                <div class="ai-flags">
+                                                    <SfCheckBox TChecked="bool" Label="AI music"
+                                                                Checked="@item.IsAiGenerated"
+                                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAiMusic(item, a.Checked))" />
+                                                    <SfCheckBox TChecked="bool" Label="AI vocals"
+                                                                Checked="@item.IsAiVocals"
+                                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAiVocals(item, a.Checked))" />
+                                                    <SfCheckBox TChecked="bool" Label="AI lyrics"
+                                                                Checked="@item.IsAiLyrics"
+                                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAiLyrics(item, a.Checked))" />
+                                                </div>
+                                            </div>
+                                            @if (item.AiError != null)
+                                            {
+                                                <small class="text-danger d-block mt-1">@item.AiError</small>
+                                            }
+                                        </td>
+                                    }
+                                    else
+                                    {
+                                        <td>
+                                            @item.AudioFileName
+                                            <br />
+
+                                            <small class="text-muted">@FormatFileSize(item.AudioFileSize)</small>
+                                        </td>
+                                    }
                                     @* During review this cell is both a drop target and a drag source,
                                        so a wrong pairing can be corrected in one gesture rather than
                                        cleared and re-made. Once uploading starts it goes back to
                                        being a plain read-only label. *@
-                                    <td style="min-width: 14rem;"
+                                    <td style="min-width: 14rem;" data-label="Cover art"
                                         class="@(_awaitingTitleConfirmation && HeldCoverArt != null ? "cover-art-target" : "")"
                                         @ondragover:preventDefault="@_awaitingTitleConfirmation"
                                         @ondrop="@(() => AssignHeldCoverArt(item))"
@@ -381,10 +572,14 @@
                                                        SfButton rendered as nothing visible - there is
                                                        no icon-only precedent anywhere in this app -
                                                        and a creator who could not find the drop target
-                                                       was never going to find an unlabelled x either. *@
+                                                       was never going to find an unlabelled x either.
+
+                                                       It says what it removes. When it just said
+                                                       "Remove", a creator trying to drop one song from
+                                                       the batch pressed it and lost the artwork. *@
                                                     <span @onclick:stopPropagation="true">
                                                         <SfButton CssClass="e-small e-outline cover-art-remove"
-                                                                  Content="Remove"
+                                                                  Content="Remove art"
                                                                   aria-label="@($"Remove cover art from {item.SongTitle}")"
                                                                   OnClick="@(() => ClearCoverArt(item))" />
                                                     </span>
@@ -397,7 +592,7 @@
                                                text. A creator looking for "where do I drop this"
                                                needs a target they can see from across the table. *@
                                             <div class="cover-art-dropzone">
-                                                <i class="fa-solid fa-image"></i>
+                                                <svg class="inline-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
                                                 <span>
                                                     @if (HeldCoverArt != null)
                                                     {
@@ -422,6 +617,18 @@
                                         @if (_awaitingTitleConfirmation)
                                         {
                                             <span class="badge bg-secondary">Not uploaded</span>
+
+                                            @* The way out for one song rather than the whole batch.
+                                               A duplicate title is the case that needs it: without
+                                               this, finding one song already in your catalogue means
+                                               renaming a song you did not want to rename, or
+                                               cancelling the two that were fine. *@
+                                            <div class="row-remove">
+                                                <SfButton CssClass="e-small e-outline"
+                                                          Content="Don't upload this"
+                                                          aria-label="@($"Remove {item.SongTitle} from this batch")"
+                                                          OnClick="@(() => RemoveFromBatchAsync(item))" />
+                                            </div>
                                         }
                                         else if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Processing)
                                         {
@@ -440,6 +647,8 @@
                                             <span class="badge bg-secondary">@item.StatusMessage</span>
                                         }
                                     </td>
+                                    @if (!_awaitingTitleConfirmation)
+                                    {
                                     @* One bar for the whole lifecycle: the browser-to-Azure upload,
                                        then transcoding in the Azure Function, then assembly here.
                                        It is never hidden and never runs backwards, so a creator can
@@ -461,6 +670,7 @@
                                             <small class="text-danger">@item.ErrorMessage</small>
                                         }
                                     </td>
+                                    }
                                 </tr>
                             }
                         </tbody>
@@ -469,11 +679,15 @@
 
                 @if (_awaitingTitleConfirmation)
                 {
-                    <div class="d-flex gap-2 mt-2">
-                        <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                        <SfButton CssClass="cta-primary e-large" OnClick="StartUploadAsync">
                             @UploadButtonLabel
                         </SfButton>
                         <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
+                        @if (!ReviewIsComplete)
+                        {
+                            <span class="review-outstanding">@ReviewOutstandingMessage</span>
+                        }
                     </div>
                 }
             </div>
@@ -536,187 +750,6 @@
         </div>
     }
 </div>
-
-<style>
-    .upload-box {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 260px;
-    border: 2px dashed #6c757d;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.2s ease;
-}
-
-.upload-box:hover {
-    background-color: rgba(255,255,255,0.05);
-}
-
-.upload-box-disabled {
-    pointer-events: none;
-    cursor: not-allowed;
-}
-
-.hidden-input {
-    display: none;
-}
-
-.upload-content {
-    text-align: center;
-    pointer-events: none;
-}
-
-.upload-content i {
-    font-size: 3rem;
-}
-
-.upload-spinner {
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
-@@keyframes upload-spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-}
-
-.upload-processing-animation {
-    width: 200px;
-    height: 200px;
-    animation: upload-spin 2s linear infinite;
-}
-
-    .dropzone {
-        display: block;
-        width: 100%;
-        height: 220px;
-        border: 2px dashed #bbb;
-        border-radius: 8px;
-        text-align: center;
-        padding: 40px;
-    }
-
-        .dropzone:hover {
-            border-color: #888;
-        }
-
-    .cover-art-pool {
-        border: 2px dashed #bbb;
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        margin-bottom: 1rem;
-    }
-
-    /* Only while something is held, so the drop targets are obvious mid-gesture and invisible
-       otherwise - a page permanently outlined in dashed boxes reads as broken. */
-    .cover-art-pool-active {
-        border-color: #0d6efd;
-        background-color: rgba(13, 110, 253, 0.06);
-    }
-
-    .cover-art-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-    }
-
-    .cover-art-chip {
-        width: 7.5rem;
-        padding: 0.5rem;
-        border: 1px solid #ced4da;
-        border-radius: 6px;
-        cursor: grab;
-        text-align: center;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .cover-art-chip:hover {
-        border-color: #0d6efd;
-    }
-
-    .cover-art-chip-held {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
-    }
-
-    .cover-art-chip-name {
-        font-size: 0.75rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .cover-art-thumb {
-        width: 100%;
-        aspect-ratio: 1 / 1;
-        object-fit: cover;
-        border-radius: 4px;
-        background-color: rgba(127, 127, 127, 0.2);
-    }
-
-    .cover-art-thumb-row {
-        width: 3rem;
-        flex: 0 0 3rem;
-        cursor: grab;
-    }
-
-    /* Green, and named as green in the instructions above the table. A creator being told to look
-       for a landmark has to be able to find that exact landmark, so the two are edited together. */
-    .cover-art-dropzone {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        min-height: 3.25rem;
-        padding: 0.5rem;
-        border: 2px dashed #198754;
-        border-radius: 6px;
-        color: #198754;
-        font-size: 0.8125rem;
-        text-align: center;
-        cursor: pointer;
-    }
-
-    .cover-art-dropzone i {
-        font-size: 1rem;
-        opacity: 0.7;
-    }
-
-    /* Applied to every row's cell while an image is held, including rows that already have art -
-       re-pairing is allowed there too, and the target has to look like one. */
-    .cover-art-target {
-        outline: 2px dashed #198754;
-        outline-offset: -4px;
-        background-color: rgba(25, 135, 84, 0.08);
-        cursor: copy;
-    }
-
-    .cover-art-target .cover-art-dropzone {
-        border-color: #198754;
-        background-color: rgba(25, 135, 84, 0.12);
-        font-weight: 600;
-    }
-
-    .cover-art-remove {
-        flex: 0 0 auto;
-        white-space: nowrap;
-        font-size: 0.75rem;
-    }
-
-    /* Makes the phrase in the instructions look like the thing it is naming. */
-    .cover-art-hint-swatch {
-        border: 1px dashed #198754;
-        border-radius: 3px;
-        padding: 0 0.25rem;
-        color: #198754;
-        white-space: nowrap;
-    }
-</style>
-
 <script suppress-error="BL9992">
     (function () {
         // These two listeners exist to stop the browser navigating away when a creator drops a file
@@ -959,20 +992,6 @@
         // account settings, and this way they cost no schema change and no round trip. Wrapped in
         // try/catch because localStorage throws outright in private-browsing modes and when a site
         // is blocked from storing data, and a preference is never worth failing a page over.
-        readPreference: function (key) {
-            try {
-                return window.localStorage.getItem(key);
-            } catch {
-                return null;
-            }
-        },
-
-        writePreference: function (key, value) {
-            try {
-                window.localStorage.setItem(key, value);
-            } catch { /* storage unavailable; the default applies next visit */ }
-        },
-
         revokeCoverArtPreviews: function () {
             var held = window._coverArtPreviewUrls || {};
             Object.keys(held).forEach(function (key) {

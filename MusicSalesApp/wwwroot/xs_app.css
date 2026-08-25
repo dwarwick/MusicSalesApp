@@ -1,26 +1,13 @@
 /* Extra small breakpoint styles (<576px) */
 @media (max-width: 576px) {
-    .creator-settings-page {
-        padding: 22px 10px 40px;
-    }
-
-    .creator-settings-card .e-card-content {
-        padding: 18px;
-    }
-
-    .creator-settings-title h2 {
-        font-size: 24px;
-    }
-
-    .creator-settings-card h3 {
-        font-size: 22px;
-    }
-
-    .creator-agreement-box,
-    .creator-info-strip,
-    .creator-payout-section {
-        padding: 14px;
-    }
+    /* ---- Upload: the drop box gives up two thirds of its height on a phone,
+       where 260px of empty dashes pushes everything else below the fold. */
+    .upload-box { height: 170px; }
+    .upload-content .upload-icon { width: 36px; height: 36px; }
+    .upload-processing-animation { width: 120px; height: 120px; }
+    .cover-art-chip { width: 6rem; }
+    .apply-all { gap: 10px; padding: 12px; }
+    .ai-flags { flex-direction: row; flex-wrap: wrap; gap: 12px; }
 
     .mobile-app-install-banner {
         min-height: 54px;
@@ -552,4 +539,60 @@
     .empty-state-icon svg { width: 26px; height: 26px; }
     .empty-state-title { font-size: 16.5px; }
     .state-action { height: 44px; width: 100%; }
+
+/* Auth pages - phone. The panel keeps the logo and the brand colour, which is the only
+       place either appears once the page scrolls. */
+    .auth-page { margin: -1rem -1.5rem 0; min-height: calc(100dvh - 56px); }
+    .auth-panel { height: 148px; padding: 20px 24px; }
+    .auth-panel-logo { height: 28px; }
+    .auth-panel-title { font-size: 26px; line-height: 1.14; margin-bottom: 12px; }
+    .auth-panel-body { display: none; }
+    .auth-panel-rule { width: 56px; }
+
+    .auth-form-col { padding: 22px 24px 20px; }
+    .auth-title { font-size: 26px; margin-bottom: 6px; }
+    .auth-subtitle { margin-bottom: 20px; }
+    .auth-check { margin-bottom: 20px; }
+    .auth-page .e-btn.auth-submit { height: 50px; }
+    .auth-page .e-btn.auth-provider { height: 48px; }
+    .auth-divider { margin: 18px 0; }
+    .auth-footer { margin-top: 22px; }
+
+/* Register - phone. */
+    .auth-legal { padding: 14px; margin-bottom: 20px; }
+    .auth-page .auth-input.form-control { height: 48px; }
+    .auth-rule { margin: 20px 0; }
+
+/* Settings surfaces - phone. */
+    .settings-page { padding: 22px 16px 40px; min-height: calc(100dvh - 56px); }
+    .settings-main { max-width: none; }
+    .settings-column { gap: 18px; }
+    .settings-card { padding: 18px; }
+    .settings-head-title { font-size: 26px; }
+    .settings-section-head { flex-direction: column; gap: 10px; }
+    .fact-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+    .fact-value { text-align: left; }
+    .passkey-row { flex-wrap: wrap; }
+    .passkey-actions { width: 100%; }
+    :is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-small { flex: 1 1 auto; }
+
+    /* Creator settings. The three status tiles stop competing for width and become
+       label-and-pill rows, which is the only shape that stays legible at 390. */
+    .status-tiles { flex-direction: column; gap: 10px; }
+    .status-tile { flex: 0 0 auto; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; }
+    .status-tile-label { margin-bottom: 0; }
+    .payout-section { padding: 14px; }
+    .payout-heading { flex-wrap: wrap; }
+    .settings-consent { padding: 14px; }
+    .persona-row { align-items: flex-start; }
+    .persona-cards { grid-template-columns: 1fr; gap: 14px; }
+    .persona-card { padding: 16px; }
+    .persona-card-head { flex-wrap: wrap; }
+    .persona-toolbar { align-items: stretch; }
+    /* Two actions on one line at 390 leaves neither with a usable target. */
+    .persona-card .settings-actions .e-btn.settings-btn { flex: 1 1 auto; }
+    .persona-image-picker { flex-direction: column; }
+    .crop-canvas { width: 100%; max-width: 300px; height: auto; }
+
+
 }

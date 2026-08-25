@@ -15,6 +15,10 @@
     --st-surface: #2a323d; /* lighter than the page, and tinted toward the brand */
     --st-surface-hover: #333c49;
     --st-line: rgba(255, 255, 255, .10);
+    /* Control boundaries ONLY. --st-line is 1.37:1 on --st-surface, which is fine
+       for a card edge but below the 3:1 WCAG 1.4.11 asks for on the border of an
+       INTERACTIVE control - an unchecked checkbox at that ratio reads as absent. */
+    --st-control-line: #7e8b9e; /* 3.74:1 on --st-surface, 4.46:1 on --st-page, 3.23:1 on --st-surface-hover */
     --st-text: #e9eef5; /* 11.10:1 on --st-surface */
     --st-text-2: #a8b6c8; /*  6.28:1 */
     --st-text-3: #8ba3c7; /*  5.03:1 */
@@ -27,7 +31,9 @@
      */
     --st-genre: #a594f6; /*  5.03:1 */
     --st-warn: #ffa500; /*  6.56:1 */
-    --st-warn-soft: rgba(255, 165, 0, .15);
+    /* Solid, not an alpha: --st-warn-soft composited differently over --st-page than
+       over --st-surface, and on the page it left --st-warn at 4.34:1, under AA. */
+    --st-warn-tint: #3f3320; /* --st-warn #ffa500 on it = 6.23:1 */
     --st-track: rgba(255, 255, 255, .16);
     /* The page behind the cards, so a sticky header can hide what scrolls under it. */
     --st-page: #212529;
@@ -47,6 +53,23 @@
     --st-on-accent: #04121f; /* 8.35:1 on the fill, 10.11:1 on the hover */
     --st-on-accent-soft: rgba(0, 0, 0, .22);
     --st-genre-fill: #a594f6;
+    /*
+     * DESTRUCTIVE. Syncfusion ships e-danger as #dc3545 and it was the last colour in
+     * the app with no theme variant at all: as TEXT or a 1px BORDER it measures
+     * 2.86:1 on --st-surface and 3.41:1 on --st-page - both well under AA, so every Delete link, outlined
+     * Cancel and danger-zone edge failed. Filled with a white label it squeaked
+     * through at 4.53:1, which is why it went unnoticed.
+     *
+     * Contrast is symmetric, so ONE value does both jobs here - unlike --st-accent,
+     * which needed a separate fill family only because its FOREGROUND was wrong.
+     * --st-on-danger is the only foreground permitted on --st-danger.
+     */
+    --st-danger: #ff8a94; /* 5.74:1 on --st-surface, 6.84:1 on --st-page, 4.95:1 on --st-surface-hover */
+    --st-on-danger: #2a0508; /* 8.29:1 on the fill */
+    /* The background a danger ALERT sits on. Solid for the same reason --st-warn-tint
+       is: an alpha composites differently over --st-page than over --st-surface, so the
+       pair cannot be measured once. */
+    --st-danger-tint: #331316; /* --st-danger on it = 7.48:1, --st-text = 14.46:1 */
     --st-on-genre: #17102e; /* 7.10:1 */
     --st-elev: 0 2px 6px rgba(0, 0, 0, .30), 0 8px 24px rgba(0, 0, 0, .38);
     --st-elev-hover: 0 4px 10px rgba(0, 0, 0, .38), 0 14px 34px rgba(0, 0, 0, .48);
@@ -89,109 +112,6 @@ body {
 .mobile-app-install-store-text:hover {
     background-color: #ffffff;
     color: #111111;
-}
-
-.creator-settings-page {
-    color: #f3f4f6;
-}
-
-.creator-settings-title h2,
-.creator-settings-card h3 {
-    color: #ffffff;
-}
-
-.creator-settings-title p,
-.creator-settings-card p,
-.creator-settings-hint,
-.creator-status-label,
-.creator-checklist-item span,
-.creator-settings-field small,
-.creator-section-heading span {
-    color: #cbd5e1;
-}
-
-.creator-settings-kicker {
-    color: #c084fc;
-}
-
-.creator-status-pill,
-.creator-settings-card.e-card,
-.creator-agreement-box,
-.creator-checklist-item,
-.creator-payout-section,
-.creator-status-card {
-    background-color: #1f2937;
-    border-color: #374151;
-}
-
-.creator-status-dot,
-.creator-success-icon,
-.creator-checklist-icon {
-    background-color: #052e1a;
-    color: #86efac;
-    border-color: #166534;
-}
-
-.creator-status-value.good,
-.creator-status-text-good {
-    color: #86efac;
-}
-
-.creator-status-value.pending,
-.creator-status-text-pending {
-    color: #facc15;
-}
-
-.creator-status-text-danger {
-    color: #fca5a5;
-}
-
-.creator-info-strip,
-.creator-settings-alert-warning {
-    background-color: #3a2e08;
-    border-color: #854d0e;
-    color: #fef3c7;
-}
-
-.creator-settings-alert-danger {
-    background-color: #450a0a;
-    border-color: #991b1b;
-    color: #fee2e2;
-}
-
-.creator-settings-alert-info {
-    background-color: #172554;
-    border-color: #1d4ed8;
-    color: #dbeafe;
-}
-
-.creator-settings-danger-zone.e-card {
-    border-color: #7f1d1d;
-}
-
-.creator-settings-page .e-checkbox-wrapper .e-frame.e-check,
-.creator-settings-page .e-css.e-checkbox-wrapper .e-frame.e-check,
-.creator-settings-page .e-checkbox-wrapper .e-checkbox:focus + .e-frame.e-check,
-.creator-settings-page .e-css.e-checkbox-wrapper .e-checkbox:focus + .e-frame.e-check {
-    background-color: #8e44ad !important;
-    border-color: #c084fc !important;
-    color: #ffffff !important;
-}
-
-.creator-settings-page .e-checkbox-wrapper:hover .e-frame,
-.creator-settings-page .e-css.e-checkbox-wrapper:hover .e-frame,
-.creator-settings-page .e-input-group.e-outline:not(.e-disabled):hover,
-.creator-settings-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled):hover,
-.creator-settings-page .e-input-group.e-input-focus,
-.creator-settings-page .e-input-group.e-control-wrapper.e-input-focus {
-    border-color: #c084fc !important;
-}
-
-.creator-settings-page .e-input-group.e-input-focus,
-.creator-settings-page .e-input-group.e-control-wrapper.e-input-focus,
-.creator-settings-page .e-checkbox-wrapper .e-checkbox:focus + .e-frame,
-.creator-settings-page .e-css.e-checkbox-wrapper .e-checkbox:focus + .e-frame {
-    box-shadow: 0 0 0 0.2rem rgba(192, 132, 252, 0.22) !important;
 }
 
 /* Playlists Page Colors - Dark Theme */
@@ -1023,7 +943,7 @@ body {
 
 .action-button {
     background: transparent;
-    border: 1px solid var(--st-line);
+    border: 1px solid var(--st-control-line);
     color: var(--st-text-2);
 }
 
@@ -1067,7 +987,7 @@ body {
 
 .filter-pill {
     background-color: var(--st-surface);
-    border-color: var(--st-line);
+    border-color: var(--st-control-line);
     color: var(--st-text-2);
 }
 
@@ -1098,7 +1018,7 @@ body {
 
 .filter-pill-search-input {
     background-color: var(--st-surface);
-    border-color: var(--st-line);
+    border-color: var(--st-control-line);
     color: var(--st-text);
 }
 
@@ -1294,7 +1214,7 @@ body {
 .card-mini-controls .e-btn:focus,
 .card-mini-controls .e-btn:active {
     background: transparent;
-    border-color: var(--st-line);
+    border-color: var(--st-control-line);
     color: var(--st-text-2);
 }
 
@@ -1410,7 +1330,7 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 
 .cta-outline {
     background-color: transparent !important;
-    border: 1px solid var(--st-line) !important;
+    border: 1px solid var(--st-control-line) !important;
     color: var(--st-text) !important;
 }
 
@@ -1430,3 +1350,449 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
     background-color: var(--st-surface-hover) !important;
     color: var(--st-text) !important;
 }
+
+/* ---- Destructive buttons ------------------------------------------------
+   AGENTS.md keeps destructive actions on e-danger rather than restyling them as
+   CTAs. These give that class a themed value; see --st-danger above. */
+
+.e-btn.e-danger,
+.e-css.e-btn.e-danger {
+    background-color: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-on-danger);
+}
+
+.e-btn.e-danger:hover,
+.e-css.e-btn.e-danger:hover {
+    background-color: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-on-danger);
+    box-shadow: var(--st-elev-hover);
+}
+
+/* Moved out of app.css, where a coloured box-shadow had no theme variant and
+   broke the property-routing rule. Unmistakably armed: a creator who does not
+   realise recording is live will press space expecting play/pause. */
+.lyrics-editor-record.is-recording {
+    box-shadow: 0 0 0 2px var(--st-danger);
+}
+
+/* ---- Auth pages ---------------------------------------------------------
+   The BRAND PANEL is deliberately one palette in both themes, so its colours sit in app.css,
+   not here - only the themed half of the page is below. Measured on the panel base #102e55:
+   #ffffff is 13.60:1, #c8eafd is 10.78:1, #02b8fd is 6.01:1.
+
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference. */
+
+.auth-page { background-color: var(--st-page); }
+
+.auth-panel-eyebrow { color: #02b8fd; }
+.auth-panel-title { color: #ffffff; }
+.auth-panel-body { color: #c8eafd; }
+
+.auth-title { color: var(--st-text); }
+.auth-subtitle { color: var(--st-text-2); }
+.auth-label { color: var(--st-text-2); }
+.auth-link { color: var(--st-accent); }
+.auth-link:hover { color: var(--st-accent-hover); }
+.auth-footer { color: var(--st-text-2); }
+.auth-dev-hint { color: var(--st-text-3); }
+
+.auth-alert {
+    background-color: var(--st-warn-tint);
+    border: 1px solid var(--st-warn);
+    color: var(--st-warn);
+}
+
+.auth-divider::before,
+.auth-divider::after { background-color: var(--st-line); }
+.auth-divider span { color: var(--st-text-3); }
+
+/* Not --st-line: this is the boundary of an interactive control, so it takes the 3:1 value.
+   See the --st-control-line note in the :root block above. */
+.auth-page .e-input-group.e-outline:not(.e-disabled),
+.auth-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled) {
+    border-color: var(--st-control-line);
+    background-color: var(--st-surface);
+}
+
+.auth-page .e-input-group.e-outline:not(.e-disabled):hover,
+.auth-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled):hover {
+    border-color: var(--st-text-3);
+}
+
+.auth-page .e-input-group.e-outline.e-input-focus,
+.auth-page .e-input-group.e-control-wrapper.e-outline.e-input-focus {
+    border-color: var(--st-accent);
+    box-shadow: 0 0 0 3px var(--st-accent-soft);
+}
+
+.auth-page .e-input-group input.e-input { color: var(--st-text); }
+
+.auth-page .e-checkbox-wrapper .e-frame,
+.auth-page .e-css.e-checkbox-wrapper .e-frame { border-color: var(--st-control-line); }
+
+.auth-page .e-checkbox-wrapper .e-frame.e-check,
+.auth-page .e-css.e-checkbox-wrapper .e-frame.e-check {
+    background-color: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+.auth-page .e-checkbox-wrapper .e-label,
+.auth-page .e-css.e-checkbox-wrapper .e-label { color: var(--st-text-2); }
+
+.auth-reactivate {
+    background-color: var(--st-accent-soft);
+    border: 1px solid var(--st-accent);
+    border-radius: var(--st-radius-sm);
+}
+
+/* Not the Google button - that one is white with #1f1f1f in BOTH themes, a brand rule
+   .google-auth-button already handles. */
+.auth-page .e-btn.auth-provider:not(.google-auth-button) {
+    background-color: var(--st-surface);
+    border-color: var(--st-control-line);
+    color: var(--st-text);
+}
+
+.auth-page .e-btn.auth-provider:not(.google-auth-button):hover {
+    background-color: var(--st-surface-hover);
+    border-color: var(--st-accent);
+    color: var(--st-accent);
+}
+
+/* ---- Register ------------------------------------------------------------
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference. */
+
+.auth-legal { background-color: var(--st-surface); border-color: var(--st-control-line); }
+.auth-legal-split { background-color: var(--st-line); }
+.auth-legal-optional { color: var(--st-text-3); }
+
+.auth-page .legal-text { color: var(--st-text-2); }
+.auth-page .legal-link { color: var(--st-accent); }
+.auth-page .legal-link:hover { color: var(--st-accent-hover); }
+
+.auth-hint { color: var(--st-text-3); }
+.auth-verify-lead { color: var(--st-text-2); }
+.auth-countdown { color: var(--st-text-3); }
+.auth-countdown strong { color: var(--st-text-2); }
+.auth-rule { background-color: var(--st-line); }
+.auth-subhead { color: var(--st-text); }
+.auth-subhead-note { color: var(--st-text-2); }
+
+/* An interactive boundary, so --st-control-line rather than --st-line. */
+.auth-page .auth-input.form-control {
+    background-color: var(--st-surface);
+    border-color: var(--st-control-line);
+    color: var(--st-text);
+}
+
+.auth-page .auth-input.form-control:hover { border-color: var(--st-text-3); }
+
+.auth-page .auth-input.form-control:focus {
+    background-color: var(--st-surface);
+    border-color: var(--st-accent);
+    box-shadow: 0 0 0 3px var(--st-accent-soft);
+    color: var(--st-text);
+}
+
+.auth-page .auth-input.form-control::placeholder { color: var(--st-text-3); }
+
+/* EditForm renders these; unstyled they arrive as browser-default red on the page tint. */
+.auth-page .validation-message,
+.auth-page .validation-errors li { color: var(--st-danger); }
+
+.auth-alert-info {
+    background-color: var(--st-accent-soft);
+    border-color: var(--st-accent);
+    color: var(--st-accent-hover);
+}
+
+/* ---- Settings surfaces ---------------------------------------------------
+   Shared by Manage Account and Creator Settings.
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference. */
+
+.settings-page { background-color: var(--st-page); }
+
+.settings-nav-heading { color: var(--st-text-3); }
+.settings-nav-link { color: var(--st-text-2); }
+.settings-nav-link:hover { background-color: var(--st-surface-hover); color: var(--st-text); }
+.settings-nav-link-danger { color: var(--st-danger); }
+
+.settings-head-eyebrow { color: var(--st-accent); }
+.settings-head-title { color: var(--st-text); }
+.settings-head-note { color: var(--st-text-2); }
+.settings-head-email { color: var(--st-text); }
+
+.settings-card {
+    background-color: var(--st-surface);
+    border-color: var(--st-line);
+    box-shadow: var(--st-elev);
+}
+
+.settings-card-danger { border-color: var(--st-danger); }
+
+.settings-eyebrow { color: var(--st-accent); }
+.settings-title { color: var(--st-text); }
+.settings-note { color: var(--st-text-2); }
+.settings-prose { color: var(--st-text-2); }
+.settings-tz { color: var(--st-text-3); }
+.settings-subhead { color: var(--st-text); }
+.settings-hint { color: var(--st-text-3); }
+.settings-working { color: var(--st-text-2); }
+
+.status-pill {
+    background-color: var(--st-accent-soft);
+    border-color: var(--st-accent);
+    color: var(--st-accent-hover);
+}
+
+.status-pill-dot { background-color: var(--st-accent); }
+
+.status-pill-warn {
+    background-color: var(--st-warn-tint);
+    border-color: var(--st-warn);
+    color: var(--st-warn);
+}
+
+.status-pill-warn .status-pill-dot { background-color: var(--st-warn); }
+
+.fact-row { border-bottom: 1px solid var(--st-line); }
+.fact-row:last-child { border-bottom: none; }
+.fact-label { color: var(--st-text-2); }
+.fact-value { color: var(--st-text); }
+
+.terms-list li { color: var(--st-text-2); }
+.terms-list li strong { color: var(--st-text); }
+.terms-list li::before { color: var(--st-accent); }
+
+.passkey-icon { background-color: var(--st-accent-soft); color: var(--st-accent); }
+.passkey-row { border-bottom: 1px solid var(--st-line); }
+.passkey-row:last-child { border-bottom: none; }
+.passkey-name { color: var(--st-text); }
+.passkey-meta { color: var(--st-text-3); }
+
+.settings-empty-icon { background-color: var(--st-accent-soft); color: var(--st-accent); }
+.settings-empty-title { color: var(--st-text); }
+.settings-empty-body { color: var(--st-text-2); }
+
+.settings-guard {
+    background-color: var(--st-surface-hover);
+    border: 1px solid var(--st-line);
+    color: var(--st-text-2);
+}
+
+.settings-guard-icon { color: var(--st-text-3); }
+
+.settings-alert-info {
+    background-color: var(--st-accent-soft);
+    border: 1px solid var(--st-accent);
+    color: var(--st-accent-hover);
+}
+
+.settings-alert-warn {
+    background-color: var(--st-warn-tint);
+    border: 1px solid var(--st-warn);
+    color: var(--st-warn);
+}
+
+.settings-label { color: var(--st-text-2); }
+.settings-loading { color: var(--st-text-2); }
+.settings-spinner { border-color: var(--st-track); border-top-color: var(--st-accent); }
+
+/* Account actions take the violet; destructive stays on the danger token. */
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn {
+    background-color: transparent;
+    border-color: var(--st-control-line);
+    color: var(--st-text);
+}
+
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn:hover {
+    background-color: var(--st-surface-hover);
+    border-color: var(--st-accent);
+    color: var(--st-accent);
+}
+
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled),
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled):hover {
+    background-color: var(--st-genre-fill);
+    border-color: var(--st-genre-fill);
+    color: var(--st-on-genre);
+}
+
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled),
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled):hover {
+    background-color: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-on-danger);
+}
+
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger-outline {
+    background-color: transparent;
+    border-color: var(--st-danger);
+    color: var(--st-danger);
+}
+
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger-outline:hover {
+    background-color: var(--st-danger);
+    color: var(--st-on-danger);
+}
+
+:is(.settings-page, .settings-dialog) .e-input-group.e-outline:not(.e-disabled),
+:is(.settings-page, .settings-dialog) .e-input-group.e-control-wrapper.e-outline:not(.e-disabled) {
+    border-color: var(--st-control-line);
+    background-color: var(--st-surface);
+}
+
+:is(.settings-page, .settings-dialog) .e-input-group.e-outline.e-input-focus,
+:is(.settings-page, .settings-dialog) .e-input-group.e-control-wrapper.e-outline.e-input-focus {
+    border-color: var(--st-accent);
+    box-shadow: 0 0 0 3px var(--st-accent-soft);
+}
+
+:is(.settings-page, .settings-dialog) .e-input-group input.e-input { color: var(--st-text); }
+
+:is(.settings-page, .settings-dialog) .e-checkbox-wrapper .e-frame,
+:is(.settings-page, .settings-dialog) .e-css.e-checkbox-wrapper .e-frame { border-color: var(--st-control-line); }
+
+:is(.settings-page, .settings-dialog) .e-checkbox-wrapper .e-frame.e-check,
+:is(.settings-page, .settings-dialog) .e-css.e-checkbox-wrapper .e-frame.e-check {
+    background-color: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+:is(.settings-page, .settings-dialog) .e-checkbox-wrapper .e-label,
+:is(.settings-page, .settings-dialog) .e-css.e-checkbox-wrapper .e-label { color: var(--st-text-2); }
+
+/* A disabled control has to read as disabled. The fill rules above are deliberately
+   scoped :not(:disabled) so they cannot paint one as live - Subscribe is gated on the
+   terms checkbox, and a violet button that does nothing is worse than a grey one. */
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn:disabled,
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.e-disabled {
+    background-color: var(--st-surface-hover);
+    border-color: var(--st-control-line);
+    color: var(--st-text-3);
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+.settings-inline-status { color: var(--st-accent-hover); }
+.settings-inline-status-bad { color: var(--st-danger); }
+
+/* ---- Creator settings ---------------------------------------------------
+   Contrast, measured on the surface each pairing actually sits on:
+     status-tile label   --st-text-2 on --st-surface-hover   6.30 light / 5.41 dark
+     step body, bio      --st-text-2 on --st-surface         6.95 / 6.28
+     persona meta        --st-text-3 on --st-surface         5.14 / 5.03
+     pill in a tile      --st-accent-hover on accent-soft over --st-surface-hover
+                                                             5.30 / 7.06
+     done tick, hero     --st-on-accent on --st-accent-fill  5.42 / 8.35
+     consent + payout edge --st-control-line on --st-surface 3.59 / 3.74
+   --st-text-3 is deliberately NOT used on --st-surface-hover: it measures 4.33:1
+   in dark, under AA. That is the same trap the disabled labels fell into.
+   ------------------------------------------------------------------------- */
+
+.settings-consent { background-color: var(--st-surface); border-color: var(--st-control-line); color: var(--st-text-2); }
+.settings-consent a { color: var(--st-accent); }
+
+.settings-hero-icon { background-color: var(--st-accent-fill); color: var(--st-on-accent); }
+
+.settings-count, .settings-optional { color: var(--st-text-3); }
+.settings-link { color: var(--st-accent); }
+
+.status-tile { background-color: var(--st-surface-hover); border-color: var(--st-line); }
+.status-tile-label { color: var(--st-text-2); }
+
+.step { border-bottom-color: var(--st-line); }
+.step-badge { background-color: var(--st-accent-soft); border-color: var(--st-accent); color: var(--st-accent-hover); }
+.step-badge-done { background-color: var(--st-accent-fill); border-color: var(--st-accent-fill); color: var(--st-on-accent); }
+.step-title { color: var(--st-text); }
+.step-body { color: var(--st-text-2); }
+
+.payout-section { background-color: var(--st-surface); border-color: var(--st-control-line); }
+.payout-num { background-color: var(--st-accent-soft); border-color: var(--st-accent); color: var(--st-accent-hover); }
+.payout-heading-title { color: var(--st-text); }
+
+.retry-window { background-color: var(--st-surface-hover); border-color: var(--st-control-line); color: var(--st-text-2); }
+
+.info-strip { background-color: var(--st-accent-soft); border-color: var(--st-accent); color: var(--st-accent-hover); }
+.info-strip-warn { background-color: var(--st-warn-tint); border-color: var(--st-warn); color: var(--st-warn); }
+
+.persona-row { border-bottom-color: var(--st-line); }
+.persona-avatar { background-color: var(--st-surface-hover); border-color: var(--st-line); color: var(--st-text-2); }
+.persona-name { color: var(--st-text); }
+.persona-bio { color: var(--st-text-2); }
+.persona-meta { color: var(--st-text-3); }
+
+.persona-summary { color: var(--st-text-3); }
+.persona-card { background-color: var(--st-surface); border-color: var(--st-line); box-shadow: var(--st-elev); }
+.persona-card-bio { color: var(--st-text-2); }
+.persona-card-site { color: var(--st-accent); }
+.persona-card-site-none { color: var(--st-text-3); }
+
+/* Dashed, and on --st-control-line rather than --st-line: it is the boundary of a file
+   picker, which WCAG 1.4.11 puts at 3:1 like any other control. */
+.persona-image-picker { border-color: var(--st-control-line); }
+.persona-image-title { color: var(--st-text); }
+.persona-image-input { color: var(--st-text-2); }
+
+.crop-tool { background-color: var(--st-surface-hover); border-color: var(--st-line); }
+.crop-canvas { background-color: var(--st-page); }
+.crop-zoom input[type="range"] { accent-color: var(--st-accent-fill); }
+
+/* ---- Upload ------------------------------------------------------------
+   Twelve hard-coded colours came out of the inline block this replaces, none
+   of which had a dark variant. Contrast, measured:
+     dropzone label   --st-accent on --st-surface   5.42 light / 5.72 dark
+     dashed edges     --st-control-line             3.59 / 3.74 (WCAG 1.4.11)
+     held/target edge --st-accent                   5.42 / 5.72, well over 3
+   ------------------------------------------------------------------------ */
+
+.upload-box { border-color: var(--st-control-line); background-color: var(--st-surface); }
+.upload-box:hover { background-color: var(--st-surface-hover); border-color: var(--st-accent); }
+.upload-content { color: var(--st-text-2); }
+.upload-content .upload-icon { color: var(--st-text-3); }
+
+.cover-art-pool { border-color: var(--st-control-line); }
+
+/* Only while something is held, so the drop targets are obvious mid-gesture and
+   invisible otherwise - a page permanently outlined in dashed boxes reads as broken. */
+.cover-art-pool-active { border-color: var(--st-accent); background-color: var(--st-accent-soft); }
+
+.cover-art-chip { border-color: var(--st-line); background-color: var(--st-surface); }
+.cover-art-chip:hover { border-color: var(--st-accent); }
+.cover-art-chip-held { border-color: var(--st-accent); box-shadow: 0 0 0 3px var(--st-accent-soft); }
+.cover-art-chip-name { color: var(--st-text); }
+.cover-art-thumb { background-color: var(--st-surface-hover); }
+
+.cover-art-dropzone { border-color: var(--st-accent); color: var(--st-accent); }
+.cover-art-target { outline-color: var(--st-accent); background-color: var(--st-accent-soft); }
+.cover-art-target .cover-art-dropzone { background-color: var(--st-accent-soft); }
+.cover-art-hint-swatch { border-color: var(--st-accent); color: var(--st-accent); }
+
+.apply-all { background-color: var(--st-accent-soft); border-color: var(--st-accent); }
+.apply-all-label { color: var(--st-accent-hover); }
+.title-source-warn { color: var(--st-warn); }
+.inline-create-link { color: var(--st-accent); }
+.inline-create-link:hover { color: var(--st-accent-hover); }
+.review-outstanding { color: var(--st-warn); }
+
+/* Below 992px each review row is a card, and every cell is titled by its
+   data-label. Declared here because it is colour; the layout is in md_app.css. */
+.review-table > tbody > tr > td::before { color: var(--st-text-3); }
+.review-table > tbody > tr { border-color: var(--st-line); background-color: var(--st-surface); }
+
+/* A row with something to fix. Bootstrap paints .table-warning a fixed #fff3cd through
+   its cells, which is not a themed colour - on the dark surface it is a slab of yellow.
+   The card takes the warn tint instead, and the cells are stripped of their own paint
+   in md_app.css so this is the only thing showing. */
+.review-table > tbody > tr.table-warning {
+    background-color: var(--st-warn-tint);
+    border-color: var(--st-warn);
+}
+
+.ai-declare { border-color: var(--st-line); }
+.ai-declare-invalid { border-color: var(--st-danger); }
+.ai-declare-or { color: var(--st-text-3); }

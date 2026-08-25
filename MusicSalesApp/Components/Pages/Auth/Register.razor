@@ -3,189 +3,193 @@
 @using Syncfusion.Blazor.Popups
 @inherits RegisterModel
 
-<PageTitle>Register</PageTitle>
+<PageTitle>Create your account</PageTitle>
 
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <SfCard>
-                <CardHeader Title="@(showVerificationSection ? "Email Verification Required" : "Create Account")" />
-                <CardContent>
-                    @if (!string.IsNullOrEmpty(successMessage))
-                    {
-                        <SfMessage Severity="MessageSeverity.Success">@successMessage</SfMessage>
-                    }
-                    @if (!string.IsNullOrEmpty(errorMessage))
-                    {
-                        <SfMessage Severity="MessageSeverity.Error">@errorMessage</SfMessage>
-                    }
-                    @if (!string.IsNullOrEmpty(infoMessage))
-                    {
-                        <SfMessage Severity="MessageSeverity.Info">@infoMessage</SfMessage>
-                    }
+@*
+    Same shell as Login - see the .auth-page block in app.css for why the panel keeps one
+    palette in both themes.
 
-                    @if (showVerificationSection)
-                    {
-                        <div class="mb-4">
-                            <p>A verification email has been sent to <strong>@Email</strong>.</p>
-                            <p>Please check your email and click the verification link to complete your registration. The link will expire in <strong>10 minutes</strong>.</p>
-                            
-                            @if (!canResendEmail)
-                            {
-                                <p class="text-muted">You can request a new verification email in @FormatRemainingTime(secondsRemaining).</p>
-                            }
-                        </div>
+    The submit here is cta-primary, NOT the violet Login uses. AGENTS.md picks a tier by
+    audience and lists "register" under cta-primary alongside subscribe and play: these are
+    listener actions, and the accent fill is the listener colour.
 
-                        <div class="d-grid gap-2">
-                            <SfButton OnClick="ResendVerificationEmail"
-                                    Disabled="@(!canResendEmail || isSubmitting)"
-                                    IsPrimary="true"
-                                    Content="@(isSubmitting ? "Sending..." : "Resend Verification Email")"
-                                    CssClass="e-btn e-primary" />
-                        </div>
+    The three fields stay InputText rather than SfTextBox. EditForm + DataAnnotations is what
+    validates this page, and RegisterTests drives input#email / #password / #confirm directly.
+*@
+<div class="auth-page">
+    <aside class="auth-panel">
+        @* logo-mark.png, not logo-dark-small.png: that one bakes its background to the dark
+           app-bar colour #181c1f, so it reads as a black box anywhere else. *@
+        <img src="@Assets["images/logo-mark.png"]" alt="StreamTunes" class="auth-panel-logo" />
 
-                        <hr class="my-4" />
-
-                        <h5>Change Email Address</h5>
-                        <p class="text-muted">Made a typo? Update your email address below:</p>
-                        
-                        <div class="mb-3">
-                            <label for="newEmail" class="e-label">New Email Address</label>
-                            <SfTextBox ID="newEmail" @bind-Value="NewEmail" Placeholder="Enter new email" CssClass="e-outline" />
-                        </div>
-                        <SfButton OnClick="ChangeEmail" Disabled="@isSubmitting" Content="@(isSubmitting ? "Updating..." : "Update Email & Send New Verification")" CssClass="e-btn e-outline w-100" />
-                    }
-                    else
-                    {
-                        @if (IsGoogleRegistrationPending)
-                        {
-                            <p class="text-muted">Finish creating your Google account by accepting the policies below.</p>
-
-                            <div class="mb-3">
-                                <label for="googleEmail" class="e-label">Email</label>
-                                <SfTextBox ID="googleEmail" Value="@Email" Enabled="false" CssClass="e-outline" />
-                            </div>
-
-                            <div class="mb-3 legal-agreements">
-                                <div class="d-flex align-items-start mb-2">
-                                    <SfCheckBox @bind-Checked="AcceptTermsOfUse" TChecked="bool" CssClass="me-2" />
-                                    <span class="legal-text">
-                                        I have read and agree to the <a href="javascript:void(0)" @onclick="ShowTermsOfUse" @onclick:preventDefault class="legal-link">Terms of Use</a>
-                                    </span>
-                                </div>
-                                <div class="d-flex align-items-start mb-2">
-                                    <SfCheckBox @bind-Checked="AcceptPrivacyPolicy" TChecked="bool" CssClass="me-2" />
-                                    <span class="legal-text">
-                                        I have read and agree to the <a href="javascript:void(0)" @onclick="ShowPrivacyPolicy" @onclick:preventDefault class="legal-link">Privacy Policy</a>
-                                    </span>
-                                </div>
-                                <div class="d-flex align-items-start mb-2">
-                                    <SfCheckBox @bind-Checked="AcceptRefundPolicy" TChecked="bool" CssClass="me-2" />
-                                    <span class="legal-text">
-                                        I have read and agree to the <a href="javascript:void(0)" @onclick="ShowRefundPolicy" @onclick:preventDefault class="legal-link">Refund Policy</a>
-                                    </span>
-                                </div>
-                                <div class="d-flex align-items-start">
-                                    <SfCheckBox @bind-Checked="ReceiveNewSongEmails" TChecked="bool" CssClass="me-2" />
-                                    <span class="legal-text">
-                                        I would like to receive email notifications when new music is added
-                                    </span>
-                                </div>
-                            </div>
-
-                            <form method="post" action="@GoogleAuthRoutes.WebRegisterPath">
-                                <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
-                                <input type="hidden" name="@ExternalAuthFormFields.PendingRegistrationToken" value="@PendingGoogleRegistrationToken" />
-                                <input type="hidden" name="@ExternalAuthFormFields.Email" value="@Email" />
-                                <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.AcceptPrivacyPolicy" value="@AcceptPrivacyPolicy.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.AcceptRefundPolicy" value="@AcceptRefundPolicy.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.ReceiveNewSongEmails" value="@ReceiveNewSongEmails.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="@RegistrationReturnUrl" />
-
-                                <SfButton Type="ButtonType.Submit" IsPrimary="true" Disabled="@(!CanRegister)" Content="Complete Google Sign Up" CssClass="e-btn e-primary w-100" />
-                            </form>
-                        }
-                        else
-                        {
-                            <EditForm Model="this" OnValidSubmit="HandleSubmit">
-                                <DataAnnotationsValidator />
-                                <ValidationSummary />
-
-                                <div class="mb-3">
-                                    <label for="email" class="e-label">Email</label>
-                                    <InputText id="email" class="form-control" @bind-Value="Email" />
-                                </div>
-                                <div class="mb-3">
-                                    <label for="password" class="e-label">Password</label>
-                                    <InputText id="password" class="form-control" type="password" @bind-Value="Password" />
-                                    <small class="text-muted">Must be at least 8 characters and include upper, lower, digit, and symbol.</small>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="confirm" class="e-label">Confirm Password</label>
-                                    <InputText id="confirm" class="form-control" type="password" @bind-Value="ConfirmPassword" />
-                                </div>
-
-                                <div class="mb-3 legal-agreements">
-                                    <div class="d-flex align-items-start mb-2">
-                                        <SfCheckBox @bind-Checked="AcceptTermsOfUse" TChecked="bool" CssClass="me-2" />
-                                        <span class="legal-text">
-                                            I have read and agree to the <a href="javascript:void(0)" @onclick="ShowTermsOfUse" @onclick:preventDefault class="legal-link">Terms of Use</a>
-                                        </span>
-                                    </div>
-                                    <div class="d-flex align-items-start mb-2">
-                                        <SfCheckBox @bind-Checked="AcceptPrivacyPolicy" TChecked="bool" CssClass="me-2" />
-                                        <span class="legal-text">
-                                            I have read and agree to the <a href="javascript:void(0)" @onclick="ShowPrivacyPolicy" @onclick:preventDefault class="legal-link">Privacy Policy</a>
-                                        </span>
-                                    </div>
-                                    <div class="d-flex align-items-start mb-2">
-                                        <SfCheckBox @bind-Checked="AcceptRefundPolicy" TChecked="bool" CssClass="me-2" />
-                                        <span class="legal-text">
-                                            I have read and agree to the <a href="javascript:void(0)" @onclick="ShowRefundPolicy" @onclick:preventDefault class="legal-link">Refund Policy</a>
-                                        </span>
-                                    </div>
-                                    <div class="d-flex align-items-start">
-                                        <SfCheckBox @bind-Checked="ReceiveNewSongEmails" TChecked="bool" CssClass="me-2" />
-                                        <span class="legal-text">
-                                            I would like to receive email notifications when new music is added
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <SfButton Type="ButtonType.Submit" IsPrimary="true" Disabled="@(isSubmitting || !CanRegister)" Content="@(isSubmitting ? "Please wait..." : "Register")" CssClass="e-btn e-primary w-100" />
-                            </EditForm>
-
-                            <div class="text-center mb-3">
-                                <hr />
-                                <span class="text-muted">OR</span>
-                                <hr />
-                            </div>
-
-                            <form method="post" action="@GoogleAuthRoutes.WebStartPath">
-                                <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
-                                <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.AcceptPrivacyPolicy" value="@AcceptPrivacyPolicy.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.AcceptRefundPolicy" value="@AcceptRefundPolicy.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.ReceiveNewSongEmails" value="@ReceiveNewSongEmails.ToString().ToLowerInvariant()" />
-                                <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="@RegistrationReturnUrl" />
-
-                                <div class="d-grid">
-                                    <SfButton Type="ButtonType.Submit" IsPrimary="false" CssClass="e-btn e-outline google-auth-button">
-                                        <img src="/images/google_logo.svg" alt="" class="google-auth-icon" />
-                                        <span>Continue with Google</span>
-                                    </SfButton>
-                                </div>
-                            </form>
-                        }
-                    }
-                </CardContent>
-            </SfCard>
-            <div class="mt-3 text-center">
-                <a href="@LoginUrl">Already have an account? Login</a>
-            </div>
+        <div class="auth-panel-copy">
+            <p class="auth-panel-eyebrow">Independent music, streamed</p>
+            <h1 class="auth-panel-title">Join StreamTunes.</h1>
+            @* Registration collects no payment and starts no trial, so this promises only what
+               a free account actually gets. *@
+            <p class="auth-panel-body">Free to join. Stream the featured songs in full, build playlists and follow the artists you like.</p>
         </div>
-    </div>
+
+        <div class="auth-panel-rule"></div>
+    </aside>
+
+    <section class="auth-form-col">
+        <div class="auth-form">
+            @if (showVerificationSection)
+            {
+                <h2 class="auth-title">Verify your email</h2>
+                <p class="auth-subtitle">One more step before you can stream.</p>
+            }
+            else if (IsGoogleRegistrationPending)
+            {
+                <h2 class="auth-title">Almost there</h2>
+                <p class="auth-subtitle">Google has given us your email address. Accept the policies below to finish creating your Google account.</p>
+            }
+            else
+            {
+                <h2 class="auth-title">Create your account</h2>
+                <p class="auth-subtitle">We&rsquo;ll email you a link to verify your address.</p>
+            }
+
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <div class="auth-alert auth-alert-info" role="status">
+                    <svg class="auth-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                    <span>@successMessage</span>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="auth-alert" role="alert">
+                    <svg class="auth-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                    <span>@errorMessage</span>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(infoMessage))
+            {
+                <div class="auth-alert auth-alert-info" role="status">
+                    <svg class="auth-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" /></svg>
+                    <span>@infoMessage</span>
+                </div>
+            }
+
+            @if (showVerificationSection)
+            {
+                <p class="auth-verify-lead">A verification email has been sent to <strong>@Email</strong>.</p>
+                <p class="auth-verify-lead">Click the link in it to finish setting up your account. The link expires in <strong>10 minutes</strong>.</p>
+
+                <SfButton OnClick="ResendVerificationEmail"
+                          Disabled="@(!canResendEmail || isSubmitting)"
+                          Content="@(isSubmitting ? "Sending..." : "Resend Verification Email")"
+                          CssClass="e-btn cta-primary auth-submit" />
+
+                @if (!canResendEmail)
+                {
+                    <p class="auth-countdown">You can request a new one in <strong>@FormatRemainingTime(secondsRemaining)</strong></p>
+                }
+
+                <div class="auth-rule"></div>
+
+                <h3 class="auth-subhead">Change your email address</h3>
+                <p class="auth-subhead-note">Made a typo? Update it and we will send a new link.</p>
+
+                <div class="auth-field">
+                    <label for="newEmail" class="auth-label">New email address</label>
+                    <SfTextBox ID="newEmail" @bind-Value="NewEmail" Placeholder="you@example.com" CssClass="e-outline" />
+                </div>
+
+                <SfButton OnClick="ChangeEmail" Disabled="@isSubmitting"
+                          Content="@(isSubmitting ? "Updating..." : "Update Email & Send New Verification")"
+                          CssClass="e-btn e-outline auth-provider" />
+            }
+            else if (IsGoogleRegistrationPending)
+            {
+                <div class="auth-field">
+                    <label for="googleEmail" class="auth-label">Email</label>
+                    <SfTextBox ID="googleEmail" Value="@Email" Enabled="false" CssClass="e-outline" />
+                    <p class="auth-hint">From your Google account.</p>
+                </div>
+
+                <RegisterPolicyBlock AcceptTermsOfUse="AcceptTermsOfUse"
+                                     AcceptTermsOfUseChanged="v => AcceptTermsOfUse = v"
+                                     AcceptPrivacyPolicy="AcceptPrivacyPolicy"
+                                     AcceptPrivacyPolicyChanged="v => AcceptPrivacyPolicy = v"
+                                     AcceptRefundPolicy="AcceptRefundPolicy"
+                                     AcceptRefundPolicyChanged="v => AcceptRefundPolicy = v"
+                                     ReceiveNewSongEmails="ReceiveNewSongEmails"
+                                     ReceiveNewSongEmailsChanged="v => ReceiveNewSongEmails = v"
+                                     OnShowTerms="ShowTermsOfUse"
+                                     OnShowPrivacy="ShowPrivacyPolicy"
+                                     OnShowRefund="ShowRefundPolicy" />
+
+                <form method="post" action="@GoogleAuthRoutes.WebRegisterPath">
+                    <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                    <input type="hidden" name="@ExternalAuthFormFields.PendingRegistrationToken" value="@PendingGoogleRegistrationToken" />
+                    <input type="hidden" name="@ExternalAuthFormFields.Email" value="@Email" />
+                    <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.AcceptPrivacyPolicy" value="@AcceptPrivacyPolicy.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.AcceptRefundPolicy" value="@AcceptRefundPolicy.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.ReceiveNewSongEmails" value="@ReceiveNewSongEmails.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="@RegistrationReturnUrl" />
+
+                    <SfButton Type="ButtonType.Submit" Disabled="@(!CanRegister)" Content="Complete Google Sign Up" CssClass="e-btn cta-primary auth-submit" />
+                </form>
+            }
+            else
+            {
+                <EditForm Model="this" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="auth-field">
+                        <label for="email" class="auth-label">Email</label>
+                        <InputText id="email" class="form-control auth-input" @bind-Value="Email" placeholder="you@example.com" />
+                    </div>
+                    <div class="auth-field">
+                        <label for="password" class="auth-label">Password</label>
+                        <InputText id="password" class="form-control auth-input" type="password" @bind-Value="Password" placeholder="Choose a password" />
+                        <p class="auth-hint">Must be at least 8 characters and include upper, lower, digit, and symbol.</p>
+                    </div>
+                    <div class="auth-field">
+                        <label for="confirm" class="auth-label">Confirm password</label>
+                        <InputText id="confirm" class="form-control auth-input" type="password" @bind-Value="ConfirmPassword" placeholder="Repeat the password" />
+                    </div>
+
+                    <RegisterPolicyBlock AcceptTermsOfUse="AcceptTermsOfUse"
+                                         AcceptTermsOfUseChanged="v => AcceptTermsOfUse = v"
+                                         AcceptPrivacyPolicy="AcceptPrivacyPolicy"
+                                         AcceptPrivacyPolicyChanged="v => AcceptPrivacyPolicy = v"
+                                         AcceptRefundPolicy="AcceptRefundPolicy"
+                                         AcceptRefundPolicyChanged="v => AcceptRefundPolicy = v"
+                                         ReceiveNewSongEmails="ReceiveNewSongEmails"
+                                         ReceiveNewSongEmailsChanged="v => ReceiveNewSongEmails = v"
+                                         OnShowTerms="ShowTermsOfUse"
+                                         OnShowPrivacy="ShowPrivacyPolicy"
+                                         OnShowRefund="ShowRefundPolicy" />
+
+                    <SfButton Type="ButtonType.Submit" Disabled="@(isSubmitting || !CanRegister)" Content="@(isSubmitting ? "Please wait..." : "Register")" CssClass="e-btn cta-primary auth-submit" />
+                </EditForm>
+
+                <div class="auth-divider"><span>or</span></div>
+
+                <form method="post" action="@GoogleAuthRoutes.WebStartPath">
+                    <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                    <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.AcceptPrivacyPolicy" value="@AcceptPrivacyPolicy.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.AcceptRefundPolicy" value="@AcceptRefundPolicy.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.ReceiveNewSongEmails" value="@ReceiveNewSongEmails.ToString().ToLowerInvariant()" />
+                    <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="@RegistrationReturnUrl" />
+
+                    <SfButton Type="ButtonType.Submit" IsPrimary="false" CssClass="e-btn e-outline google-auth-button auth-provider">
+                        <img src="/images/google_logo.svg" alt="" class="google-auth-icon" />
+                        <span>Continue with Google</span>
+                    </SfButton>
+                </form>
+            }
+
+            <p class="auth-footer">Already have an account? <a href="@LoginUrl" class="auth-link auth-link-strong">Log in</a></p>
+        </div>
+    </section>
 </div>
 
 <!-- Terms of Use Dialog -->

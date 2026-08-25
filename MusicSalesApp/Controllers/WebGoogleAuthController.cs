@@ -48,9 +48,11 @@ public class WebGoogleAuthController : Controller
     }
 
     [HttpGet("start")]
-    public IActionResult StartLogin([FromQuery(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = AppPageRoutes.Home)
+    public IActionResult StartLogin(
+        [FromQuery(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = AppPageRoutes.Home,
+        [FromQuery(Name = ExternalAuthFormFields.RememberMe)] bool rememberMe = true)
     {
-        return StartGoogleChallenge(registrationIntentToken: null, returnUrl);
+        return StartGoogleChallenge(registrationIntentToken: null, returnUrl, rememberMe);
     }
 
     [HttpPost("start")]
@@ -75,13 +77,14 @@ public class WebGoogleAuthController : Controller
                     normalizedReturnUrl));
         }
 
-        return StartGoogleChallenge(registrationIntentToken, normalizedReturnUrl);
+        return StartGoogleChallenge(registrationIntentToken, normalizedReturnUrl, rememberMe: true);
     }
 
     [HttpGet("callback")]
     public async Task<IActionResult> Callback(
         [FromQuery(Name = ExternalAuthFormFields.RegistrationIntentToken)] string registrationIntentToken = "",
-        [FromQuery(Name = ExternalAuthFormFields.ReturnUrl)] string callbackReturnUrl = AppPageRoutes.Home)
+        [FromQuery(Name = ExternalAuthFormFields.ReturnUrl)] string callbackReturnUrl = AppPageRoutes.Home,
+        [FromQuery(Name = ExternalAuthFormFields.RememberMe)] bool rememberMe = true)
     {
         try
         {
@@ -115,13 +118,13 @@ public class WebGoogleAuthController : Controller
             var linkedUser = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
             if (linkedUser != null)
             {
-                return await SignInGoogleUserAsync(linkedUser, returnUrl);
+                return await SignInGoogleUserAsync(linkedUser, returnUrl, rememberMe);
             }
 
             var existingEmailUser = await _userManager.FindByEmailAsync(email);
             if (existingEmailUser != null)
             {
-                return await LinkPromoteAndSignInAsync(existingEmailUser, info.LoginProvider, info.ProviderKey, returnUrl);
+                return await LinkPromoteAndSignInAsync(existingEmailUser, info.LoginProvider, info.ProviderKey, returnUrl, rememberMe);
             }
 
             if (registrationIntent != null)
@@ -132,7 +135,8 @@ public class WebGoogleAuthController : Controller
                     email,
                     info.Principal.Identity?.Name ?? email,
                     registrationIntent.ReceiveNewSongEmails,
-                    returnUrl);
+                    returnUrl,
+                    rememberMe);
             }
 
             var pendingRegistrationToken = _mobileExternalAuthTokenService.ProtectPendingRegistration(
@@ -188,10 +192,11 @@ public class WebGoogleAuthController : Controller
             payload.Email,
             payload.DisplayName,
             receiveNewSongEmails,
-            normalizedReturnUrl);
+            normalizedReturnUrl,
+            rememberMe: true);
     }
 
-    private IActionResult StartGoogleChallenge(string? registrationIntentToken, string returnUrl)
+    private IActionResult StartGoogleChallenge(string? registrationIntentToken, string returnUrl, bool rememberMe)
     {
         if (string.IsNullOrWhiteSpace(_configuration["Authentication:Google:ClientId"]) ||
             string.IsNullOrWhiteSpace(_configuration["Authentication:Google:ClientSecret"]))
@@ -210,6 +215,11 @@ public class WebGoogleAuthController : Controller
             callbackUrl,
             ExternalAuthFormFields.ReturnUrl,
             normalizedReturnUrl);
+
+        callbackUrl = QueryHelpers.AddQueryString(
+            callbackUrl,
+            ExternalAuthFormFields.RememberMe,
+            rememberMe ? "true" : "false");
 
         if (!string.IsNullOrWhiteSpace(registrationIntentToken))
         {
@@ -232,12 +242,13 @@ public class WebGoogleAuthController : Controller
         string email,
         string displayName,
         bool receiveNewSongEmails,
-        string returnUrl)
+        string returnUrl,
+        bool rememberMe)
     {
         var existingLoginUser = await _userManager.FindByLoginAsync(loginProvider, providerKey);
         if (existingLoginUser != null)
         {
-            return await SignInGoogleUserAsync(existingLoginUser, returnUrl);
+            return await SignInGoogleUserAsync(existingLoginUser, returnUrl, rememberMe);
         }
 
         var user = await _userManager.FindByEmailAsync(email);
@@ -262,7 +273,7 @@ public class WebGoogleAuthController : Controller
             isNewUser = true;
         }
 
-        var signInResult = await LinkPromoteAndSignInAsync(user, loginProvider, providerKey, returnUrl);
+        var signInResult = await LinkPromoteAndSignInAsync(user, loginProvider, providerKey, returnUrl, rememberMe);
         if (signInResult is not LocalRedirectResult)
         {
             return signInResult;
@@ -281,7 +292,8 @@ public class WebGoogleAuthController : Controller
         ApplicationUser user,
         string loginProvider,
         string providerKey,
-        string returnUrl)
+        string returnUrl,
+        bool rememberMe)
     {
         if (user.IsSuspended)
         {
@@ -294,10 +306,10 @@ public class WebGoogleAuthController : Controller
             return RedirectToLoginError(linkError);
         }
 
-        return await SignInGoogleUserAsync(user, returnUrl);
+        return await SignInGoogleUserAsync(user, returnUrl, rememberMe);
     }
 
-    private async Task<IActionResult> SignInGoogleUserAsync(ApplicationUser user, string returnUrl)
+    private async Task<IActionResult> SignInGoogleUserAsync(ApplicationUser user, string returnUrl, bool rememberMe)
     {
         if (user.IsSuspended)
         {
@@ -310,7 +322,7 @@ public class WebGoogleAuthController : Controller
             return RedirectToLoginError(promoteError);
         }
 
-        await _signInManager.SignInAsync(user, isPersistent: true, authenticationMethod: ExternalLoginProviders.Google);
+        await _signInManager.SignInAsync(user, isPersistent: rememberMe, authenticationMethod: ExternalLoginProviders.Google);
         _logger.LogInformation("User {Email} signed in with Google", user.Email);
         return LocalRedirect(NormalizeLocalReturnUrl(returnUrl));
     }

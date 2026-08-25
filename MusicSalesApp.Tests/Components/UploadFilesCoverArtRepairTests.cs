@@ -368,82 +368,29 @@ public class UploadFilesCoverArtRepairTests
     // -----------------------------------------------------------------
 
     [Test]
-    public void ABatchWithNoArtworkAtAll_DoesNotPause()
+    public void EveryBatchPauses()
     {
-        // Nothing to pair, no pool to drag from - the step would be a confirmation dialog wearing a
-        // table, and audio-only batches are a normal way to use this page.
-        Assert.That(
-            UploadFilesModel.ShouldPauseForReview(
-                titlesNeedAttention: false, batchHasCoverArt: false, matchCoverArtBeforeUpload: true),
-            Is.False);
+        // It did not used to: an audio-only batch, or one whose owner had turned off the
+        // cover-art checkbox, went straight up. Genre moving onto this page ended both - a song
+        // cannot publish without one, and the review step is the only place to set it.
+        Assert.That(UploadFilesModel.ShouldPauseForReview(), Is.True);
     }
 
     [Test]
-    public void ABatchWithArtwork_Pauses()
+    public void TheRepairInterfaceIsAvailableWheneverThereIsArtworkToMove()
     {
-        Assert.That(
-            UploadFilesModel.ShouldPauseForReview(
-                titlesNeedAttention: false, batchHasCoverArt: true, matchCoverArtBeforeUpload: true),
-            Is.True);
-    }
-
-    [Test]
-    public void TurningTheCheckboxOff_SkipsThePauseEvenWithArtwork()
-    {
-        Assert.That(
-            UploadFilesModel.ShouldPauseForReview(
-                titlesNeedAttention: false, batchHasCoverArt: true, matchCoverArtBeforeUpload: false),
-            Is.False);
-    }
-
-    [Test]
-    public void ABrokenTitleStopsTheBatchWhateverElseIsTurnedOff()
-    {
-        // Not a preference. The upload would be rejected by the server, so skipping the step would
-        // trade one pause for a failed batch.
-        Assert.Multiple(() =>
-        {
-            Assert.That(
-                UploadFilesModel.ShouldPauseForReview(
-                    titlesNeedAttention: true, batchHasCoverArt: false, matchCoverArtBeforeUpload: false),
-                Is.True);
-
-            Assert.That(
-                UploadFilesModel.ShouldPauseForReview(
-                    titlesNeedAttention: true, batchHasCoverArt: true, matchCoverArtBeforeUpload: false),
-                Is.True);
-        });
-    }
-
-    [Test]
-    public void TheRepairInterfaceIsHiddenWhenTheCheckboxIsOff()
-    {
-        // "Do not show the interface at all" has to hold on the one path that still reaches the
-        // review step with the box unticked: a batch stopped for a broken title.
+        // There used to be a checkbox that took this away. It survived the review step becoming
+        // mandatory as a switch whose only remaining effect was to remove a capability - the
+        // automatic pairing is a guess, and turning off the only way to correct it helps nobody.
         var page = new TestableUploadFiles();
         page.GivenSong("One", "a.png");
         page.GivenPooled("stray.png");
-        page.BeginReview();
 
-        Assert.That(page.CanRepair, Is.True);
-
-        page.DisableCoverArtMatching();
-
-        Assert.That(page.CanRepair, Is.False);
-    }
-
-    [Test]
-    public void TurningTheCheckboxOffMidGesture_PutsDownWhateverWasHeld()
-    {
-        // Otherwise the held image survives with nothing on screen to place it on, and the next
-        // batch starts holding a file from the last one.
-        var page = new TestableUploadFiles();
-        page.GivenPooled("stray.png");
-        page.Hold("stray.png");
-
-        page.DisableCoverArtMatching();
-
-        Assert.That(page.Held, Is.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanRepair, Is.True);
+            Assert.That(page.ShowPool, Is.True);
+        });
     }
 
     // -----------------------------------------------------------------
@@ -527,7 +474,9 @@ public class UploadFilesCoverArtRepairTests
         Assert.Multiple(() =>
         {
             Assert.That(markup, Does.Not.Contain("Content=\"\""), "An SfButton with no content has nothing to click.");
-            Assert.That(markup, Does.Contain("Content=\"Remove\""));
+            // "Remove art", not "Remove": a second Remove appeared on the row for dropping the
+            // song itself, and a creator pressed the wrong one and lost their artwork.
+            Assert.That(markup, Does.Contain("Content=\"Remove art\""));
             Assert.That(
                 markup,
                 Does.Contain("Tap or Drop Cover Art Here"),
@@ -685,8 +634,6 @@ public class UploadFilesCoverArtRepairTests
         public void Clear(UploadPairItem item) => ClearCoverArt(item);
 
         public void DropOnPool() => ReturnHeldCoverArtToPool();
-
-        public void DisableCoverArtMatching() => ApplyMatchCoverArtPreference(false);
 
         public void DismissValidationError() => ClearValidationError();
     }

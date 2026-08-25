@@ -35,6 +35,15 @@ public partial class ManageAccountModel : BlazorBase
 
     // Email preferences
     protected bool _receiveNewSongEmails = false;
+
+    // Shown inside the Email preferences card rather than only in the page-level banner.
+    // That banner renders above the first section, so a reader who saves from the third one
+    // never sees it - the click looks like it did nothing at all.
+    protected string _emailPreferencesStatus = string.Empty;
+    protected string _passwordStatus = string.Empty;
+    protected bool _passwordFailed;
+    protected bool _emailPreferencesFailed;
+    protected bool _savingEmailPreferences;
     
     // Passkey fields
     protected List<Passkey> _passkeys = new();
@@ -178,6 +187,7 @@ public partial class ManageAccountModel : BlazorBase
             {
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
+                await ScrollToRequestedSectionAsync();
             }
         }
     }
@@ -205,18 +215,24 @@ public partial class ManageAccountModel : BlazorBase
     {
         _successMessage = string.Empty;
         _errorMessage = string.Empty;
+        _passwordStatus = string.Empty;
+        _passwordFailed = false;
 
         if (string.IsNullOrWhiteSpace(_currentPassword) || 
             string.IsNullOrWhiteSpace(_newPassword) || 
             string.IsNullOrWhiteSpace(_confirmPassword))
         {
-            _errorMessage = "All password fields are required.";
+            _passwordFailed = true;
+            _passwordStatus = "All password fields are required.";
+            _errorMessage = _passwordStatus;
             return;
         }
 
         if (_newPassword != _confirmPassword)
         {
-            _errorMessage = "New password and confirmation do not match.";
+            _passwordFailed = true;
+            _passwordStatus = "New password and confirmation do not match.";
+            _errorMessage = _passwordStatus;
             return;
         }
 
@@ -226,6 +242,7 @@ public partial class ManageAccountModel : BlazorBase
             
             if (result.Succeeded)
             {
+                _passwordStatus = "Password changed. We have emailed you to confirm.";
                 _successMessage = "Password changed successfully.";
                 _currentPassword = string.Empty;
                 _newPassword = string.Empty;
@@ -254,13 +271,17 @@ public partial class ManageAccountModel : BlazorBase
             }
             else
             {
-                _errorMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+                _passwordFailed = true;
+                _passwordStatus = string.Join(", ", result.Errors.Select(e => e.Description));
+                _errorMessage = _passwordStatus;
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error changing password");
-            _errorMessage = "An error occurred while changing your password.";
+            _passwordFailed = true;
+            _passwordStatus = "An error occurred while changing your password.";
+            _errorMessage = _passwordStatus;
         }
     }
 
@@ -268,25 +289,41 @@ public partial class ManageAccountModel : BlazorBase
     {
         _successMessage = string.Empty;
         _errorMessage = string.Empty;
+        _emailPreferencesStatus = string.Empty;
+        _emailPreferencesFailed = false;
+        _savingEmailPreferences = true;
 
         try
         {
             _currentUser.ReceiveNewSongEmails = _receiveNewSongEmails;
             var result = await UserManager.UpdateAsync(_currentUser);
-            
+
             if (result.Succeeded)
             {
+                // Says which way it was saved. "Saved" alone leaves a reader who has just
+                // switched something OFF wondering whether it took the new value or the old.
+                _emailPreferencesStatus = _receiveNewSongEmails
+                    ? "Saved. We will email you when new music is added."
+                    : "Saved. We will not email you when new music is added.";
                 _successMessage = "Email preferences saved successfully.";
             }
             else
             {
-                _errorMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+                _emailPreferencesFailed = true;
+                _emailPreferencesStatus = string.Join(", ", result.Errors.Select(e => e.Description));
+                _errorMessage = _emailPreferencesStatus;
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error saving email preferences");
-            _errorMessage = "An error occurred while saving your email preferences.";
+            _emailPreferencesFailed = true;
+            _emailPreferencesStatus = "An error occurred while saving your email preferences.";
+            _errorMessage = _emailPreferencesStatus;
+        }
+        finally
+        {
+            _savingEmailPreferences = false;
         }
     }
 
@@ -449,6 +486,69 @@ public partial class ManageAccountModel : BlazorBase
     protected string OfferRegularTermsDisplay => _payPalOfferQuote == null
         ? string.Empty
         : $"{OfferPriceDisplay} {OfferCadenceDisplay}";
+    /// <summary>
+    /// An in-page link for the section nav.
+    ///
+    /// <para>
+    /// The route is spelled out rather than using a bare "#id": Blazor intercepts internal
+    /// anchor clicks and resolves the href against the base href, so a fragment-only link
+    /// lands on the home page with the fragment attached instead of scrolling this one.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Scrolls to the section named in the URL fragment, once there is something to scroll to.
+    ///
+    /// <para>
+    /// The browser handles a fragment as the document loads, and at that moment this page is
+    /// still a spinner: every section renders only after the subscription status comes back.
+    /// So /manage-account#subscription lands at the top and stays there unless the scroll is
+    /// repeated once the content exists. Failure is deliberately silent - arriving at the top
+    /// of the right page is a poor outcome, not a broken one.
+    /// </para>
+    /// </summary>
+    private async Task ScrollToRequestedSectionAsync()
+    {
+        var fragment = new Uri(NavigationManager.Uri).Fragment.TrimStart('#');
+        if (string.IsNullOrWhiteSpace(fragment))
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("dashboardHelper.scrollToSection", fragment);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not scroll to section {Fragment} on manage account", fragment);
+        }
+    }
+
+    protected static string SectionLink(string sectionId) => $"{AppPageRoutes.ManageAccount}#{sectionId}";
+
+    /// <summary>
+    /// What the subscription section is called right now. It names the problem when there is
+    /// one, which the old markup did in a bare paragraph below the heading.
+    /// </summary>
+    protected string SubscriptionCardTitle => HasUnresolvedPayPalAgreement
+        ? "PayPal billing needs attention"
+        : CanCreateNewSubscription && !_hasSubscription
+            ? SubscriptionOfferHeadline
+            : "Manage your subscription";
+
+    /// <summary>The offer headline, which the section head shows before the card body.</summary>
+    protected string SubscriptionOfferHeadline => HasFreeTrialOffer
+        ? $"Try unlimited music free for {TrialDurationDisplay}."
+        : _payPalOfferQuote?.IsFirstTimeSubscriber == false
+            ? $"Restart unlimited streaming for {OfferRegularTermsDisplay}."
+            : $"Subscribe for {OfferRegularTermsDisplay}.";
+
+    protected string SubscriptionOfferLead => HasFreeTrialOffer
+        ? "Stream every full song during your free trial. You will not be charged until the trial ends."
+        : _payPalOfferQuote?.IsFirstTimeSubscriber == false
+            ? "As a returning subscriber, you will receive the current subscription price."
+            : "Enjoy unlimited streaming of all music on our platform.";
+
     protected string SubscribeButtonLabel => HasFreeTrialOffer
         ? $"Start My {TrialHeadlineDisplay} Free Trial"
         : _payPalOfferQuote?.IsFirstTimeSubscriber == false

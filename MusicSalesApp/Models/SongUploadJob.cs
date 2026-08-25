@@ -47,6 +47,22 @@ public class SongUploadJob
     [MaxLength(200)]
     public string AlbumName { get; set; }
 
+    /// <summary>
+    /// The genre the creator chose at the review step. Required for a song to publish, which is
+    /// why it rides along here rather than being asked for afterwards.
+    /// </summary>
+    public string Genre { get; set; }
+
+    /// <summary>The persona to credit, or null to fall back to the creator display name.</summary>
+    public int? PersonaId { get; set; }
+
+    /// <summary>AI disclosure, stated when the file is handed over rather than added later.</summary>
+    public bool IsAiGenerated { get; set; }
+
+    public bool IsAiVocals { get; set; }
+
+    public bool IsAiLyrics { get; set; }
+
     /// <summary>Path within the staging container, e.g. <c>{guid}/source.wav</c>.</summary>
     [MaxLength(500)]
     public string SourceBlobPath { get; set; }

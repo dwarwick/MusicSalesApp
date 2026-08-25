@@ -343,6 +343,35 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public async Task<bool> TryClaimActivationAnnouncementAsync(int creatorId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        // One conditional UPDATE, not a read then a write. Two tabs opening the page at the same
+        // moment cannot both win it - which matters, because the winner spends that true on a
+        // Google Ads conversion and a permanent history row.
+        var rows = await context.Creators
+            .Where(c => c.Id == creatorId && c.ActivationAnnouncedAt == null)
+            .ExecuteUpdateAsync(setters =>
+                setters.SetProperty(c => c.ActivationAnnouncedAt, DateTime.UtcNow));
+
+        return rows > 0;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryClaimDeactivationAnnouncementAsync(int creatorId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var rows = await context.Creators
+            .Where(c => c.Id == creatorId && c.DeactivationAnnouncedAt == null)
+            .ExecuteUpdateAsync(setters =>
+                setters.SetProperty(c => c.DeactivationAnnouncedAt, DateTime.UtcNow));
+
+        return rows > 0;
+    }
+
     public async Task<Creator> ActivateCreatorAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -355,6 +384,15 @@ public class CreatorService : ICreatorService
 
         creator.IsActive = true;
         creator.OnboardingStatus = CreatorOnboardingStatus.Completed;
+
+        // OnboardedAt is deliberately NOT written here. StartOnboardingAsync calls
+        // ResetCreatorOnboardingAsync immediately before this, and that is what stamps it - so
+        // every creator already has one. Setting it again here would overwrite a correct
+        // historical date with today every time a dormant creator is re-activated, which both
+        // CompleteOnboardingAsync and the admin activate endpoint do.
+
+        // Arms the one-time celebration. Null means "owed"; the page claims it on arrival.
+        creator.ActivationAnnouncedAt = null;
         creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
@@ -450,6 +488,7 @@ public class CreatorService : ICreatorService
         creator.OnboardingStatus = CreatorOnboardingStatus.Suspended;
         creator.CreatorAgreementAccepted = false;
         creator.CreatorAgreementAcceptedAtUtc = null;
+        creator.DeactivationAnnouncedAt = null;
         creator.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();
 
@@ -534,6 +573,14 @@ public class CreatorService : ICreatorService
             .Where(s => s.CreatorId == creatorId && s.IsActive)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetCreatorSongCountAsync(int creatorId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        return await context.SongMetadata
+            .CountAsync(s => s.CreatorId == creatorId && s.IsActive);
     }
 
     /// <inheritdoc />

@@ -59,7 +59,7 @@ This application uses Syncfusion Blazor components for all UI elements to provid
 Syncfusion components should still look like StreamTunes, not Syncfusion defaults:
 
 - For prominent page actions on public, account, creator setup, and creator settings surfaces, prefer the existing site CTA classes over plain `IsPrimary="true"` when `IsPrimary` renders the default Syncfusion blue.
-- Use the existing home-page CTA classes for purple primary creator/account actions: `cta-secondary hero-secondary-cta`, plus a page-specific hook when needed (for example `creator-settings-cta`).
+- Use the existing home-page CTA classes for purple primary creator/account actions: `cta-secondary hero-secondary-cta`. **On Backstage surfaces (`/manage-account`, `/CreatorSettings`) the equivalent is `e-btn settings-btn settings-btn-violet`** - see "The Backstage settings kit" below.
 - Keep destructive actions on `e-danger`; do not restyle stop/delete/destructive buttons as purple CTAs.
 - **The purple is for CREATOR surfaces, not for every button that happens to be secondary.** There are four tiers, and picking by prominence rather than by audience is how the home hero ended up with its main listener action wearing the creator colour:
   | Tier | Classes | For |
@@ -285,7 +285,7 @@ So there are two families:
 | Family | Declared | Use for |
 | --- | --- | --- |
 | `--st-player-*`, `--st-blue*`, `--st-violet`, `--st-amber` | **once**, in `tokens.css` | the two player pages only |
-| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-soft`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
+| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-control-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-tint`, `--st-danger`, `--st-on-danger`, `--st-danger-tint`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
 
 **Never point a card rule at a `--st-player-*` token.** Measured on white, `--st-blue-bright` is
 ~2.1:1, `--st-violet` ~2.9:1, `--st-amber` ~2.1:1 — all fail AA. That is why `--st-warn` is
@@ -314,6 +314,125 @@ Note dark keeps the **bright** fill and flips the *foreground* to near-black, ra
 the fill — the same pattern the players already use for an active pill segment. Anything sitting
 inside a filled control (`.filter-pill-count`, `.filter-pill-clear`) takes `color: inherit` and
 `--st-on-accent-soft`, never a hardcoded white.
+
+### A border on a CONTROL is measured differently from a border on a CARD
+
+`--st-line` (`#dee2e6` light, `rgba(255,255,255,.10)` dark) measures **1.30:1** and **1.37:1**
+against `--st-surface`. That is correct for what it is: the edge of a card, a divider, a
+popup boundary. WCAG has no contrast requirement for decoration.
+
+It is *not* correct for the border of something you can click or type into. WCAG 1.4.11 asks
+for **3:1** on the visual boundary of an interactive control, and the failure is not academic:
+an unchecked checkbox drawn with a 1.37:1 border on the dark page reads as simply absent.
+
+So control boundaries take **`--st-control-line`** (`#7f8894` light, `#7e8b9e` dark), which
+clears 3:1 on all three backgrounds a control can sit on - `--st-surface`, `--st-page` and
+`--st-surface-hover`. Five rules use it today: `.action-button`, `.filter-pill`,
+`.filter-pill-search-input`, `.card-mini-controls .e-btn` and `.cta-outline`. `.music-card`,
+`.filter-pill-dropdown`, `.feature-card` and `.cta-card` keep `--st-line`, because they are
+surfaces rather than controls.
+
+The new border is visibly heavier than the old hairline. That is the cost of the rule, not a
+drawing error - do not "fix" it back.
+
+### Destructive actions have a theme now
+
+`e-danger` is Syncfusion's, and AGENTS.md deliberately keeps destructive actions on it rather
+than restyling them as CTAs. What it did not have was a value of our own, which made `#dc3545`
+the last colour in the app with no theme variant:
+
+| `#dc3545` used as | Light | Dark |
+| --- | --- | --- |
+| text or a 1px border on `--st-surface` | 4.53:1 | **2.86:1** |
+| text or a 1px border on `--st-page` | **4.30:1** | **3.41:1** |
+| a fill under a white label | 4.53:1 | 4.53:1 |
+
+The filled case squeaked through, which is exactly why this went unnoticed for so long — the
+button looked fine while every *text* and *border* use of the same colour failed. On this app
+that is most of them: Delete links, outlined Cancel actions, the danger-zone edge.
+
+So there is now **`--st-danger`** (`#c8102e` light, `#ff8a94` dark) and **`--st-on-danger`**
+(`#ffffff` / `#2a0508`), applied to `.e-btn.e-danger` in both theme sheets.
+
+**One value covers both jobs here, and that is not an inconsistency with the fill family.**
+Contrast is symmetric: `#c8102e` reads at 5.88:1 as text on white *and* carries white text at
+5.88:1. `--st-accent` needed a separate `--st-accent-fill` only because its dark value carried
+the wrong FOREGROUND — white on `#02b8fd` is 2.26:1 — not because the value itself was wrong.
+Dark danger takes the same escape route the fill family already uses: keep the bright value,
+flip the foreground to near-black. `--st-on-danger` is the only foreground permitted on it.
+
+The alert background that goes with it is **`--st-danger-tint`** (`#fdf0f1` / `#331316`), solid
+for the same reason `--st-warn-tint` is: an alpha composites differently over `--st-page` than
+over `--st-surface`, so the pair cannot be measured once. `--st-danger` on it is 5.30:1 light and
+7.48:1 dark. `.settings-alert-warn`, `.settings-card-danger` and `.settings-btn-danger` are
+its consumers.
+
+`.lyrics-editor-record.is-recording` moved out of `app.css` in the same change. A coloured
+`box-shadow` belongs in the theme sheets by the routing rule above, and being in `app.css` is
+precisely how it ended up with no dark variant.
+
+The `creator-settings-*` family that used to be listed here as "still on raw literals" is gone:
+the Backstage rebuild of `/CreatorSettings` deleted all forty-odd of them along with the markup
+they styled.
+
+### The Backstage settings kit
+
+`/manage-account` and `/CreatorSettings` are the same kind of surface - a single column of
+sections with a nav rail beside it - so they share one vocabulary. It is `settings-*`, not
+`manage-*` or `creator-*`, precisely so the second page could not grow a parallel set. **A
+third account-management surface reuses these; it does not invent its own.**
+
+| Piece | Classes |
+|---|---|
+| Page shell and nav rail | `.settings-page`, `.settings-nav`, `.settings-nav-link`, `.settings-main`, `.settings-head*` |
+| A section | `.settings-card` (`.settings-card-danger`), `.settings-section-head`, `.settings-eyebrow`, `.settings-title`, `.settings-note` |
+| Copy | `.settings-prose`, `.settings-hint`, `.settings-working`, `.settings-label`, `.settings-count`, `.settings-optional` |
+| Actions | `.settings-actions`, `.e-btn.settings-btn` + `-violet` / `-danger` / `-danger-outline` / `-small`, `.settings-inline-status` (+ `-bad`) |
+| State | `.status-pill` (+ `-warn`), `.settings-alert-info` / `-warn`, `.settings-empty*`, `.settings-loading` |
+| Data | `.fact-row`, `.terms-list`, `.passkey-row`, `.persona-row`, `.status-tile`, `.step`, `.payout-section`, `.info-strip` (+ `-warn`), `.retry-window` |
+
+Three rules the rebuild is built on, each of which was a real defect first:
+
+**A section link has to name the route.** `href="#subscription"` does not stay on the page.
+Blazor intercepts internal anchor clicks and resolves the target against `<base href="/">`,
+so a fragment-only link navigates to the HOME page carrying the fragment. Both pages have a
+`SectionLink(id)` helper that spells the route out, and a test that walks every
+`.settings-nav-link` checking both halves.
+
+**A save reports where the click happened.** The page-level banner renders above the first
+section; most of these forms are three or more sections below it, so a save from one moved
+nothing on screen and the button read as dead. Every form-level action also sets a
+`.settings-inline-status` beside its own button. Where a save is directional - a notification
+switched on or off - the message says which way it went, because "Saved" alone leaves the
+reader unable to tell whether it took the new value or the old.
+
+**Status is a pill with a dot, never a coloured word.** `/CreatorSettings` used to print
+"Active" in `#16a34a` and "Required before payout" in `#b45309`, so the state was carried by
+hue alone and vanished in greyscale. There is deliberately **no success token** in this
+palette: `--st-accent` does that job, and the word in the pill is what actually distinguishes
+the states.
+
+Two traps specific to this kit:
+
+- The Syncfusion overrides are scoped `:is(.settings-page, .settings-dialog)`, not
+  `.settings-page` alone. A Syncfusion dialog renders at the **body root**, outside the page
+  div, so a `settings-btn` inside one silently lost every override. Any new dialog on these
+  pages needs `CssClass="settings-dialog"`.
+- **`--st-text-3` is not usable on `--st-surface-hover`.** It measures 4.33:1 in dark, under
+  AA. Anything nested on a hover-tinted panel - a status tile label, an inset hint - takes
+  `--st-text-2`. The disabled-button labels fell into this exact hole once already.
+
+### A tint token must be solid, not an alpha
+
+`--st-warn-soft` was `rgba(154,92,0,.12)`, so what it actually painted depended on what sat
+behind it. Over `--st-surface` it gave `#f3ebe0`, on which `--st-warn` is 4.55:1 and passes.
+Over `--st-page` it gave `#ede6dc`, where the same pair is **4.34:1 and fails** - and the page
+is where a full-width alert normally sits. The token could not be measured once, which is the
+whole point of the "measure against the surface, not the page" rule two paragraphs down.
+
+It is now **`--st-warn-tint`**, a solid `#f7f1e8` / `#3f3320`, measured once: `--st-warn` on it
+is 4.79:1 light and 6.23:1 dark. It was renamed rather than added beside the old one because
+`--st-warn-soft` had no consumers anywhere in the app.
 
 Three more rules that fall out of this:
 

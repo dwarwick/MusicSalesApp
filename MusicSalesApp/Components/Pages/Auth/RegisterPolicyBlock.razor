@@ -1,0 +1,39 @@
+@inherits RegisterPolicyBlockModel
+
+@*
+    The three policies gate the submit through CanRegister; the fourth is an optional marketing
+    opt-in, so it sits below a hairline rather than in the same run of four identical rows.
+
+    Extracted because Register renders this twice - once for the email path and once for the
+    Google-pending path - and the two copies were byte-identical. The legal-agreements class
+    stays: RegisterTests asserts it, and app.css already styles .legal-text and .legal-link.
+*@
+<div class="legal-agreements auth-legal">
+    <div class="auth-legal-row">
+        <SfCheckBox Checked="AcceptTermsOfUse" CheckedChanged="AcceptTermsOfUseChanged" TChecked="bool" />
+        <span class="legal-text">
+            I have read and agree to the <a href="javascript:void(0)" @onclick="OnShowTerms" @onclick:preventDefault class="legal-link">Terms of Use</a>
+        </span>
+    </div>
+    <div class="auth-legal-row">
+        <SfCheckBox Checked="AcceptPrivacyPolicy" CheckedChanged="AcceptPrivacyPolicyChanged" TChecked="bool" />
+        <span class="legal-text">
+            I have read and agree to the <a href="javascript:void(0)" @onclick="OnShowPrivacy" @onclick:preventDefault class="legal-link">Privacy Policy</a>
+        </span>
+    </div>
+    <div class="auth-legal-row">
+        <SfCheckBox Checked="AcceptRefundPolicy" CheckedChanged="AcceptRefundPolicyChanged" TChecked="bool" />
+        <span class="legal-text">
+            I have read and agree to the <a href="javascript:void(0)" @onclick="OnShowRefund" @onclick:preventDefault class="legal-link">Refund Policy</a>
+        </span>
+    </div>
+
+    <div class="auth-legal-split"></div>
+
+    <div class="auth-legal-row auth-legal-row-optional">
+        <SfCheckBox Checked="ReceiveNewSongEmails" CheckedChanged="ReceiveNewSongEmailsChanged" TChecked="bool" />
+        <span class="legal-text">
+            Email me when new music is added <span class="auth-legal-optional">(optional)</span>
+        </span>
+    </div>
+</div>

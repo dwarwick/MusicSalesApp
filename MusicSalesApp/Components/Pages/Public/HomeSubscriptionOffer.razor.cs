@@ -35,8 +35,8 @@ public partial class HomeSubscriptionOfferModel : BlazorBase
         : _offerQuote == null
             ? "Subscribe Now"
             : $"Subscribe Now - {OfferRegularTermsDisplay}";
-    protected string SubscriberLoginUrl => BuildReturnUrl(AppPageRoutes.Login, AppPageRoutes.ManageAccount);
-    protected string SubscriberRegisterUrl => BuildReturnUrl(AppPageRoutes.Register, AppPageRoutes.ManageAccount);
+    protected string SubscriberLoginUrl => BuildReturnUrl(AppPageRoutes.Login, AppPageRoutes.ManageAccountSubscription);
+    protected string SubscriberRegisterUrl => BuildReturnUrl(AppPageRoutes.Register, AppPageRoutes.ManageAccountSubscription);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

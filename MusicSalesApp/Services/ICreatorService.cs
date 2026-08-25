@@ -113,6 +113,26 @@ public interface ICreatorService
     Task<Creator> ActivateCreatorAsync(int creatorId);
 
     /// <summary>
+    /// Claims the right to show the one-time "you are a creator" celebration, returning true to
+    /// exactly one caller per activation.
+    ///
+    /// <para>
+    /// The celebration is not free: it fires a Google Ads conversion, a funnel analytics event and
+    /// a permanent user-history row. It used to be triggered by <c>?creator_activated=true</c>,
+    /// which meant a creator could replay all three by reloading a URL. The claim is a single
+    /// conditional UPDATE, so concurrent tabs cannot both win it.
+    /// </para>
+    /// </summary>
+    Task<bool> TryClaimActivationAnnouncementAsync(int creatorId);
+
+    /// <summary>
+    /// The deactivation counterpart of <see cref="TryClaimActivationAnnouncementAsync"/>. Only a
+    /// message, but it goes the same way so that neither notice depends on a URL surviving a
+    /// forced reload.
+    /// </summary>
+    Task<bool> TryClaimDeactivationAnnouncementAsync(int creatorId);
+
+    /// <summary>
     /// Deactivates a creator account (admin function).
     /// </summary>
     Task<Creator> DeactivateCreatorAsync(int creatorId);
@@ -147,6 +167,17 @@ public interface ICreatorService
     /// <param name="creatorId">The creator ID</param>
     /// <returns>List of song metadata for the creator</returns>
     Task<List<SongMetadata>> GetCreatorSongsAsync(int creatorId);
+
+    /// <summary>
+    /// How many active songs this creator has.
+    ///
+    /// <para>
+    /// Separate from <see cref="GetCreatorSongsAsync"/> because the settings page needs the
+    /// number and nothing else, and that method loads every row with its creator, user and
+    /// persona attached.
+    /// </para>
+    /// </summary>
+    Task<int> GetCreatorSongCountAsync(int creatorId);
 
     /// <summary>
     /// Deactivates all songs for a creator and cleans up related data.

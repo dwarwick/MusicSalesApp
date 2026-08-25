@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
@@ -11,9 +12,11 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824014739_AddCreatorStatusAnnouncementFlags")]
+    partial class AddCreatorStatusAnnouncementFlags
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2158,23 +2161,8 @@ namespace MusicSalesApp.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
-                    b.Property<string>("Genre")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsAiGenerated")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsAiLyrics")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsAiVocals")
-                        .HasColumnType("bit");
-
                     b.Property<Guid>("MediaGuid")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<int?>("PersonaId")
-                        .HasColumnType("int");
 
                     b.Property<string>("PlaybackBlobPath")
                         .HasMaxLength(500)

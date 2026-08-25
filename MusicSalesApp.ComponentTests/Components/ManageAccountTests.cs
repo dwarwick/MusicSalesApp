@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,6 +53,53 @@ public class ManageAccountTests : BUnitTestBase
     }
 
     [Test]
+    public void ManageAccount_SectionNavLinks_SpellOutTheRoute()
+    {
+        // A bare href="#account" does not stay on this page. Blazor intercepts internal anchor
+        // clicks and resolves the target against <base href="/">, so a fragment-only link
+        // navigates to the HOME page carrying the fragment - which is exactly what happened
+        // the first time this shipped.
+        SetupAuthorizedUser(1, "testuser@test.com");
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(new ApplicationUser
+            {
+                Id = 1,
+                UserName = "testuser@test.com",
+                Email = "testuser@test.com",
+                EmailConfirmed = true,
+                TimeZoneId = "America/New_York"
+            });
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(
+            new Uri("http://localhost/api/subscription/status"),
+            new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        var navLinks = cut.FindAll(".settings-nav-link");
+        Assert.That(navLinks, Is.Not.Empty, "the section nav should render for a signed-in user");
+
+        Assert.Multiple(() =>
+        {
+            foreach (var link in navLinks)
+            {
+                var href = link.GetAttribute("href");
+                Assert.That(href, Does.StartWith(AppPageRoutes.ManageAccount),
+                    $"'{link.TextContent.Trim()}' must name the route, or it lands on the home page");
+                Assert.That(href, Does.Contain("#"), "each link targets a section on this page");
+            }
+        });
+    }
+
+    [Test]
     public void ManageAccount_DoesNotRenderCreatorSettingsSections()
     {
         SetupAuthorizedUser(1, "testuser@test.com");
@@ -85,7 +133,7 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Close Account"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Not.Contain("Become a Creator"));
         Assert.That(cut.Markup, Does.Not.Contain("Creator Profile"));
@@ -132,11 +180,11 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Current Billing Period Ends:"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Current Billing Period Ends"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("Status:</strong> Active"));
+        Assert.That(cut.Markup, Does.Contain("Manage your subscription"));
         Assert.That(cut.Markup, Does.Contain("America/New_York"));
-        Assert.That(cut.Markup, Does.Contain("Current Billing Period Ends:"));
+        Assert.That(cut.Markup, Does.Contain("Current Billing Period Ends"));
         Assert.That(cut.Markup, Does.Contain("will automatically renew unless canceled"));
         Assert.That(cut.Markup, Does.Contain("Manage Subscription"));
         Assert.That(cut.Markup, Does.Not.Contain("Start a new subscription at any time."));
@@ -227,9 +275,9 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Access Until:"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Access Until"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("Status:</strong> Renews Off"));
+        Assert.That(cut.Markup, Does.Contain("Renews Off"));
         Assert.That(cut.Markup, Does.Contain("America/New_York"));
         Assert.That(cut.Markup, Does.Contain("has been canceled"));
         Assert.That(cut.Markup, Does.Contain("will not automatically renew"));
@@ -584,7 +632,7 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Close Account"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
 
         SetField(cut.Instance, "_accountActionConfirmEmail", "  testuser@test.com  ");
         await InvokeNonPublicTask(cut.Instance, "DeleteAccount");
@@ -606,6 +654,84 @@ public class ManageAccountTests : BUnitTestBase
         return (Task)method!.Invoke(instance, null)!;
     }
 
+    [TestCase(true, "Saved. We will email you when new music is added.")]
+    [TestCase(false, "Saved. We will not email you when new music is added.")]
+    public async Task ManageAccount_SaveEmailPreferences_ConfirmsInsideTheCardAndSaysWhichWay(
+        bool receiveEmails, string expected)
+    {
+        // The page-level banner renders above the FIRST section and this button sits in the
+        // third, so a reader who saves from here sees nothing move and reads the button as
+        // dead - which is what was reported. The confirmation has to appear where the click
+        // happened, and it has to say WHICH way it saved: "Saved" alone leaves someone who
+        // just switched something OFF unable to tell whether it took the new value or the old.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        MockUserManager.Setup(x => x.UpdateAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(IdentityResult.Success);
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_receiveNewSongEmails", receiveEmails);
+        await cut.Find("#email-preferences .settings-actions button").ClickAsync(new MouseEventArgs());
+
+        var status = cut.Find("#email-preferences").QuerySelector(".settings-inline-status");
+        Assert.That(status, Is.Not.Null, "the confirmation belongs beside the button, not three sections above it");
+        Assert.That(status!.TextContent.Trim(), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ManageAccount_SaveEmailPreferences_IsNotGatedOnTheCheckbox()
+    {
+        // Turning a notification OFF is a save like any other. The subscription card gates its
+        // button on the terms checkbox because agreement is a precondition there; copying that
+        // here would make unsubscribing impossible.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_receiveNewSongEmails", false);
+        cut.Render();
+
+        var button = cut.Find("#email-preferences .settings-actions button");
+        Assert.Multiple(() =>
+        {
+            Assert.That(button.HasAttribute("disabled"), Is.False,
+                "unchecking the box must not disable the save");
+            Assert.That(button.ClassList, Does.Not.Contain("e-disabled"),
+                "a button that looks disabled reads as dead even when it is clickable");
+        });
+    }
+
+    [Test]
+    public async Task ManageAccount_ChangePassword_ReportsFailureBesideTheForm()
+    {
+        // Same defect as the email preferences card: this form is the fifth section, and its
+        // only report was the banner at the top of the page.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_currentPassword", "Current1!");
+        SetField(cut.Instance, "_newPassword", "NewPassword1!");
+        SetField(cut.Instance, "_confirmPassword", "Different1!");
+        await cut.InvokeAsync(() => InvokeNonPublicTask(cut.Instance, "ChangePassword"));
+        cut.Render();
+
+        var status = cut.Find("#password").QuerySelector(".settings-inline-status");
+        Assert.That(status, Is.Not.Null, "the form has to say why nothing happened");
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.TextContent.Trim(), Is.EqualTo("New password and confirmation do not match."));
+            Assert.That(status.ClassList, Does.Contain("settings-inline-status-bad"),
+                "a failure must not be styled as a success");
+        });
+    }
     private ApplicationUser SetupAccountWithSubscriptionStatus(object status)
     {
         const int userId = 1;

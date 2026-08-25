@@ -30,14 +30,14 @@ public class CreatorSettingsTests : BUnitTestBase
         SetupCreatorSettingsPage(CreateCreator(isActive: false));
 
         var cut = TestContext.Render<CreatorSettings>();
-        cut.WaitForState(() => cut.Markup.Contains("Creator activation"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Become a creator"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("Account Email: testuser@test.com"));
+        Assert.That(cut.Markup, Does.Contain("testuser@test.com"));
         Assert.That(cut.Markup, Does.Contain("Review and accept the Creator Agreement"));
         Assert.That(cut.Markup, Does.Contain("Creator Agreement"));
         Assert.That(cut.Markup, Does.Contain("Become a Creator"));
-        Assert.That(cut.FindAll(".creator-settings-card").Count, Is.EqualTo(1));
-        Assert.That(cut.Markup, Does.Not.Contain("PayPal Email Address"));
+        Assert.That(cut.FindAll(".settings-card").Count, Is.EqualTo(1));
+        Assert.That(cut.Markup, Does.Not.Contain("PayPal email address"));
         Assert.That(cut.Markup, Does.Not.Contain("Complete W-9/W-8 Tax Form"));
     }
 
@@ -83,9 +83,9 @@ public class CreatorSettingsTests : BUnitTestBase
         cut.WaitForState(() => cut.Markup.Contains("Become a Creator"), TimeSpan.FromSeconds(5));
 
         var becomeCreatorButton = FindButtonContaining(cut, "Become a Creator");
-        Assert.That(becomeCreatorButton.ClassList.Contains("cta-secondary"), Is.True);
-        Assert.That(becomeCreatorButton.ClassList.Contains("hero-secondary-cta"), Is.True);
-        Assert.That(becomeCreatorButton.ClassList.Contains("creator-settings-cta"), Is.True);
+        Assert.That(becomeCreatorButton.ClassList.Contains("settings-btn-violet"), Is.True);
+        Assert.That(becomeCreatorButton.ClassList.Contains("settings-btn"), Is.True);
+        Assert.That(becomeCreatorButton.ClassList.Contains("e-btn"), Is.True);
         Assert.That(becomeCreatorButton.ClassList.Contains("e-primary"), Is.False);
     }
 
@@ -111,7 +111,9 @@ public class CreatorSettingsTests : BUnitTestBase
         MockCreatorService.Verify(x => x.StartOnboardingAsync(It.IsAny<CreatorOnboardingInput>()), Times.Once);
         var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
         Assert.That(navigationManager.Uri, Does.Contain(AppPageRoutes.RefreshSignIn));
-        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorActivated}=true"));
+        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain(AppPageRoutes.CreatorSettings));
+        Assert.That(navigationManager.Uri, Does.Not.Contain("creator_activated"),
+            "what happened is recorded on the creator record, not carried in a URL anyone can retype");
     }
 
     [Test]
@@ -124,12 +126,12 @@ public class CreatorSettingsTests : BUnitTestBase
             payPalAccountAffirmed: false));
 
         var cut = TestContext.Render<CreatorSettings>();
-        cut.WaitForState(() => cut.Markup.Contains("Your creator account is active"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Where you stand"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("Creator role"));
         Assert.That(cut.Markup, Does.Contain("Music uploads"));
         Assert.That(cut.Markup, Does.Contain("Payout setup"));
-        Assert.That(cut.Markup, Does.Contain("Required before payout"));
+        Assert.That(cut.Markup, Does.Contain("Needed before payout"));
         Assert.That(cut.Markup, Does.Contain("Upload Music"));
         Assert.That(cut.Markup, Does.Contain("Manage My Songs"));
         Assert.That(cut.Markup, Does.Contain("View Earnings"));
@@ -137,26 +139,33 @@ public class CreatorSettingsTests : BUnitTestBase
     }
 
     [Test]
-    public void CreatorSettings_ButtonsUseStableAppOwnedIcons()
+    public void CreatorSettings_UsesNoSyncfusionIconFont()
     {
+        // The icon font this page used to carry is gone: the redesign standard is inline SVG
+        // with fill="currentColor", because a glyph font cannot follow the theme. What the
+        // original version of this test was really guarding is the line below - Syncfusion
+        // ships its own e-icons glyphs, and one appearing here would be an unthemed icon
+        // nobody chose. Scoped to buttons: Syncfusion builds its own checkbox and toast chrome
+        // out of e-icons spans, and those are not ours to remove.
         SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.NotStarted));
 
         var cut = TestContext.Render<CreatorSettings>();
-        cut.WaitForState(() => cut.Markup.Contains("Your creator account is active"), TimeSpan.FromSeconds(5));
-
-        AssertButtonHasIcon(cut, "Upload Music", "streamtunes-button-icon-upload-music");
-        AssertButtonHasIcon(cut, "Manage My Songs", "streamtunes-button-icon-song-list");
-        AssertButtonHasIcon(cut, "View Earnings", "streamtunes-button-icon-earnings");
-        AssertButtonHasIcon(cut, "Set Up Payouts", "streamtunes-button-icon-payout");
-        AssertButtonHasIcon(cut, "Stop Being a Creator", "streamtunes-button-icon-warning");
+        cut.WaitForState(() => cut.Markup.Contains("Where you stand"), TimeSpan.FromSeconds(5));
 
         FindButtonContaining(cut, "Set Up Payouts").Click();
-        cut.WaitForState(() => cut.Markup.Contains("Save PayPal Email"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Save Payout Email"), TimeSpan.FromSeconds(5));
 
-        AssertButtonHasIcon(cut, "Save PayPal Email", "streamtunes-button-icon-save");
-        AssertButtonHasIcon(cut, "Complete W-9/W-8 Tax Form", "streamtunes-button-icon-tax-form");
-
-        Assert.That(cut.FindAll("button .e-icons"), Is.Empty);
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll("button .e-icons"), Is.Empty, "Syncfusion glyph icons cannot follow the theme");
+            Assert.That(cut.FindAll(".streamtunes-button-icon"), Is.Empty,
+                "the page-specific icon font was retired in favour of inline SVG");
+            foreach (var svg in cut.FindAll("svg"))
+            {
+                Assert.That(svg.GetAttribute("fill") ?? svg.GetAttribute("stroke"), Is.Not.Null,
+                    "an icon that hard-codes no colour source cannot follow the theme");
+            }
+        });
     }
 
     [Test]
@@ -166,15 +175,15 @@ public class CreatorSettingsTests : BUnitTestBase
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Set Up Payouts"), TimeSpan.FromSeconds(5));
-        Assert.That(cut.Markup, Does.Not.Contain("PayPal Email Address"));
+        Assert.That(cut.Markup, Does.Not.Contain("PayPal email address"));
 
         FindButtonContaining(cut, "Set Up Payouts").Click();
-        cut.WaitForState(() => cut.Markup.Contains("PayPal Email Address"), TimeSpan.FromSeconds(5));
-        Assert.That(cut.Markup, Does.Contain("owned or controlled by you or your authorized creator business"));
-        Assert.That(cut.Markup, Does.Contain("I affirm that I own or am authorized to use this PayPal account"));
+        cut.WaitForState(() => cut.Markup.Contains("PayPal email address"), TimeSpan.FromSeconds(5));
+        Assert.That(cut.Markup, Does.Contain("owned or controlled by you, or by your authorised creator business"));
+        Assert.That(cut.Markup, Does.Contain("I affirm that I own or am authorised to use this PayPal account"));
 
-        FindButtonContaining(cut, "Set Up Payouts").Click();
-        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Not.Contain("PayPal Email Address")), TimeSpan.FromSeconds(5));
+        FindButtonContaining(cut, "Hide Payout Setup").Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Not.Contain("PayPal email address")), TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -194,7 +203,7 @@ public class CreatorSettingsTests : BUnitTestBase
 
         Assert.That(cut.Markup, Does.Contain("Middle Name is Invalid"));
         Assert.That(cut.Markup, Does.Contain("previous tax form submission had an error"));
-        Assert.That(cut.Markup, Does.Contain("creator-settings-alert-danger"));
+        Assert.That(cut.Markup, Does.Contain("info-strip-warn"));
     }
 
     [Test]
@@ -231,7 +240,7 @@ public class CreatorSettingsTests : BUnitTestBase
         FindButtonContaining(cut, "Set Up Payouts").Click();
         cut.WaitForState(() => cut.Markup.Contains("Middle Name is Invalid"), TimeSpan.FromSeconds(5));
 
-        var alertDiv = cut.Find("div.creator-settings-alert-danger");
+        var alertDiv = cut.Find("div.info-strip-warn");
         Assert.That(alertDiv.GetAttribute("role"), Is.EqualTo("alert"));
         Assert.That(alertDiv.GetAttribute("aria-live"), Is.EqualTo("assertive"));
     }
@@ -269,15 +278,15 @@ public class CreatorSettingsTests : BUnitTestBase
         cut.WaitForState(() => cut.Markup.Contains("Manage Payout Info"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("Complete"));
-        Assert.That(cut.Markup, Does.Not.Contain("Payout setup comes later"));
-        Assert.That(cut.Markup, Does.Not.Contain("Reach the payout threshold"));
-        Assert.That(cut.Markup, Does.Not.Contain("Complete payout setup"));
+        Assert.That(cut.Markup, Does.Not.Contain("Getting paid, in three steps"));
+        Assert.That(cut.Markup, Does.Not.Contain("Add a PayPal payout email"));
+        Assert.That(cut.Markup, Does.Not.Contain("Complete your tax form"));
 
         FindButtonContaining(cut, "Manage Payout Info").Click();
         cut.WaitForState(() => cut.Markup.Contains("Manage payout information"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("Confirmed"));
-        Assert.That(cut.Markup, Does.Contain("Your tax form is complete"));
+        Assert.That(cut.Markup, Does.Contain("Your tax form is on file"));
         Assert.That(cut.Markup, Does.Contain("Update W-9/W-8 Tax Form"));
     }
 
@@ -313,7 +322,7 @@ public class CreatorSettingsTests : BUnitTestBase
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Set Up Payouts"), TimeSpan.FromSeconds(5));
         FindButtonContaining(cut, "Set Up Payouts").Click();
-        cut.WaitForState(() => cut.Markup.Contains("PayPal Email Address"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("PayPal email address"), TimeSpan.FromSeconds(5));
 
         SetField(cut.Instance, "_paypalEmail", "payout@example.com");
         SetField(cut.Instance, "_paypalAccountAffirmed", true);
@@ -337,7 +346,7 @@ public class CreatorSettingsTests : BUnitTestBase
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Set Up Payouts"), TimeSpan.FromSeconds(5));
         FindButtonContaining(cut, "Set Up Payouts").Click();
-        cut.WaitForState(() => cut.Markup.Contains("PayPal Email Address"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("PayPal email address"), TimeSpan.FromSeconds(5));
 
         SetField(cut.Instance, "_paypalEmail", "@angelaomalley72");
         SetField(cut.Instance, "_paypalAccountAffirmed", true);
@@ -382,7 +391,7 @@ public class CreatorSettingsTests : BUnitTestBase
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Manage Payout Info"), TimeSpan.FromSeconds(5));
         FindButtonContaining(cut, "Manage Payout Info").Click();
-        cut.WaitForState(() => cut.Markup.Contains("PayPal Email Address"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("PayPal email address"), TimeSpan.FromSeconds(5));
 
         SetField(cut.Instance, "_paypalEmail", string.Empty);
         SetField(cut.Instance, "_paypalAccountAffirmed", false);
@@ -422,7 +431,7 @@ public class CreatorSettingsTests : BUnitTestBase
     public void CreatorSettings_ActivationReturn_TracksCreatorSignupConversion()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed));
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
 
@@ -446,23 +455,23 @@ public class CreatorSettingsTests : BUnitTestBase
             taxFormStatus: TaxFormStatus.Completed,
             payPalEmail: "artist@example.com",
             payPalAccountAffirmed: true));
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("Payout setup"));
         Assert.That(cut.Markup, Does.Contain("Complete"));
-        Assert.That(cut.Markup, Does.Not.Contain("Payout setup comes later"));
-        Assert.That(cut.Markup, Does.Not.Contain("Reach the payout threshold"));
-        Assert.That(cut.Markup, Does.Not.Contain("Complete payout setup"));
+        Assert.That(cut.Markup, Does.Not.Contain("Getting paid, in three steps"));
+        Assert.That(cut.Markup, Does.Not.Contain("Add a PayPal payout email"));
+        Assert.That(cut.Markup, Does.Not.Contain("Complete your tax form"));
     }
 
     [Test]
     public async Task CreatorSettings_ActivationReturn_DoesNotTrackConversionTwice()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed));
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForAssertion(() => Assert.That(GetGoogleAdsTrackingInvocations(), Has.Count.EqualTo(1)), TimeSpan.FromSeconds(5));
@@ -477,7 +486,7 @@ public class CreatorSettingsTests : BUnitTestBase
     public void CreatorSettings_ActivationReturn_DoesNotTrackConversion_WhenHostIsNotAllowed()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed), "davidtest.dev");
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
@@ -491,7 +500,7 @@ public class CreatorSettingsTests : BUnitTestBase
         SetupCreatorSettingsPage(CreateCreator(isActive: false));
 
         var cut = TestContext.Render<CreatorSettings>();
-        cut.WaitForState(() => cut.Markup.Contains("Creator activation"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Become a creator"), TimeSpan.FromSeconds(5));
 
         Assert.That(GetGoogleAdsTrackingInvocations(), Is.Empty);
     }
@@ -500,12 +509,12 @@ public class CreatorSettingsTests : BUnitTestBase
     public void CreatorSettings_DeactivationReturn_ShowsStopCreatorSuccess()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: false));
-        NavigateToCreatorDeactivationReturn();
+        ArmDeactivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("You are no longer a creator"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("Creator activation"));
+        Assert.That(cut.Markup, Does.Contain("Become a creator"));
         Assert.That(cut.Markup, Does.Contain("You are no longer a creator. All your music has been removed from the platform."));
         Assert.That(GetGoogleAdsTrackingInvocations(), Is.Empty);
     }
@@ -526,11 +535,250 @@ public class CreatorSettingsTests : BUnitTestBase
         MockCreatorService.Verify(x => x.StopBeingCreatorAsync(1), Times.Once);
         var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
         Assert.That(navigationManager.Uri, Does.Contain(AppPageRoutes.RefreshSignIn));
-        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorDeactivated}=true"));
+        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain(AppPageRoutes.CreatorSettings));
+        Assert.That(navigationManager.Uri, Does.Not.Contain("creator_deactivated"));
     }
 
+    [Test]
+    public void CreatorSettings_SectionNavLinks_SpellOutTheRoute()
+    {
+        // A bare href="#status" does not stay on this page. Blazor intercepts internal anchor
+        // clicks and resolves the target against <base href="/">, so a fragment-only link
+        // navigates to the HOME page carrying the fragment. Manage Account shipped that bug
+        // once already.
+        SetupCreatorSettingsPage(CreateCreator(isActive: true));
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Where you stand"), TimeSpan.FromSeconds(5));
+
+        var navLinks = cut.FindAll(".settings-nav-link");
+        Assert.That(navLinks, Is.Not.Empty, "the section nav should render for an active creator");
+
+        Assert.Multiple(() =>
+        {
+            foreach (var link in navLinks)
+            {
+                var label = link.TextContent.Trim();
+                var href = link.GetAttribute("href");
+                Assert.That(href, Does.StartWith(AppPageRoutes.CreatorSettings),
+                    $"{label} must name the route, or the link lands on the home page");
+
+                var section = href![(href.IndexOf("#", StringComparison.Ordinal) + 1)..];
+                Assert.That(cut.FindAll($"#{section}"), Is.Not.Empty,
+                    $"{label} points at #{section}, which nothing on the page renders");
+            }
+        });
+    }
+
+    [TestCase(true, true, 3, TestName = "CreatorSettings_Steps_AllDone_HidesTheCard")]
+    [TestCase(false, true, 2, TestName = "CreatorSettings_Steps_PayPalMissing_TicksTheOtherTwo")]
+    [TestCase(true, false, 2, TestName = "CreatorSettings_Steps_TaxMissing_TicksTheOtherTwo")]
+    public void CreatorSettings_StepsReflectRealState(bool payPalReady, bool taxReady, int expectedTicks)
+    {
+        // The point of rebuilding this card: it used to be three static numbered tiles that
+        // never changed, whatever the creator had actually done.
+        var creator = CreateCreator(
+            isActive: true,
+            taxFormStatus: taxReady ? TaxFormStatus.Completed : TaxFormStatus.NotStarted);
+        creator.PayPalEmail = payPalReady ? "payouts@test.com" : string.Empty;
+        creator.PayPalAccountAffirmed = payPalReady;
+        SetupCreatorSettingsPage(creator);
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Where you stand"), TimeSpan.FromSeconds(5));
+
+        var allDone = payPalReady && taxReady;
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup.Contains("Getting paid, in three steps"), Is.EqualTo(!allDone),
+                "with nothing outstanding the card is a wall of ticks between the reader and the rest");
+            Assert.That(cut.FindAll(".step-badge-done").Count, Is.EqualTo(allDone ? 0 : expectedTicks));
+        });
+    }
+
+    [Test]
+    public void CreatorSettings_Personas_ListThemAndLinkAcross()
+    {
+        // Nothing on this page linked to /creator/personas before - the only route in was the
+        // nav menu, which is a poor place to learn that the artist name a listener sees is not
+        // the display name set two sections above.
+        var creator = CreateCreator(isActive: true);
+        SetupCreatorSettingsPage(creator);
+
+        MockCreatorPersonaService.Setup(x => x.GetPersonasByCreatorIdAsync(creator.Id))
+            .ReturnsAsync(new List<CreatorPersona>
+            {
+                new() { Id = 7, CreatorId = creator.Id, Name = "Nightshift Radio", Bio = "Slow and late.", IsEnabled = true },
+                new() { Id = 8, CreatorId = creator.Id, Name = "Warwick", IsEnabled = true },
+            });
+        MockCreatorPersonaService.Setup(x => x.GetPersonaSongCountsAsync(It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new Dictionary<int, int> { [7] = 14 });
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Your artist identities"), TimeSpan.FromSeconds(5));
+
+        var rows = cut.FindAll(".persona-row");
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows.Count, Is.EqualTo(2));
+            Assert.That(rows[0].TextContent, Does.Contain("Nightshift Radio"));
+            Assert.That(rows[0].TextContent, Does.Contain("14 songs"));
+            // A persona with no linked songs is omitted from the count dictionary, not zero.
+            Assert.That(rows[1].TextContent, Does.Contain("0 songs"));
+            Assert.That(rows[1].TextContent, Does.Contain("No website"));
+        });
+
+        FindButtonContaining(cut, "Manage Personas").Click();
+
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        Assert.That(navigationManager.Uri, Does.EndWith(AppPageRoutes.CreatorPersonas));
+    }
+
+    [Test]
+    public void CreatorSettings_NoPersonas_NamesTheDisplayNameThatWillBeUsedInstead()
+    {
+        var creator = CreateCreator(isActive: true);
+        creator.DisplayName = "Dave Warwick";
+        SetupCreatorSettingsPage(creator);
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Your artist identities"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll(".persona-row"), Is.Empty);
+            Assert.That(cut.Find(".settings-empty-body").TextContent, Does.Contain("Dave Warwick"),
+                "the empty state has to say what listeners see instead");
+            Assert.That(FindButtonContaining(cut, "Create a Persona"), Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void CreatorSettings_StopBeingACreator_SaysHowManySongsGo()
+    {
+        // This deletes the audio files, not just the listings, so the dialog has to name the
+        // size of what is about to go rather than describing it in the abstract. The singular
+        // matters: "1 songs" is the classic tell that nobody read the screen.
+        SetupCreatorSettingsPage(CreateCreator(isActive: true));
+        MockCreatorService.Setup(x => x.GetCreatorSongCountAsync(It.IsAny<int>())).ReturnsAsync(1);
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Where you stand"), TimeSpan.FromSeconds(5));
+
+        FindButtonContaining(cut, "Stop Being a Creator").Click();
+        cut.WaitForState(() => cut.Markup.Contains("Type your email to confirm"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("remove <strong>1 song</strong> from StreamTunes"));
+    }
+    [TestCase("creator_activated")]
+    [TestCase("creator_deactivated")]
+    public void CreatorSettings_StatusNoticeCannotBeTriggeredByUrl(string retiredParameter)
+    {
+        // These parameters used to drive the celebration, and with it a Google Ads conversion, a
+        // funnel event and a permanent user-history row - so anyone who read one off the address
+        // bar could replay all three. The page now asks the database, which answers once.
+        SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed));
+
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"{AppPageRoutes.CreatorSettings}?{retiredParameter}=true");
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Where you stand"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Creator account activated"));
+            Assert.That(cut.Markup, Does.Not.Contain("You are no longer a creator"));
+            Assert.That(GetGoogleAdsTrackingInvocations(), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void CreatorSettings_ActivationNotice_IsClaimedOncePerLoad()
+    {
+        // The claim is what makes the notice one-shot, so the page has to actually spend it
+        // rather than reading a flag and leaving it armed for the next reload.
+        var creator = CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed);
+        SetupCreatorSettingsPage(creator);
+        ArmActivationAnnouncement();
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
+
+        MockCreatorService.Verify(x => x.TryClaimActivationAnnouncementAsync(creator.Id), Times.Once);
+    }
+
+    [Test]
+    public void CreatorSettings_InactiveCreator_NeverClaimsTheActivationNotice()
+    {
+        // Deactivated creators keep their record, so the activation claim is still sitting there
+        // to be won. Asking for it here would congratulate someone who has just stopped.
+        SetupCreatorSettingsPage(CreateCreator(isActive: false));
+        ArmActivationAnnouncement();
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Become a creator"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Creator account activated"));
+            MockCreatorService.Verify(x => x.TryClaimActivationAnnouncementAsync(It.IsAny<int>()), Times.Never);
+        });
+    }
+    [Test]
+    public void CreatorSettings_RealActivation_StillFiresFunnelEventAndConversionAndHistory()
+    {
+        // Removing the query parameter must not have taken the measurement with it. This is the
+        // arrival straight after a real activation - the creator record says a notice is owed -
+        // and all three effects have to happen exactly as they did when a URL triggered them.
+        var creator = CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed);
+        SetupCreatorSettingsPage(creator);
+        ArmActivationAnnouncement();
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
+
+        cut.WaitForAssertion(() =>
+        {
+            var conversions = GetGoogleAdsTrackingInvocations();
+            Assert.That(conversions, Has.Count.EqualTo(1), "the Google Ads conversion still fires");
+            Assert.That(conversions.Single().Arguments[0]?.ToString(),
+                Is.EqualTo("AW-18188763957/zvw_CJ6in74cELWGiuFD"));
+
+            var funnelEvents = TestContext.JSInterop.Invocations
+                .Where(i => i.Identifier == GoogleAdsTrackingConfigKeys.TrackFunnelEventFunctionName)
+                .Where(i => string.Equals(i.Arguments.FirstOrDefault()?.ToString(),
+                    FunnelAnalyticsEvents.CreatorActivated, StringComparison.Ordinal))
+                .ToList();
+            Assert.That(funnelEvents, Has.Count.EqualTo(1), "the funnel analytics event still fires");
+        }, TimeSpan.FromSeconds(5));
+
+        MockAdminNotificationService.Verify(
+            x => x.RecordUserHistoryAsync(
+                It.IsAny<int>(),
+                It.IsAny<string>(),
+                UserHistoryEventTypes.CreatorActivated,
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()),
+            Times.Once,
+            "the audit row is still written - once, which is the whole point");
+    }
     private void SetupCreatorSettingsPage(Creator creator, params string[] enabledHosts)
     {
+        // Default to a creator who has uploaded. A zero count is a real state, but it is a
+        // different test from any of these, and leaving it at zero keeps the next-steps card
+        // on screen in every scenario.
+        MockCreatorService.Setup(x => x.GetCreatorSongCountAsync(It.IsAny<int>()))
+            .ReturnsAsync(4);
+
+        // Nothing owed, which is every page load except the one straight after a status
+        // change. Tests that want the notice call ArmActivationAnnouncement.
+        MockCreatorService.Setup(x => x.TryClaimActivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(false);
+        MockCreatorService.Setup(x => x.TryClaimDeactivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(false);
+
         if (enabledHosts.Length == 0)
         {
             enabledHosts = new[] { "localhost" };
@@ -614,17 +862,19 @@ public class CreatorSettingsTests : BUnitTestBase
             .Returns(httpContext);
     }
 
-    private void NavigateToCreatorActivationReturn()
-    {
-        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
-        navigationManager.NavigateTo($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorActivated}=true");
-    }
+    /// <summary>
+    /// The creator record says the activation notice is still owed, and this page load claims
+    /// it. This used to be a URL parameter, which is why it could be replayed.
+    /// </summary>
+    private void ArmActivationAnnouncement() =>
+        MockCreatorService
+            .Setup(x => x.TryClaimActivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(true);
 
-    private void NavigateToCreatorDeactivationReturn()
-    {
-        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
-        navigationManager.NavigateTo($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorDeactivated}=true");
-    }
+    private void ArmDeactivationAnnouncement() =>
+        MockCreatorService
+            .Setup(x => x.TryClaimDeactivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(true);
 
     private static IElement FindButtonContaining(IRenderedComponent<CreatorSettings> cut, string text)
     {
@@ -632,22 +882,6 @@ public class CreatorSettingsTests : BUnitTestBase
             .FirstOrDefault(element => element.TextContent.Contains(text, StringComparison.OrdinalIgnoreCase));
         Assert.That(button, Is.Not.Null, $"Expected to find a button containing '{text}'.");
         return button!;
-    }
-
-    private static void AssertButtonHasIcon(
-        IRenderedComponent<CreatorSettings> cut,
-        string buttonText,
-        string iconClass)
-    {
-        var button = FindButtonContaining(cut, buttonText);
-        Assert.That(
-            button.QuerySelector($".streamtunes-button-icon.{iconClass}"),
-            Is.Not.Null,
-            $"Expected the '{buttonText}' button to use {iconClass}.");
-        Assert.That(
-            button.QuerySelector(".e-icons"),
-            Is.Null,
-            $"Expected the '{buttonText}' button to avoid Syncfusion e-icons glyph classes.");
     }
 
     private static bool ButtonIsDisabled(IElement button) =>

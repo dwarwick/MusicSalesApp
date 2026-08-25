@@ -17,6 +17,14 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
 
     protected bool _loading = true;
     protected string _errorMessage = string.Empty;
+
+    /// <summary>
+    /// Whether the list itself could not be loaded, as opposed to an action on it having
+    /// failed. A failed delete leaves a perfectly good list on screen and must not hide it;
+    /// "you are not a creator" must not sit above an empty state offering to create a
+    /// persona, because that button cannot work.
+    /// </summary>
+    protected bool _loadFailed;
     protected string _successMessage = string.Empty;
     protected List<PersonaAdminViewModel> _personas = new();
 
@@ -55,6 +63,47 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
     private int? _creatorId;
     private bool _hasLoadedData = false;
 
+    protected string PersonaSummary
+    {
+        get
+        {
+            var songs = _personas.Sum(x => x.SongCount);
+            var personaPart = _personas.Count == 1 ? "1 persona" : $"{_personas.Count} personas";
+            var songPart = songs == 1 ? "1 song linked" : $"{songs} songs linked";
+            return $"{personaPart} · {songPart}";
+        }
+    }
+
+    protected string SaveButtonLabel => _isSaving
+        ? "Saving..."
+        : _isNewPersona ? "Create Persona" : "Save Persona";
+
+    protected int BioLength => _editBio?.Length ?? 0;
+
+    /// <summary>
+    /// Whether the image in the dialog would be cropped by the time a listener sees it.
+    /// A newly picked file is judged on its own dimensions; otherwise the saved persona is.
+    /// </summary>
+    protected bool NeedsCrop => _personaImageFile != null
+        ? _newPersonaImageIsSquare == false
+        : _editingPersona?.IsImageSquare == false;
+
+    /// <summary>
+    /// The crop tool needs pixels to work on: either a buffered new image as a data URL, or a
+    /// saved blob it can fetch back through the same-origin proxy. This mirrors the guard at
+    /// the top of <see cref="OpenCropTool"/> - offering a button that returns immediately is
+    /// worse than offering none.
+    /// </summary>
+    protected bool CanOpenCropTool => !_showCropTool
+        && !_cropApplied
+        && _editingPersona != null
+        && (!string.IsNullOrEmpty(_newPersonaImagePreviewUrl) || !string.IsNullOrEmpty(_editingPersona.ImageBlobPath));
+
+    protected static string SongCountLabel(int count) => count == 1 ? "1 song" : $"{count} songs";
+
+    protected static string PersonaInitial(string name) =>
+        string.IsNullOrWhiteSpace(name) ? "?" : name.Trim().Substring(0, 1).ToUpperInvariant();
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && !_hasLoadedData)
@@ -87,6 +136,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                         }
                         else
                         {
+                            _loadFailed = true;
                             _errorMessage = "You are not registered as a creator. Please complete creator onboarding first.";
                         }
                     }
@@ -94,6 +144,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
             }
             catch (Exception ex)
             {
+                _loadFailed = true;
                 _errorMessage = $"Failed to load personas: {ex.Message}";
             }
             finally
@@ -259,6 +310,17 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         if (_editName?.Length > 200)
         {
             _validationErrors.Add("Persona name must be 200 characters or less.");
+        }
+
+        // Checked here so the creator gets a named message rather than the service exception
+        // surfacing through the generic catch below. The service enforces it regardless.
+        if (!_validationErrors.Any()
+            && await CreatorPersonaService.PersonaNameExistsAsync(
+                _creatorId.Value,
+                _editName,
+                excludePersonaId: _isNewPersona ? null : _editingPersona.Id))
+        {
+            _validationErrors.Add($"You already have a persona called '{_editName.Trim()}'.");
         }
 
         if (_validationErrors.Any())

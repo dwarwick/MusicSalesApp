@@ -87,6 +87,55 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         IsPayoutPayPalReady
         && IsPayoutTaxReady;
 
+    // The settings page shows what the creator has, not just what they must still do:
+    // a song count for the checklist and the stop-being-a-creator warning, and the
+    // personas that decide what artist name a listener actually sees.
+    protected int _songCount;
+    protected List<PersonaAdminViewModel> _personas = new();
+
+    protected bool HasUploadedMusic => _songCount > 0;
+
+    /// <summary>
+    /// Whether the three-step card has anything left to say. Every step is driven by real
+    /// state, so once all three are done the card is not a checklist any more - it is a wall
+    /// of ticks between the reader and the sections they came for.
+    /// </summary>
+    protected bool HasOutstandingSteps => !HasUploadedMusic || !IsPayoutReady;
+
+    protected string CatalogueNote => _songCount == 0
+        ? "You have not uploaded anything yet."
+        : $"{SongCountLabel(_songCount)} on StreamTunes.";
+
+    protected string NoPersonasBody => string.IsNullOrWhiteSpace(_editCreatorDisplayName)
+        ? "Your songs show your display name. Create a persona if you release under a band or project name."
+        : $"Your songs show your display name, {_editCreatorDisplayName}. Create a persona if you release under a band or project name.";
+
+    /// <summary>
+    /// The tax form status as a pill label. Deliberately not the raw enum name:
+    /// "TinMatchInProgress" is an internal term for something a creator experiences as
+    /// waiting on the IRS.
+    /// </summary>
+    protected string TaxFormStatusLabel =>
+        _creatorTaxFormStatus == TaxFormStatus.Completed.ToString() ? "Complete"
+        : _creatorTaxFormStatus == TaxFormStatus.TinMatchInProgress.ToString() ? "Verifying"
+        : _creatorTaxFormStatus == TaxFormStatus.Failed.ToString() ? "Failed"
+        : _creatorTaxFormStatus == TaxFormStatus.Pending.ToString() ? "Processing"
+        : "Not started";
+
+    protected int BioLength => _editCreatorBio?.Length ?? 0;
+
+    protected static string SongCountLabel(int count) => count == 1 ? "1 song" : $"{count} songs";
+
+    protected static string PersonaInitial(string name) =>
+        string.IsNullOrWhiteSpace(name) ? "?" : name.Trim().Substring(0, 1).ToUpperInvariant();
+
+    /// <summary>
+    /// A section link that names the route. A fragment-only href does not stay on this page:
+    /// Blazor intercepts internal anchor clicks and resolves them against &lt;base href="/"&gt;,
+    /// so href="#status" navigates to the home page carrying a fragment.
+    /// </summary>
+    protected static string SectionLink(string sectionId) => $"{AppPageRoutes.CreatorSettings}#{sectionId}";
+
     protected SfDialog _stopSellingDialog;
     protected SfToast _toastRef;
 
@@ -99,12 +148,6 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
     [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.TrackingId)]
     public string CreatorTrackingId { get; set; }
-
-    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.CreatorActivated)]
-    public bool CreatorActivated { get; set; }
-
-    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.CreatorDeactivated)]
-    public bool CreatorDeactivated { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -128,14 +171,14 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                         await DetectAndPersistUserTimeZoneAsync();
                         await LoadCreatorStatus();
 
-                        if (CreatorActivated && _isActiveCreator)
-                        {
-                            await ShowCreatorActivatedDialog();
-                        }
-                        else if (CreatorDeactivated && !_isActiveCreator)
-                        {
-                            _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
-                        }
+                        // Whether this arrival is the end of the activation flow is a question
+                        // for the database, not the address bar. Activation finishes with a
+                        // forced reload through /refresh-signin - the Creator role has just
+                        // been granted and the auth cookie has to be reissued - so nothing in
+                        // memory survives to say what happened. It used to be carried by
+                        // ?creator_activated=true, which let anyone replay the celebration,
+                        // its analytics event and its user-history row by typing a URL.
+                        await AnnounceCreatorStatusChangeAsync();
 
                         await TrackCreatorSettingsViewedAsync();
 
@@ -227,7 +270,11 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _creatorStreamPayRateDisplay = creator.StreamPayRate * 1000;
                 _editCreatorDisplayName = _creatorDisplayName;
                 _editCreatorBio = _creatorBio;
-                _showActivationSuccess = CreatorActivated && creator.IsActive;
+                // Set by AnnounceCreatorStatusChangeAsync when it wins the claim, and by
+                // CompleteCreatorOnboarding. Reloading the page does not bring it back.
+                _showActivationSuccess &= creator.IsActive;
+
+                await LoadCatalogueSummaryAsync(creator.Id);
             }
             else
             {
@@ -255,6 +302,47 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading creator status");
+        }
+    }
+
+    /// <summary>
+    /// The song count and the persona list. Both are display-only, so a failure here leaves
+    /// the page usable: the checklist shows the upload step as outstanding and the personas
+    /// card shows its empty state, which is the same thing a genuinely empty account sees.
+    /// </summary>
+    private async Task LoadCatalogueSummaryAsync(int creatorId)
+    {
+        try
+        {
+            _songCount = await CreatorService.GetCreatorSongCountAsync(creatorId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading song count for creator {CreatorId}", creatorId);
+        }
+
+        try
+        {
+            var personas = await CreatorPersonaService.GetPersonasByCreatorIdAsync(creatorId);
+            var counts = await CreatorPersonaService.GetPersonaSongCountsAsync(personas.Select(x => x.Id));
+
+            _personas = personas
+                .OrderBy(x => x.Name)
+                .Select(x => new PersonaAdminViewModel
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Bio = x.Bio ?? string.Empty,
+                    WebsiteUrl = x.WebsiteUrl ?? string.Empty,
+                    IsEnabled = x.IsEnabled,
+                    SongCount = counts.TryGetValue(x.Id, out var n) ? n : 0,
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading personas for creator {CreatorId}", creatorId);
+            _personas = new();
         }
     }
 
@@ -401,7 +489,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             {
                 await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupActive);
                 await LoadCreatorStatus();
-                RefreshSignInAndReturnToCreatorSettings(CreatorSettingsQueryKeys.CreatorActivated);
+                RefreshSignInAndReturnToCreatorSettings();
                 return;
             }
             else
@@ -469,6 +557,38 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Shows the activation or deactivation notice, once per status change.
+    ///
+    /// <para>
+    /// The claim is a single conditional UPDATE, so a reload cannot replay it and two tabs
+    /// cannot both win it. Nothing here is gated on a query parameter: the only inputs are the
+    /// creator record and the claim.
+    /// </para>
+    /// </summary>
+    private async Task AnnounceCreatorStatusChangeAsync()
+    {
+        if (!_creatorId.HasValue)
+        {
+            return;
+        }
+
+        if (_isActiveCreator)
+        {
+            if (await CreatorService.TryClaimActivationAnnouncementAsync(_creatorId.Value))
+            {
+                await ShowCreatorActivatedDialog();
+            }
+
+            return;
+        }
+
+        if (await CreatorService.TryClaimDeactivationAnnouncementAsync(_creatorId.Value))
+        {
+            _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
+        }
+    }
+
     protected async Task ShowCreatorActivatedDialog()
     {
         await TrackCreatorActivatedFunnelAsync();
@@ -526,6 +646,11 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         NavigationManager.NavigateTo(AppPageRoutes.UploadFiles);
     }
 
+    protected void NavigateToPersonas()
+    {
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorPersonas);
+    }
+
     protected void NavigateToManageSongs()
     {
         NavigationManager.NavigateTo(AppPageRoutes.CreatorSongs);
@@ -571,7 +696,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             if (success)
             {
                 await _stopSellingDialog.HideAsync();
-                RefreshSignInAndReturnToCreatorSettings(CreatorSettingsQueryKeys.CreatorDeactivated);
+                RefreshSignInAndReturnToCreatorSettings();
                 return;
             }
             else
@@ -593,10 +718,19 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         }
     }
 
-    private void RefreshSignInAndReturnToCreatorSettings(string returnQueryKey)
+    /// <summary>
+    /// Reissues the auth cookie and comes back here.
+    ///
+    /// <para>
+    /// The forced reload is not optional: the Creator role has just been granted or taken away,
+    /// and the cookie in the browser still says otherwise. The return URL deliberately carries
+    /// no state - what happened is recorded on the creator record, which is the only thing that
+    /// survives a reload anyway.
+    /// </para>
+    /// </summary>
+    private void RefreshSignInAndReturnToCreatorSettings()
     {
-        var returnUrl = $"{AppPageRoutes.CreatorSettings}?{returnQueryKey}=true";
-        var refreshUrl = $"{AppPageRoutes.RefreshSignIn}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(returnUrl)}";
+        var refreshUrl = $"{AppPageRoutes.RefreshSignIn}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(AppPageRoutes.CreatorSettings)}";
         NavigationManager.NavigateTo(refreshUrl, forceLoad: true);
     }
 

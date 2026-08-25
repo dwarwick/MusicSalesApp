@@ -3,6 +3,24 @@
         return Intl.DateTimeFormat().resolvedOptions().timeZone;
     },
 
+    // Scrolls to a section AFTER the page has rendered it. The browser resolves a URL
+    // fragment when the document loads, and pages that fetch their content first are still
+    // a spinner at that moment - the target does not exist yet, so nothing happens and the
+    // reader is left at the top wondering what the link did.
+    scrollToSection: function (id) {
+        if (!id) {
+            return false;
+        }
+
+        var target = document.getElementById(id);
+        if (!target) {
+            return false;
+        }
+
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return true;
+    },
+
     // A no-op the server calls purely to find out whether this browser is still attached to the
     // circuit. It exists because NavigationManager.NavigateTo cannot be wrapped in a try/catch on
     // the server side - a navigation whose interop is never answered surfaces a minute later as an

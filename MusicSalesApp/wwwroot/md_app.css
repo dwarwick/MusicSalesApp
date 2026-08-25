@@ -1,16 +1,59 @@
 /* Medium breakpoint styles (<992px) */
 @media (max-width: 992px) {
-    .creator-settings-page {
-        padding: 36px 18px 56px;
+    /* ---- Upload review: six columns do not fit a tablet, let alone a phone.
+       Each row becomes a card and each cell is titled from its data-label, so
+       nothing has to be read against a header row that is off screen. Only the
+       review table: the progress view has four columns and reads fine as one.
+
+       The selectors are child-combinator and !important on purpose. Bootstrap
+       styles cells at .table > :not(caption) > * > * - specificity 0,1,3 - and
+       sets padding, a bottom border, a background AND the stripe, which it paints
+       as an inset box-shadow. A plain .review-table td is 0,1,1 and loses all four,
+       which is how the first version of this rendered as a table anyway. */
+    .review-table thead { display: none; }
+
+    .review-table,
+    .review-table > tbody,
+    .review-table > tbody > tr,
+    .review-table > tbody > tr > td {
+        display: block;
+        width: 100%;
     }
 
-    .creator-payout-grid {
-        grid-template-columns: 1fr;
+    .review-table > tbody > tr {
+        border-style: solid;
+        border-width: 1px;
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 14px;
     }
 
-    .creator-settings-card .e-card-content {
-        padding: 26px;
+    .review-table > tbody > tr > td {
+        min-width: 0 !important;
+        padding: 8px 0 !important;
+        border: none !important;
+
+        /* The card carries its own colour, on the row. Leaving these on the cells
+           would stripe alternate cards and paint the problem row Bootstrap yellow,
+           which is not a themed colour and reads badly on the dark surface. */
+        background-color: transparent !important;
+        box-shadow: none !important;
     }
+
+    .review-table > tbody > tr > td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    /* The one cell whose label would just repeat the value under it. */
+    .review-table > tbody > tr > td[data-label="Song title"]::before { display: none; }
+
+    .apply-all-field { min-width: 100%; }
 
     .mobile-app-install-banner {
         min-height: 60px;
@@ -351,4 +394,24 @@
     .playlist-player-container .track-sub { display: block; margin-top: 2px; font-size: 12.5px; }
 
     .playlist-player-container .player-bar { margin: 18px 36px 18px; height: 72px; padding: 0 22px; gap: 16px; }
+
+/* Auth pages - the panel becomes a banner. A 620px rail plus a 400px column needs more
+       width than this breakpoint has. */
+    /* Stacked, an inner scroll area would trap the form under a banner the reader cannot
+       scroll past, so the page grows and the whole thing scrolls normally. */
+    .auth-page { flex-direction: column; height: auto; }
+    .auth-form-col { overflow-y: visible; }
+    .auth-panel { width: auto; height: 260px; padding: 30px 40px; }
+    .auth-panel-logo { height: 34px; }
+    .auth-panel-eyebrow { margin-bottom: 8px; }
+    .auth-panel-title { font-size: 34px; line-height: 1.12; margin-bottom: 10px; }
+    .auth-panel-body { font-size: 15px; line-height: 1.55; max-width: 540px; margin-bottom: 14px; }
+    .auth-form-col { padding: 40px 32px; align-items: flex-start; }
+
+/* Settings surfaces - the rail needs about 1030px beside a readable column, so it is
+       dropped here rather than squeezed. */
+    .settings-page { padding: 30px 32px 48px; gap: 0; }
+    .settings-nav { display: none; }
+    .settings-main { max-width: 700px; }
+    .settings-column { gap: 20px; }
 }

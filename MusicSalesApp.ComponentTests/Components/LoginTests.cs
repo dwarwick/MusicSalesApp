@@ -30,7 +30,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert - SfCard renders the title in CardHeader
-        Assert.That(cut.Markup, Does.Contain("Login"));
+        Assert.That(cut.Markup, Does.Contain("Log in"));
     }
 
     [Test]
@@ -65,8 +65,8 @@ public class LoginTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<Login>();
 
-        // Assert - SfButton renders with e-btn class and contains "Login"
-        Assert.That(cut.Markup, Does.Contain("Login"));
+        // Assert - SfButton renders with e-btn class and carries the submit label
+        Assert.That(cut.Markup, Does.Contain("Log in"));
         Assert.That(cut.Markup, Does.Contain("e-btn"));
     }
 
@@ -113,7 +113,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Login with Passkey"));
+        Assert.That(cut.Markup, Does.Contain("Log in with a passkey"));
     }
 
     [Test]
@@ -134,7 +134,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Login with Password"));
+        Assert.That(cut.Markup, Does.Contain("Log in"));
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Forgot Password?"));
+        Assert.That(cut.Markup, Does.Contain("Forgot password?"));
         Assert.That(cut.Markup, Does.Contain("href=\"/forgot-password\""));
     }
 
@@ -171,6 +171,109 @@ public class LoginTests : BUnitTestBase
             .Single(button => button.TextContent.Contains("Continue with Google"));
         googleButton.Click();
 
-        Assert.That(navigationManager.Uri, Does.EndWith($"{GoogleAuthRoutes.WebStartPath}?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings"));
+        Assert.That(navigationManager.Uri, Does.EndWith(
+            $"{GoogleAuthRoutes.WebStartPath}" +
+            $"?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings" +
+            $"&{ExternalAuthFormFields.RememberMe}=true"));
+    }
+
+    [Test]
+    public void Login_HasKeepMeSignedInField_TickedByDefault()
+    {
+        var cut = TestContext.Render<Login>();
+
+        var rememberMeInput = cut.Find($"input[name='{ExternalAuthFormFields.RememberMe}']");
+        Assert.Multiple(() =>
+        {
+            Assert.That(rememberMeInput.GetAttribute("type"), Is.EqualTo("hidden"));
+            // Default ticked, so an existing user who ignores the box keeps the
+            // persistent cookie they get today.
+            Assert.That(rememberMeInput.GetAttribute("value"), Is.EqualTo("true"));
+            Assert.That(cut.Markup, Does.Contain("Keep me signed in on this device"));
+        });
+    }
+
+    [Test]
+    public void Login_KeepMeSignedInUnticked_PostsFalse()
+    {
+        var cut = TestContext.Render<Login>();
+
+        cut.Find("input[type='checkbox']").Click();
+
+        var rememberMeInput = cut.Find($"input[name='{ExternalAuthFormFields.RememberMe}']");
+        Assert.That(rememberMeInput.GetAttribute("value"), Is.EqualTo("false"));
+    }
+
+    [Test]
+    public void Login_KeepMeSignedInUnticked_CarriesThroughToGoogle()
+    {
+        var cut = TestContext.Render<Login>();
+        cut.Find("input[type='checkbox']").Click();
+
+        var googleButton = cut.FindAll("button")
+            .Single(button => button.TextContent.Contains("Continue with Google"));
+        googleButton.Click();
+
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        Assert.That(navigationManager.Uri, Does.EndWith($"&{ExternalAuthFormFields.RememberMe}=false"));
+    }
+
+    [Test]
+    public void Login_PasskeyLogin_PassesRememberMeToJs()
+    {
+        var invocation = TestContext.JSInterop.SetupVoid(
+            "passkeyHelper.loginWithPasskey",
+            _ => true);
+
+        var cut = TestContext.Render<Login>();
+        cut.Find("#username").Change("dave.warwick");
+        cut.Find("input[type='checkbox']").Click();
+
+        var passkeyButton = cut.FindAll("button")
+            .Single(button => button.TextContent.Contains("Log in with a passkey"));
+        passkeyButton.Click();
+
+        var args = invocation.Invocations.Single().Arguments;
+        Assert.Multiple(() =>
+        {
+            Assert.That(args[0], Is.EqualTo("dave.warwick"));
+            Assert.That(args[1], Is.EqualTo(false));
+        });
+    }
+
+    [Test]
+    public void Login_HasBrandPanel()
+    {
+        var cut = TestContext.Render<Login>();
+
+        var panel = cut.Find(".auth-panel");
+        var logo = cut.Find(".auth-panel-logo");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(panel, Is.Not.Null);
+            // The transparent mark specifically. logo-dark-small.png bakes its background to
+            // #181c1f - the dark app-bar colour - so on the navy panel it is a black box.
+            Assert.That(logo.GetAttribute("src"), Does.Contain("logo-mark"));
+            Assert.That(logo.GetAttribute("src"), Does.Not.Contain("logo-dark-small"));
+            Assert.That(cut.Markup, Does.Contain("Welcome back."));
+        });
+    }
+
+    [Test]
+    public void Login_LinksToRegister_PreservingTheReturnUrl()
+    {
+        // Register has always linked to Login; this is the other half of that pair. The
+        // returnUrl has to survive the hop or a creator sent here from /CreatorSettings loses
+        // the destination by choosing to sign up instead.
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/login?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings");
+
+        var cut = TestContext.Render<Login>();
+
+        var registerLink = cut.FindAll("a").Single(a => a.TextContent.Trim() == "Register");
+        Assert.That(
+            registerLink.GetAttribute("href"),
+            Is.EqualTo($"{AppPageRoutes.Register}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(AppPageRoutes.CreatorSettings)}"));
     }
 }
