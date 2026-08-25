@@ -106,6 +106,43 @@ The MAUI app also calls `MusicController` (`api/music`) directly — it is *not*
 - **Production** (streamtunes.net): live PayPal, live StoreKit, `Logging:Default = Information`.
 - Fido2 `ServerDomain`/`Origins` are set per-environment (required for passkeys, which are origin-bound).
 
+## Migrations run themselves
+
+`Program.cs` calls `db.Database.Migrate()` at startup, behind a `CanConnect()` check, and
+**rethrows on failure so the app will not start half-migrated**. A deployment therefore applies
+whatever is pending on its own — there is no `dotnet ef database update` step to remember, and
+no need to tell anyone to run one.
+
+Two consequences worth knowing before writing one:
+
+- **A bad migration takes the site down**, rather than leaving it up on a half-changed schema.
+  That is the right trade, but it means a migration is a deployment-blocking change: prefer
+  additive ones (new nullable columns, new tables) so an old instance overlapping a new one
+  during a deploy keeps working.
+- **Web Deploy may ALSO publish the database**, and that path is not the same. `Migrate()` sends
+  each operation as its own command; the Web Deploy script puts the whole migration in one batch
+  inside one transaction. SQL Server compiles a batch before running any of it, so a `Sql()`
+  backfill naming a column the `AddColumn` above it creates fails to parse with
+  `Invalid column name` — even though the same migration applies cleanly at startup.
+
+### Writing one
+
+- Let `dotnet ef migrations add` generate it, and ship what it generates. A schema change is a
+  diff of the model, and hand-writing that is how it drifts from the snapshot.
+- **Anything you add by hand is where the risk is**, and a data backfill always is one — EF
+  cannot infer it, because "what existing rows should say" is not in the model.
+- **Wrap a hand-added `Sql()` that touches new columns in `EXEC(N'...')`.** Dynamic SQL is
+  compiled when it runs, by which point the columns exist. `AddUserPlaylistSortOrder` and
+  `AddCreatorStatusAnnouncementFlags` both do this; the second one learned it the hard way, by
+  failing a publish.
+- **Then read the script**: `dotnet ef migrations script <from> <to> --idempotent`. That is the
+  artifact Web Deploy runs, and it is the only place the batching problem is visible.
+- **Think about what null means to the code you just wrote.** A new nullable column is null for
+  every existing row, so if your code reads null as "not done yet", every existing row is about
+  to look undone. `AddCreatorStatusAnnouncementFlags` backfills for exactly this reason: without
+  it, every creator who had already been welcomed would have been welcomed again — analytics
+  event, audit row and all — the next time they opened the page.
+
 ## Key files
 
 | File | Why it matters |
