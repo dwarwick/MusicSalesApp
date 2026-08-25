@@ -107,18 +107,13 @@ public class UploadFilesReviewMetadataTests
     // The step can no longer be skipped.
     // ------------------------------------------------------------------
 
-    [TestCase(false, false, false)]
-    [TestCase(false, true, true)]
-    [TestCase(true, false, false)]
-    [TestCase(false, true, false)]
-    public void EveryBatchPausesForReview(bool badTitles, bool hasArt, bool matchPreference)
+    [Test]
+    public void EveryBatchPausesForReview()
     {
         // An audio-only batch, or one whose owner turned the cover-art checkbox off, used to go
         // straight up. That stopped being safe when genre moved onto this page: a song cannot
-        // publish without one, and this is the only place to set it.
-        Assert.That(
-            UploadFilesModel.ShouldPauseForReview(badTitles, hasArt, matchPreference),
-            Is.True);
+        // publish without one, and this is the only place to set it. The checkbox itself is gone.
+        Assert.That(UploadFilesModel.ShouldPauseForReview(), Is.True);
     }
 
     // ------------------------------------------------------------------

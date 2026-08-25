@@ -212,7 +212,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// they would rather have no artwork.
     /// </para>
     /// </summary>
-    protected bool _matchCoverArtBeforeUpload = true;
 
     /// <summary>
     /// Where the preference is remembered.
@@ -223,7 +222,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// unchecks it once instead of once per batch.
     /// </para>
     /// </summary>
-    private const string MatchCoverArtPreferenceKey = "streamtunes.upload.matchCoverArt";
 
     /// <summary>
     /// The cover image the creator is currently moving, or null.
@@ -335,21 +333,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     protected bool HideUploadBox
         => _isUploading || _isProcessingFiles || _awaitingTitleConfirmation || IsBatchProcessing;
-
-    /// <summary>
-    /// Whether the cover-art review choice is on screen.
-    ///
-    /// <para>
-    /// Everything the drop box hides for <em>except</em> the review step. Hiding it there was a
-    /// mistake with two costs: the setting is still live at that point - unticking it takes the
-    /// re-pairing interface away - and more importantly the review step is exactly where a creator
-    /// discovers they did not want it. Taking the switch off screen at the moment it becomes
-    /// relevant also made its state unknowable, which is how a report of "it paused anyway" became
-    /// impossible to tell apart from "the box was still ticked".
-    /// </para>
-    /// </summary>
-    protected bool ShowMatchCoverArtChoice
-        => !_isUploading && !_isProcessingFiles && !IsBatchProcessing;
 
     /// <summary>
     /// Batch progress, 0-100. Terminal songs count as complete - a failed song will not progress
@@ -543,7 +526,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _hasLoadedCreatorId = true;
             await LoadCreatorIdAsync();
             await LoadMaxAudioFileSizeAsync();
-            await LoadMatchCoverArtPreferenceAsync();
 
             // Before any files arrive rather than when the review step opens: by then the
             // creator is already waiting, and a batch that has finished decoding should not
@@ -1140,7 +1122,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // appear. A batch with no artwork at all has nothing to show and does not stop.
         var titlesNeedAttention = await MarkInvalidPendingTitlesAsync();
 
-        if (!ShouldPauseForReview(titlesNeedAttention, coverArtFilesByName.Count > 0, _matchCoverArtBeforeUpload))
+        if (!ShouldPauseForReview())
         {
             await InvokeAsync(StateHasChanged);
             await RunPendingUploadsAsync();
@@ -1218,7 +1200,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// <summary>True when this batch has cover art the creator can move around.</summary>
     protected bool CanRepairCoverArt
         => _awaitingTitleConfirmation
-            && _matchCoverArtBeforeUpload
             && (_unmatchedCoverArtFiles.Count > 0 || _uploadItems.Any(item => item.HasCoverArt));
 
     /// <summary>
@@ -1255,68 +1236,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// within the step; it no longer decides whether the step happens.
     /// </para>
     /// </summary>
-    internal static bool ShouldPauseForReview(
-        bool titlesNeedAttention,
-        bool batchHasCoverArt,
-        bool matchCoverArtBeforeUpload)
-        => true;
-
-    /// <summary>Remembers the creator's choice in their browser, and reads it back on a later visit.</summary>
-    private async Task LoadMatchCoverArtPreferenceAsync()
-    {
-        try
-        {
-            var stored = await JS.InvokeAsync<string>("uploadFilesHelper.readPreference", MatchCoverArtPreferenceKey);
-
-            // Absent means never chosen, which is the default rather than "off".
-            _matchCoverArtBeforeUpload = !string.Equals(stored, "false", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (JSDisconnectedException) { }
-        catch (TaskCanceledException) { }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Could not read the cover-art review preference; defaulting to on.");
-        }
-    }
-
-    /// <summary>
-    /// Applies the choice. Split from persisting it so the state change is testable on its own -
-    /// writing to localStorage is interop, and what matters here is what the page does afterwards.
-    /// </summary>
-    protected void ApplyMatchCoverArtPreference(bool enabled)
-    {
-        _matchCoverArtBeforeUpload = enabled;
-
-        if (!enabled)
-        {
-            // Nothing can be mid-gesture once the interface is gone, or the next batch starts
-            // holding a file from the last one.
-            _heldCoverArt = null;
-        }
-    }
-
-    /// <summary>Bridges Syncfusion's ValueChange event onto the preference.</summary>
-    protected Task OnMatchCoverArtChanged(Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> args)
-        => SetMatchCoverArtBeforeUploadAsync(args.Checked);
-
-    protected async Task SetMatchCoverArtBeforeUploadAsync(bool enabled)
-    {
-        ApplyMatchCoverArtPreference(enabled);
-
-        try
-        {
-            await JS.InvokeVoidAsync(
-                "uploadFilesHelper.writePreference",
-                MatchCoverArtPreferenceKey,
-                enabled ? "true" : "false");
-        }
-        catch (JSDisconnectedException) { }
-        catch (TaskCanceledException) { }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Could not save the cover-art review preference.");
-        }
-    }
+    internal static bool ShouldPauseForReview() => true;
 
     /// <summary>The image the creator picked up, so the UI can highlight it and every drop target.</summary>
     protected string HeldCoverArt => _heldCoverArt;

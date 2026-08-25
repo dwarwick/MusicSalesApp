@@ -367,53 +367,30 @@ public class UploadFilesCoverArtRepairTests
     // When the batch stops for review, and when it does not.
     // -----------------------------------------------------------------
 
-    [TestCase(false, false, false)]
-    [TestCase(false, true, true)]
-    [TestCase(true, false, false)]
-    [TestCase(false, true, false)]
-    public void EveryBatchNowPauses(bool badTitles, bool hasArt, bool matchPreference)
+    [Test]
+    public void EveryBatchPauses()
     {
-        // It did not used to: an audio-only batch, or one whose owner had turned the cover-art
-        // checkbox off, went straight up. That stopped being safe when genre moved onto this page.
-        // A song cannot publish without one, and the review step is the only place to set it, so a
-        // skipped step is a rejected batch.
-        //
-        // The checkbox still means something - it decides whether the artwork re-pairing controls
-        // appear inside the step - it just no longer decides whether the step happens.
-        Assert.That(
-            UploadFilesModel.ShouldPauseForReview(badTitles, hasArt, matchPreference),
-            Is.True);
+        // It did not used to: an audio-only batch, or one whose owner had turned off the
+        // cover-art checkbox, went straight up. Genre moving onto this page ended both - a song
+        // cannot publish without one, and the review step is the only place to set it.
+        Assert.That(UploadFilesModel.ShouldPauseForReview(), Is.True);
     }
 
     [Test]
-    public void TheRepairInterfaceIsHiddenWhenTheCheckboxIsOff()
+    public void TheRepairInterfaceIsAvailableWheneverThereIsArtworkToMove()
     {
-        // "Do not show the interface at all" has to hold on the one path that still reaches the
-        // review step with the box unticked: a batch stopped for a broken title.
+        // There used to be a checkbox that took this away. It survived the review step becoming
+        // mandatory as a switch whose only remaining effect was to remove a capability - the
+        // automatic pairing is a guess, and turning off the only way to correct it helps nobody.
         var page = new TestableUploadFiles();
         page.GivenSong("One", "a.png");
         page.GivenPooled("stray.png");
-        page.BeginReview();
 
-        Assert.That(page.CanRepair, Is.True);
-
-        page.DisableCoverArtMatching();
-
-        Assert.That(page.CanRepair, Is.False);
-    }
-
-    [Test]
-    public void TurningTheCheckboxOffMidGesture_PutsDownWhateverWasHeld()
-    {
-        // Otherwise the held image survives with nothing on screen to place it on, and the next
-        // batch starts holding a file from the last one.
-        var page = new TestableUploadFiles();
-        page.GivenPooled("stray.png");
-        page.Hold("stray.png");
-
-        page.DisableCoverArtMatching();
-
-        Assert.That(page.Held, Is.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanRepair, Is.True);
+            Assert.That(page.ShowPool, Is.True);
+        });
     }
 
     // -----------------------------------------------------------------
@@ -657,8 +634,6 @@ public class UploadFilesCoverArtRepairTests
         public void Clear(UploadPairItem item) => ClearCoverArt(item);
 
         public void DropOnPool() => ReturnHeldCoverArtToPool();
-
-        public void DisableCoverArtMatching() => ApplyMatchCoverArtPreference(false);
 
         public void DismissValidationError() => ClearValidationError();
     }

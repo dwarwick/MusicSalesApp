@@ -24,38 +24,6 @@
 
 <div class="container-fluid">
 
-    @* Stays visible through the review step, unlike the drop box. The setting is still live there -
-       unticking it takes the re-pairing interface away - and the review step is exactly where a
-       creator discovers they did not want it. Hiding it at that moment also made its state
-       unknowable, which turned "it paused anyway" into an unanswerable bug report. *@
-    @if (ShowMatchCoverArtChoice)
-    {
-        <div class="mb-3">
-            <SfCheckBox TChecked="bool"
-                        Label="Let me re-pair cover art before uploading"
-                        Checked="@_matchCoverArtBeforeUpload"
-                        ValueChange="@OnMatchCoverArtChanged" />
-            @* This used to decide whether the batch paused at all, and said so. It does not
-               any more - every batch stops so titles can be confirmed and genres chosen,
-               because a song cannot publish without a genre. All this now decides is whether
-               the artwork controls appear at that stop. *@
-            <small class="text-muted d-block ms-4 ps-1">
-                Every batch pauses so you can confirm each title and choose a genre. Tick this to
-                add the artwork controls to that step, so you can drag an image onto a different
-                song. Cover art is matched automatically either way.
-                @if (_awaitingTitleConfirmation)
-                {
-                    @* It does NOT wait for the next batch. Unticking it here removes the pairing
-                       controls from the batch on screen, and saying otherwise would strand any
-                       image the creator had not placed yet. *@
-                    <strong class="d-block mt-1">
-                        Unticking this now also removes the cover art controls from the batch below.
-                    </strong>
-                }
-            </small>
-        </div>
-    }
-
     <label class="upload-box @(HideUploadBox ? "upload-box-disabled" : "") mb-2"
            style="display: @(HideUploadBox ? "none" : "flex")">
         @* direct-upload-input is how direct-upload.js finds the live FileList. Blazor's IBrowserFile
@@ -1024,20 +992,6 @@
         // account settings, and this way they cost no schema change and no round trip. Wrapped in
         // try/catch because localStorage throws outright in private-browsing modes and when a site
         // is blocked from storing data, and a preference is never worth failing a page over.
-        readPreference: function (key) {
-            try {
-                return window.localStorage.getItem(key);
-            } catch {
-                return null;
-            }
-        },
-
-        writePreference: function (key, value) {
-            try {
-                window.localStorage.setItem(key, value);
-            } catch { /* storage unavailable; the default applies next visit */ }
-        },
-
         revokeCoverArtPreviews: function () {
             var held = window._coverArtPreviewUrls || {};
             Object.keys(held).forEach(function (key) {
