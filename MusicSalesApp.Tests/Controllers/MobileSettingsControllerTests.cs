@@ -13,8 +13,8 @@ public class MobileSettingsControllerTests
     public async Task GetMobileSettings_ReturnsStreamThresholdWithoutSubscriptionPrice()
     {
         var appSettingsService = new Mock<IAppSettingsService>();
-        appSettingsService.Setup(service => service.GetStreamQualifyingSecondsAsync())
-            .ReturnsAsync(45);
+        appSettingsService.Setup(service => service.GetStreamQualifyingSettingsAsync())
+            .ReturnsAsync(new StreamQualifyingSettings(45, ReductionEnabled: false));
         var controller = new MobileSettingsController(appSettingsService.Object);
 
         var result = await controller.GetMobileSettings();
@@ -27,5 +27,23 @@ public class MobileSettingsControllerTests
             Assert.That(json, Does.Contain("\"streamQualifyingSeconds\":45"));
             Assert.That(json, Does.Not.Contain("subscriptionPrice"));
         });
+    }
+
+    [Test]
+    public async Task GetMobileSettings_AppliesThePromotionalReductionServerSide()
+    {
+        // The reduction is applied here rather than in the app, so turning the flag on does not need a
+        // store release. Nothing on the mobile side re-applies it, so if this stops reducing, the
+        // feature silently stops working for every phone.
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(service => service.GetStreamQualifyingSettingsAsync())
+            .ReturnsAsync(new StreamQualifyingSettings(65, ReductionEnabled: true));
+        var controller = new MobileSettingsController(appSettingsService.Object);
+
+        var result = await controller.GetMobileSettings();
+
+        var json = JsonSerializer.Serialize(((OkObjectResult)result).Value);
+        var expected = 65 - StreamQualifyingPolicy.PromotionalReductionSeconds;
+        Assert.That(json, Does.Contain($"\"streamQualifyingSeconds\":{expected}"));
     }
 }

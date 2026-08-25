@@ -133,7 +133,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     [SupplyParameterFromQuery(Name = "token")]
     public string TipPayPalToken { get; set; }
-    private int _defaultStreamQualifyingSeconds = 30;
+    private StreamQualifyingSettings _streamQualifying = new(30, false);
     private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
@@ -200,7 +200,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                         _isAuthenticated, _isAdmin, _currentUserId);
                 }
 
-                _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+                _streamQualifying = await AppSettingsService.GetStreamQualifyingSettingsAsync();
                 await LoadFiles();
             }
             catch (Exception ex)
@@ -529,7 +529,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     // Store genre
                     _genreMap[audioFile.Name] = songMeta.Genre;
                     // Store stream qualifying seconds from creator
-                    _streamQualifyingSecondsMap[audioFile.Name] = songMeta.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
+                    _streamQualifyingSecondsMap[audioFile.Name] = _streamQualifying.Resolve(songMeta.Creator?.StreamQualifyingSeconds);
                     // Store creator user ID for stream recording guard
                     _creatorUserIdMap[songMeta.Id] = songMeta.Creator?.UserId;
                     // Store creator ID for tip functionality
@@ -1188,7 +1188,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             return seconds;
         }
 
-        return _defaultStreamQualifyingSeconds;
+        return _streamQualifying.Resolve(creatorSeconds: null);
     }
 
     protected async Task PlayCard(string fileName)

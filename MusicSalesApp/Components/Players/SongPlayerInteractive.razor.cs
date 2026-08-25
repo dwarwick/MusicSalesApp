@@ -47,7 +47,7 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     protected bool _isAuthenticated;
     protected int _streamCount;
     private Models.SongMetadata _songMetadata;
-    private int _defaultStreamQualifyingSeconds = 30;
+    private StreamQualifyingSettings _streamQualifying = new(30, false);
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerInteractiveModel> _dotNetRef;
     private bool invokedJs = false;
@@ -139,7 +139,24 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/SongPlayerInteractive.razor.js");
-            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), GetStreamQualifyingSeconds());
+
+            // Logged because the interaction between these four is not observable from the outside: a
+            // restricted listener is cut off at the preview limit, so a qualifying threshold at or above
+            // it means that listener can never be credited with a stream - and the symptom is simply
+            // that nothing happens, which looks identical to the counter being broken.
+            var qualifyingSeconds = GetStreamQualifyingSeconds();
+            Logger.LogInformation(
+                "SongPlayer: initAudioPlayer song={SongMetadataId} restricted={Restricted} previewSeconds={PreviewSeconds} "
+                + "qualifyingSeconds={QualifyingSeconds} (creator={CreatorSeconds}, adminDefault={AdminDefault}, reduction={ReductionEnabled})",
+                GetSongMetadataId(),
+                IsProgressBarRestricted(),
+                PREVIEW_DURATION_SECONDS,
+                qualifyingSeconds,
+                _songMetadata?.Creator?.StreamQualifyingSeconds,
+                _streamQualifying.DefaultSeconds,
+                _streamQualifying.ReductionEnabled);
+
+            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), qualifyingSeconds);
             await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
 
@@ -243,7 +260,7 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
         try
         {
-            _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+            _streamQualifying = await AppSettingsService.GetStreamQualifyingSettingsAsync();
 
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
@@ -531,7 +548,7 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
     protected int GetStreamQualifyingSeconds()
     {
-        return _songMetadata?.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
+        return _streamQualifying.Resolve(_songMetadata?.Creator?.StreamQualifyingSeconds);
     }
 
     protected string GetGenre()

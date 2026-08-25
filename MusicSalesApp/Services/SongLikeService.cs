@@ -13,15 +13,26 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public class SongLikeService : ISongLikeService
 {
+    /// <summary>
+    /// Configuration key for the stream-before-rating rule. See the "//Likes" note in appsettings.json:
+    /// this gates only the server-side rejection, not the client-side gating in the web and mobile UIs,
+    /// and exists so a server can go live ahead of a mobile release that is still in store review.
+    /// Absent means enforce - a new environment is strict by default.
+    /// </summary>
+    internal const string RequireStreamBeforeRatingKey = "Likes:RequireStreamBeforeRating";
+
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IHubContext<LikeCountHub> _hubContext;
+    private readonly bool _requireStreamBeforeRating;
 
     public SongLikeService(
         IDbContextFactory<AppDbContext> contextFactory,
-        IHubContext<LikeCountHub> hubContext)
+        IHubContext<LikeCountHub> hubContext,
+        IConfiguration configuration)
     {
         _contextFactory = contextFactory;
         _hubContext = hubContext;
+        _requireStreamBeforeRating = configuration.GetValue(RequireStreamBeforeRatingKey, true);
     }
 
     /// <inheritdoc/>
@@ -125,6 +136,20 @@ public class SongLikeService : ISongLikeService
         int songMetadataId,
         bool? state)
     {
+        // Setting an opinion requires having streamed the song; clearing one never does. Both toggles and
+        // SetLikeStateAsync land here, so this is the one place the rule has to be stated - including for
+        // the Blazor app, which calls this service in-process and never passes through MusicController.
+        //
+        // Exempting the clear keeps a rating made before this rule (or one whose stream rows have since
+        // been anonymised by an account deletion) retractable, rather than stranding the user with an
+        // opinion they can see but not remove.
+        if (_requireStreamBeforeRating &&
+            state != null &&
+            !await SongStreamQueries.HasUserStreamedAsync(context, songMetadataId, userId))
+        {
+            throw new LikeRequiresStreamException(songMetadataId, userId);
+        }
+
         if (state == null)
         {
             context.SongLikes.Remove(existingLike!);

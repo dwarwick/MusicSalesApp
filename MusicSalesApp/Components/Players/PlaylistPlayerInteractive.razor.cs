@@ -86,7 +86,7 @@ namespace MusicSalesApp.Components.Players
         protected bool _isAdmin;
         private int? _currentUserId;
         private int? _currentUserCreatorId;
-        private int _defaultStreamQualifyingSeconds = 30;
+        private StreamQualifyingSettings _streamQualifying = new(30, false);
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
         protected SubscribeCtaDialogModel _subscribeCtaDialog;
@@ -284,7 +284,7 @@ namespace MusicSalesApp.Components.Players
                 try
                 {
                     // Load default stream qualifying seconds for songs without a creator
-                    _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+                    _streamQualifying = await AppSettingsService.GetStreamQualifyingSettingsAsync();
 
                     if (_isGenreMode)
                     {
@@ -1605,15 +1605,15 @@ namespace MusicSalesApp.Components.Players
 
         protected int GetCurrentTrackStreamQualifyingSeconds()
         {
-            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return _defaultStreamQualifyingSeconds;
-            
+            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count)
+                return _streamQualifying.Resolve(creatorSeconds: null);
+
             var track = _playlistInfo.Tracks[_currentTrackIndex];
-            if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.Creator != null)
-            {
-                return metadata.Creator.StreamQualifyingSeconds;
-            }
-            
-            return _defaultStreamQualifyingSeconds;
+            var creatorSeconds = _metadataLookup.TryGetValue(track.Name, out var metadata)
+                ? metadata.Creator?.StreamQualifyingSeconds
+                : null;
+
+            return _streamQualifying.Resolve(creatorSeconds);
         }
 
         /// <summary>

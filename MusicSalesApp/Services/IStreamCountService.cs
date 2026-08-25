@@ -40,4 +40,23 @@ public interface IStreamCountService
     /// <param name="songMetadataId">The ID of the song metadata record.</param>
     /// <param name="newCount">The new stream count.</param>
     void NotifyStreamCountUpdated(int songMetadataId, int newCount);
+
+    /// <summary>
+    /// Whether the user has at least one recorded stream of this song.
+    ///
+    /// This is the eligibility test for rating a song - see <see cref="LikeRequiresStreamException"/>.
+    /// Streams recorded while logged out carry a null StreamerUserId and do not count towards the
+    /// account that later signs in.
+    /// </summary>
+    /// <param name="userId">The ID of the user.</param>
+    /// <param name="songMetadataId">The ID of the song metadata record.</param>
+    Task<bool> HasUserStreamedSongAsync(int userId, int songMetadataId);
+
+    /// <summary>
+    /// Bulk form of <see cref="HasUserStreamedSongAsync"/>: the subset of the given song IDs that this
+    /// user has streamed. Used to tell clients which songs they may rate without a request per song.
+    /// </summary>
+    /// <param name="userId">The ID of the user.</param>
+    /// <param name="songMetadataIds">The song metadata IDs to test.</param>
+    Task<HashSet<int>> GetUserStreamedSongIdsAsync(int userId, IEnumerable<int> songMetadataIds);
 }

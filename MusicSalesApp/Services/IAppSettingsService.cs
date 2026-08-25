@@ -122,6 +122,24 @@ public interface IAppSettingsService
     /// <returns><see langword="false"/> unless explicitly enabled, including on a malformed value.</returns>
     Task<bool> IsDirectToStorageUploadEnabledAsync();
 
+    /// <summary>
+    /// Whether the promotional reduction to the stream-qualifying threshold is active.
+    ///
+    /// Lowers only the effective counting threshold - each creator's contracted
+    /// <see cref="Models.Creator.StreamQualifyingSeconds"/> is untouched. See
+    /// <see cref="StreamQualifyingPolicy"/> for why that distinction matters. Defaults off.
+    /// </summary>
+    Task<bool> IsReducedStreamQualifyingEnabledAsync();
+
+    /// <inheritdoc cref="IsReducedStreamQualifyingEnabledAsync"/>
+    Task SetReducedStreamQualifyingEnabledAsync(bool enabled);
+
+    /// <summary>
+    /// The admin default plus the promotional-reduction flag, together, for callers that resolve a
+    /// per-song threshold.
+    /// </summary>
+    Task<StreamQualifyingSettings> GetStreamQualifyingSettingsAsync();
+
     /// <summary>Turns browser-direct uploads on or off.</summary>
     Task SetDirectToStorageUploadEnabledAsync(bool enabled);
 

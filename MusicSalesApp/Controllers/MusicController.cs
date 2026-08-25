@@ -23,6 +23,24 @@ namespace MusicSalesApp.Controllers
         /// </summary>
         internal const string SongNotFoundError = "Song not found";
 
+        /// <summary>
+        /// Returned as a 403 body when the caller tries to rate a song they have never streamed.
+        ///
+        /// 403 rather than 400 so the client can tell "you are not allowed to do this" from "that song
+        /// does not exist" - the mobile queue drops both permanently, but only one of them is worth
+        /// explaining to the user.
+        /// </summary>
+        internal const string LikeRequiresStreamError = "Listen to this song before rating it";
+
+        /// <summary>
+        /// Upper bound on a bulk like request. Set well above any plausible catalogue - the point is to
+        /// stop an unbounded list becoming an unbounded query, not to constrain real clients. The old
+        /// GET form had no cap because IIS imposed one for it; the POST form has no such accident.
+        /// </summary>
+        internal const int MaxBulkSongIds = 10_000;
+
+        internal const string TooManySongIdsError = "Too many song IDs in one request";
+
         private readonly IAzureStorageService _storageService;
         private readonly ISubscriptionService _subscriptionService;
         private readonly IStreamCountService _streamCountService;
@@ -83,7 +101,7 @@ namespace MusicSalesApp.Controllers
         {
             var allMetadata = await _songMetadataService.GetAllAsync();
             var sasLifetime = TimeSpan.FromHours(24);
-            var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+            var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
 
             var playable = allMetadata
                 .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
@@ -103,7 +121,7 @@ namespace MusicSalesApp.Controllers
                 .Select(m => _songMapper.MapToSongListItem(
                     m,
                     sasLifetime,
-                    defaultStreamQualifyingSeconds,
+                    streamQualifying,
                     lyrics.TryGetValue(m.Id, out var songLyrics) ? songLyrics : null))
                 .ToList();
 
@@ -368,18 +386,28 @@ namespace MusicSalesApp.Controllers
         /// </summary>
         /// <param name="ids">Comma-separated song metadata IDs</param>
         [HttpGet("likes/bulk")]
-        public async Task<IActionResult> GetBulkLikeCounts([FromQuery] string ids)
+        public Task<IActionResult> GetBulkLikeCounts([FromQuery] string ids)
+            => BuildBulkLikeCountsAsync(ParseIds(ids));
+
+        /// <summary>
+        /// Body-based form of <see cref="GetBulkLikeCounts"/>.
+        ///
+        /// The catalogue is sent whole, one ID per song, and a query string cannot carry it: IIS request
+        /// filtering caps a query at 2048 characters by default, which a five-digit ID list exhausts at
+        /// roughly 340 songs - and the failure is a 404 from the request filter, not something the app
+        /// can read as "too many". The GET stays for apps built before this route existed.
+        /// </summary>
+        [HttpPost("likes/bulk")]
+        public Task<IActionResult> PostBulkLikeCounts([FromBody] BulkSongIdsRequest request)
+            => BuildBulkLikeCountsAsync(NormalizeIds(request?.Ids));
+
+        private async Task<IActionResult> BuildBulkLikeCountsAsync(List<int> songIds)
         {
-            if (string.IsNullOrWhiteSpace(ids))
-                return Ok(Array.Empty<object>());
-
-            var songIds = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(s => int.TryParse(s, out var id) ? id : -1)
-                .Where(id => id > 0)
-                .ToList();
-
             if (songIds.Count == 0)
                 return Ok(Array.Empty<object>());
+
+            if (songIds.Count > MaxBulkSongIds)
+                return BadRequest(new { error = TooManySongIdsError });
 
             var counts = await _songLikeService.GetBulkLikeDislikeCountsAsync(songIds);
 
@@ -415,6 +443,10 @@ namespace MusicSalesApp.Controllers
             {
                 return BadRequest(new { error = SongNotFoundError });
             }
+            catch (LikeRequiresStreamException)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = LikeRequiresStreamError });
+            }
 
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
 
@@ -443,6 +475,10 @@ namespace MusicSalesApp.Controllers
             catch (SongNotFoundException)
             {
                 return BadRequest(new { error = SongNotFoundError });
+            }
+            catch (LikeRequiresStreamException)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = LikeRequiresStreamError });
             }
 
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
@@ -478,6 +514,10 @@ namespace MusicSalesApp.Controllers
             {
                 return BadRequest(new { error = SongNotFoundError });
             }
+            catch (LikeRequiresStreamException)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = LikeRequiresStreamError });
+            }
 
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
 
@@ -485,26 +525,47 @@ namespace MusicSalesApp.Controllers
         }
 
         /// <summary>
-        /// Returns per-user like/dislike status for a batch of songs.
+        /// Returns per-user like/dislike status for a batch of songs, plus whether the caller has streamed
+        /// each one - which is what decides whether they may rate it at all.
+        ///
+        /// One entry per requested ID, including songs the caller has never rated: an unrated song is
+        /// exactly the case where the client needs to know whether the buttons should be live, so the
+        /// sparse "only what you have rated" shape this used to return carried no signal for it.
         /// </summary>
         [HttpGet("likes/user-status")]
         [Authorize]
-        public async Task<IActionResult> GetBulkUserLikeStatus([FromQuery] string ids)
+        public Task<IActionResult> GetBulkUserLikeStatus([FromQuery] string ids)
+            => BuildBulkUserLikeStatusAsync(ParseIds(ids));
+
+        /// <summary>
+        /// Body-based form of <see cref="GetBulkUserLikeStatus"/>. Same reasoning as
+        /// <see cref="PostBulkLikeCounts"/>: the ID list outgrows a query string.
+        /// </summary>
+        [HttpPost("likes/user-status")]
+        [Authorize]
+        public Task<IActionResult> PostBulkUserLikeStatus([FromBody] BulkSongIdsRequest request)
+            => BuildBulkUserLikeStatusAsync(NormalizeIds(request?.Ids));
+
+        private async Task<IActionResult> BuildBulkUserLikeStatusAsync(List<int> songIds)
         {
             var user = await _userManager.GetUserAsync(User);
             if (user == null)
                 return Unauthorized();
 
-            var songIds = ParseIds(ids);
             if (songIds.Count == 0)
                 return Ok(Array.Empty<object>());
 
-            var statuses = await _songLikeService.GetBulkUserLikeStatusAsync(user.Id, songIds);
+            if (songIds.Count > MaxBulkSongIds)
+                return BadRequest(new { error = TooManySongIdsError });
 
-            var result = statuses.Select(kvp => new
+            var statuses = await _songLikeService.GetBulkUserLikeStatusAsync(user.Id, songIds);
+            var streamedSongIds = await _streamCountService.GetUserStreamedSongIdsAsync(user.Id, songIds);
+
+            var result = songIds.Select(id => new
             {
-                songMetadataId = kvp.Key,
-                userLikeStatus = kvp.Value
+                songMetadataId = id,
+                userLikeStatus = statuses.TryGetValue(id, out var status) ? status : null,
+                hasStreamed = streamedSongIds.Contains(id)
             });
 
             return Ok(result);
@@ -532,9 +593,9 @@ namespace MusicSalesApp.Controllers
                 return NotFound(new { error = "Song not found" });
 
             var sasLifetime = TimeSpan.FromHours(24);
-            var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+            var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
             var songLyrics = await _lyricsService.GetForSongAsync(song.Id);
-            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime, defaultStreamQualifyingSeconds, songLyrics);
+            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime, streamQualifying, songLyrics);
             mappedSong.StreamUrl = _storageService.GetReadSasUri(song.Mp3BlobPath!, TimeSpan.FromHours(2)).ToString();
 
             var streamCount = await _streamCountService.GetStreamCountAsync(song.Id);
@@ -579,11 +640,23 @@ namespace MusicSalesApp.Controllers
             if (string.IsNullOrWhiteSpace(idsString))
                 return [];
 
-            return idsString
+            return NormalizeIds(idsString
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(s => int.TryParse(s, out var id) ? id : -1)
-                .Where(id => id > 0)
-                .ToList();
+                .Select(s => int.TryParse(s, out var id) ? id : -1));
+        }
+
+        /// <summary>
+        /// Drops non-positive IDs and duplicates.
+        ///
+        /// Distinct is not cosmetic: both bulk endpoints project one response entry per ID, and the MAUI
+        /// client keys the response by song - a repeated ID would give it two entries for one song.
+        /// </summary>
+        private static List<int> NormalizeIds(IEnumerable<int> ids)
+        {
+            if (ids == null)
+                return [];
+
+            return ids.Where(id => id > 0).Distinct().ToList();
         }
 
         private static string NormalizeContentType(string original, string fileName)
@@ -645,6 +718,14 @@ namespace MusicSalesApp.Controllers
         public class ReportSongRequest
         {
             public string Reason { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// Body for the POST forms of the bulk like endpoints - the song IDs the caller wants data for.
+        /// </summary>
+        public class BulkSongIdsRequest
+        {
+            public List<int> Ids { get; set; } = [];
         }
 
         public class SetLikeStateRequest

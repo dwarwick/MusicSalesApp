@@ -34,7 +34,7 @@ public class MobileSongMapperTests
             Creator = new Creator { Id = 5, StreamQualifyingSeconds = 65 }
         };
 
-        var mapped = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: 9, defaultStreamQualifyingSeconds: 45);
+        var mapped = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: 9, streamQualifying: new StreamQualifyingSettings(45, false));
 
         Assert.That(mapped.StreamQualifyingSeconds, Is.EqualTo(65));
         Assert.That(mapped.UserPlaylistId, Is.EqualTo(9));
@@ -50,7 +50,7 @@ public class MobileSongMapperTests
             Mp3BlobPath = "folder/test.mp3"
         };
 
-        var mapped = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: null, defaultStreamQualifyingSeconds: 45);
+        var mapped = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: null, streamQualifying: new StreamQualifyingSettings(45, false));
 
         Assert.That(mapped.StreamQualifyingSeconds, Is.EqualTo(45));
     }
@@ -68,8 +68,8 @@ public class MobileSongMapperTests
             IsAiLyrics = true
         };
 
-        var listItem = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), defaultStreamQualifyingSeconds: 45);
-        var playlistItem = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: 9, defaultStreamQualifyingSeconds: 45);
+        var listItem = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), streamQualifying: new StreamQualifyingSettings(45, false));
+        var playlistItem = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: 9, streamQualifying: new StreamQualifyingSettings(45, false));
 
         Assert.That(listItem.IsAiGenerated, Is.True);
         Assert.That(listItem.IsAiVocals, Is.True);
@@ -93,7 +93,7 @@ public class MobileSongMapperTests
             Persona = new CreatorPersona { IsEnabled = true, WebsiteUrl = "example.com/artist" }
         };
 
-        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30);
+        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false));
 
         Assert.That(mapped.PersonaWebsiteUrl, Is.EqualTo("example.com/artist"),
             "Passed through exactly as stored - the creator typed it and nothing normalises it.");
@@ -110,7 +110,7 @@ public class MobileSongMapperTests
             Persona = new CreatorPersona { IsEnabled = false, WebsiteUrl = "example.com/artist" }
         };
 
-        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30);
+        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false));
 
         Assert.That(mapped.PersonaWebsiteUrl, Is.Null);
     }
@@ -127,7 +127,7 @@ public class MobileSongMapperTests
             Creator = new Creator { Id = 5, Bio = "A creator bio." }
         };
 
-        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30);
+        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false));
 
         Assert.Multiple(() =>
         {
@@ -152,7 +152,7 @@ public class MobileSongMapperTests
             Version = 4
         };
 
-        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30, lyrics);
+        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false), lyrics);
 
         Assert.Multiple(() =>
         {
@@ -185,7 +185,7 @@ public class MobileSongMapperTests
             Version = 4
         };
 
-        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30, lyrics);
+        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false), lyrics);
 
         Assert.Multiple(() =>
         {
@@ -216,8 +216,8 @@ public class MobileSongMapperTests
             DisabledByUserId = 99
         };
 
-        var listItem = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30, lyrics);
-        var playlistItem = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), null, 30, lyrics);
+        var listItem = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false), lyrics);
+        var playlistItem = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), null, new StreamQualifyingSettings(30, false), lyrics);
 
         Assert.Multiple(() =>
         {
@@ -242,7 +242,7 @@ public class MobileSongMapperTests
             Version = 4
         };
 
-        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30, lyrics);
+        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false), lyrics);
 
         Assert.That(mapped.LyricsTimingsPath, Is.Null);
     }
@@ -253,7 +253,7 @@ public class MobileSongMapperTests
         // The overwhelmingly common call: most callers have no reason to load lyrics at all.
         var song = new SongMetadata { Id = 7, Mp3BlobPath = "folder/test.mp3" };
 
-        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30);
+        var mapped = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false));
 
         Assert.Multiple(() =>
         {
@@ -281,7 +281,7 @@ public class MobileSongMapperTests
             Version = 2
         };
 
-        var mapped = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: null, 30, lyrics);
+        var mapped = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: null, new StreamQualifyingSettings(30, false), lyrics);
 
         Assert.Multiple(() =>
         {
