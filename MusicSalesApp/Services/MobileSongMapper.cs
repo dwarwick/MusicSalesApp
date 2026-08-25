@@ -16,10 +16,10 @@ public interface IMobileSongMapper
     /// This song's lyrics row, when the caller has loaded one. Optional because most callers do
     /// not need it; pass it and the response carries a fetchable timings path.
     /// </param>
-    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null);
+    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null);
 
     /// <param name="lyrics">See <see cref="MapToSongListItem"/>.</param>
-    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null);
+    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null);
 }
 
 public class MobileSongMapper : IMobileSongMapper
@@ -35,7 +35,7 @@ public class MobileSongMapper : IMobileSongMapper
         _creatorPersonaService = creatorPersonaService;
     }
 
-    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null)
+    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null)
     {
         return new SongListItemDto
         {
@@ -57,7 +57,7 @@ public class MobileSongMapper : IMobileSongMapper
             LyricsVersion = ResolveLyricsVersion(lyrics),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
-            StreamQualifyingSeconds = ResolveStreamQualifyingSeconds(m, defaultStreamQualifyingSeconds),
+            StreamQualifyingSeconds = streamQualifying.Resolve(m.Creator?.StreamQualifyingSeconds),
             TrackLengthSeconds = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             DisplayOrder = m.DisplayOrder,
@@ -69,7 +69,7 @@ public class MobileSongMapper : IMobileSongMapper
         };
     }
 
-    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null)
+    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null)
     {
         return new MobilePlaylistSongDto
         {
@@ -92,7 +92,7 @@ public class MobileSongMapper : IMobileSongMapper
             LyricsVersion = ResolveLyricsVersion(lyrics),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
-            StreamQualifyingSeconds = ResolveStreamQualifyingSeconds(m, defaultStreamQualifyingSeconds),
+            StreamQualifyingSeconds = streamQualifying.Resolve(m.Creator?.StreamQualifyingSeconds),
             TrackLengthSeconds = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             DisplayOrder = m.DisplayOrder,
@@ -179,6 +179,4 @@ public class MobileSongMapper : IMobileSongMapper
     private static int ResolveLyricsVersion(SongLyrics? lyrics) =>
         ResolveLyricsTimingsPath(lyrics) is null ? 0 : lyrics!.Version;
 
-    private static int ResolveStreamQualifyingSeconds(SongMetadata m, int defaultStreamQualifyingSeconds) =>
-        m.Creator?.StreamQualifyingSeconds ?? defaultStreamQualifyingSeconds;
 }

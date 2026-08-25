@@ -124,6 +124,13 @@ public class AppSettingsService : IAppSettingsService
     public const string DirectToStorageUploadEnabledKey = "DirectToStorageUploadEnabled";
 
     /// <summary>
+    /// Whether the promotional reduction to the stream-qualifying threshold is active.
+    /// Defaults off; see <see cref="AppSettingsService.IsReducedStreamQualifyingEnabledAsync"/> and
+    /// <see cref="StreamQualifyingPolicy"/>.
+    /// </summary>
+    public const string ReducedStreamQualifyingEnabledKey = "ReducedStreamQualifyingEnabled";
+
+    /// <summary>
     /// The key used for storing the application version number.
     /// </summary>
     public const string AppVersionKey = "AppVersion";
@@ -392,6 +399,37 @@ public class AppSettingsService : IAppSettingsService
             MaxImageUploadSizeMBKey,
             sizeMB.ToString(),
             "Maximum image upload file size in MB");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsReducedStreamQualifyingEnabledAsync()
+    {
+        var value = await GetSettingAsync(ReducedStreamQualifyingEnabledKey);
+
+        // Defaults OFF. This moves a number creator payouts are calculated from, so an absent or
+        // unparseable row must leave every creator on their contracted threshold rather than quietly
+        // crediting streams sooner than the agreement says.
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        return bool.TryParse(value, out var enabled) && enabled;
+    }
+
+    /// <inheritdoc />
+    public Task SetReducedStreamQualifyingEnabledAsync(bool enabled) =>
+        SetSettingAsync(
+            ReducedStreamQualifyingEnabledKey,
+            enabled.ToString(),
+            "Temporarily counts a stream earlier than each creator's contracted qualifying seconds");
+
+    /// <inheritdoc />
+    public async Task<StreamQualifyingSettings> GetStreamQualifyingSettingsAsync()
+    {
+        return new StreamQualifyingSettings(
+            await GetStreamQualifyingSecondsAsync(),
+            await IsReducedStreamQualifyingEnabledAsync());
     }
 
     /// <inheritdoc />

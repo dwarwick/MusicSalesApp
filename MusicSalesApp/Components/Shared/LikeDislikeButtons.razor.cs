@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Services;
 using Syncfusion.Blazor.Popups;
 
 namespace MusicSalesApp.Components.Shared;
@@ -18,11 +19,21 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
     protected int _likeCount = 0;
     protected int _dislikeCount = 0;
     protected bool? _userLikeStatus = null; // true = liked, false = disliked, null = no preference
+    protected bool _hasStreamed = false;
     protected bool _isProcessing = false;
     private int? _currentUserId = null;
     private int _previousSongMetadataId = 0;
     private bool _needsDataReload = false;
     protected SfDialog _loginDialog;
+
+    /// <summary>
+    /// Whether the buttons are live for this user and song.
+    ///
+    /// Setting an opinion requires having streamed the song. An existing rating stays clickable
+    /// regardless, so a rating made before that rule can always be taken back - the same asymmetry
+    /// <see cref="SongLikeService"/> enforces server-side.
+    /// </summary>
+    protected bool CanRate => _hasStreamed || _userLikeStatus != null;
 
     protected override void OnParametersSet()
     {
@@ -41,6 +52,11 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
             // Subscribe to real-time like count updates from other clients
             LikeCountHubClient.OnLikeCountReceived += HandleLikeCountReceived;
             await LikeCountHubClient.StartAsync();
+
+            // The three pages that host these buttons are also the three that record streams, so this is
+            // how the buttons come alive part-way through a listen rather than waiting for a page reload.
+            StreamCountHubClient.OnStreamCountReceived += HandleStreamCountReceived;
+            await StreamCountHubClient.StartAsync();
         }
 
         if ((firstRender || _needsDataReload) && SongMetadataId > 0)
@@ -57,6 +73,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
             _likeCount = 0;
             _dislikeCount = 0;
             _userLikeStatus = null;
+            _hasStreamed = false;
         }
     }
 
@@ -88,6 +105,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
                 {
                     _currentUserId = userId.Value;
                     _userLikeStatus = await SongLikeService.GetUserLikeStatusAsync(userId.Value, SongMetadataId);
+                    _hasStreamed = await StreamCountService.HasUserStreamedSongAsync(userId.Value, SongMetadataId);
                 }
             }
         }
@@ -99,25 +117,31 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
 
     protected async Task HandleLikeClick()
     {
-        if (_isProcessing || _currentUserId == null)
+        if (_isProcessing || _currentUserId == null || !CanRate)
             return;
 
         _isProcessing = true;
         try
         {
             var wasLiked = await SongLikeService.ToggleLikeAsync(_currentUserId.Value, SongMetadataId);
-            
+
             // Update UI state
             _userLikeStatus = wasLiked ? true : null;
-            
+
             // Reload counts
             await LoadLikeCounts();
-            
+
             // Sync Liked Songs playlist
             await PlaylistService.SyncLikedSongsPlaylistAsync(_currentUserId.Value);
-            
+
             // Notify parent component
             await OnLikeStatusChanged.InvokeAsync();
+        }
+        catch (LikeRequiresStreamException)
+        {
+            // Eligibility was stale - the buttons were enabled from a check made when the component
+            // loaded. Correct the local view rather than logging an error; the server is right.
+            _hasStreamed = false;
         }
         catch (Exception ex)
         {
@@ -131,7 +155,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
 
     protected async Task HandleDislikeClick()
     {
-        if (_isProcessing || _currentUserId == null)
+        if (_isProcessing || _currentUserId == null || !CanRate)
             return;
 
         _isProcessing = true;
@@ -150,6 +174,11 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
             
             // Notify parent component
             await OnLikeStatusChanged.InvokeAsync();
+        }
+        catch (LikeRequiresStreamException)
+        {
+            // See HandleLikeClick - stale eligibility, not a failure.
+            _hasStreamed = false;
         }
         catch (Exception ex)
         {
@@ -173,13 +202,21 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
 
     protected string GetLikeButtonTitle()
     {
-        return _userLikeStatus == true ? "Remove like" : "Like this song";
+        if (_userLikeStatus == true)
+            return "Remove like";
+
+        return CanRate ? "Like this song" : NotStreamedTitle;
     }
 
     protected string GetDislikeButtonTitle()
     {
-        return _userLikeStatus == false ? "Remove dislike" : "Dislike this song";
+        if (_userLikeStatus == false)
+            return "Remove dislike";
+
+        return CanRate ? "Dislike this song" : NotStreamedTitle;
     }
+
+    private const string NotStreamedTitle = "Listen to this song before rating it";
 
     private void HandleLikeCountReceived(int songMetadataId, int likeCount, int dislikeCount)
     {
@@ -192,9 +229,31 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
         });
     }
 
+    /// <summary>
+    /// A stream was recorded somewhere. The hub broadcasts to every client, and
+    /// <see cref="IStreamCountService.IncrementStreamCountAsync"/> fires it even for streams it decided
+    /// not to count, so this is a prompt to re-check rather than proof that a row now exists for us.
+    ///
+    /// Short-circuiting on <see cref="CanRate"/> keeps that cheap: once the buttons are live there is
+    /// nothing to learn, so a popular song broadcasting steadily costs no queries on this circuit.
+    /// </summary>
+    private void HandleStreamCountReceived(int songMetadataId, int newCount)
+    {
+        if (songMetadataId != SongMetadataId || CanRate || _currentUserId == null)
+            return;
+
+        var userId = _currentUserId.Value;
+
+        DispatchUiUpdate(async () =>
+        {
+            _hasStreamed = await StreamCountService.HasUserStreamedSongAsync(userId, SongMetadataId);
+        });
+    }
+
     public void Dispose()
     {
         LikeCountHubClient.OnLikeCountReceived -= HandleLikeCountReceived;
+        StreamCountHubClient.OnStreamCountReceived -= HandleStreamCountReceived;
     }
 
     protected async Task HandleUnauthenticatedClick()

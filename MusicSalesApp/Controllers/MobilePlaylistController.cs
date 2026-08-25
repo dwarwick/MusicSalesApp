@@ -157,11 +157,11 @@ public class MobilePlaylistController : ControllerBase
         }
 
         var entries = await _playlistService.GetPlaylistSongsAsync(playlistId);
-        var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+        var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
 
         var songs = entries
             .Where(up => up.SongMetadata != null && !string.IsNullOrEmpty(up.SongMetadata.Mp3BlobPath))
-            .Select(up => _songMapper.MapToPlaylistSong(up.SongMetadata, SasLifetime, up.Id, defaultStreamQualifyingSeconds))
+            .Select(up => _songMapper.MapToPlaylistSong(up.SongMetadata, SasLifetime, up.Id, streamQualifying))
             .ToList();
 
         return Ok(new MobilePlaylistSongsDto
@@ -183,12 +183,12 @@ public class MobilePlaylistController : ControllerBase
             return Unauthorized();
 
         var recommended = await _recommendationService.GetRecommendedPlaylistAsync(userId);
-        var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+        var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
 
         // Materialize the SongMetadata (navigation property was included by service)
         var songs = recommended
             .Where(r => r.SongMetadata != null && !string.IsNullOrEmpty(r.SongMetadata.Mp3BlobPath))
-            .Select(r => _songMapper.MapToPlaylistSong(r.SongMetadata, SasLifetime, userPlaylistId: null, defaultStreamQualifyingSeconds))
+            .Select(r => _songMapper.MapToPlaylistSong(r.SongMetadata, SasLifetime, userPlaylistId: null, streamQualifying))
             .ToList();
 
         return Ok(new MobilePlaylistSongsDto
@@ -288,10 +288,10 @@ public class MobilePlaylistController : ControllerBase
         }
 
         var available = await _playlistService.GetAvailableSongsForPlaylistAsync(userId, playlistId);
-        var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+        var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
         var dtos = available
             .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
-            .Select(m => _songMapper.MapToPlaylistSong(m, SasLifetime, userPlaylistId: null, defaultStreamQualifyingSeconds))
+            .Select(m => _songMapper.MapToPlaylistSong(m, SasLifetime, userPlaylistId: null, streamQualifying))
             .ToList();
         return Ok(new { songs = dtos, requiresSubscription = false });
     }

@@ -184,8 +184,22 @@ public class StreamCountService : IStreamCountService
 
     private static Task<bool> HasExistingStreamRecordAsync(AppDbContext context, int songMetadataId, int streamerUserId)
     {
-        return context.SongStreams.AnyAsync(stream =>
-            stream.SongMetadataId == songMetadataId &&
-            stream.StreamerUserId == streamerUserId);
+        return SongStreamQueries.HasUserStreamedAsync(context, songMetadataId, streamerUserId);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> HasUserStreamedSongAsync(int userId, int songMetadataId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await SongStreamQueries.HasUserStreamedAsync(context, songMetadataId, userId);
+    }
+
+    /// <inheritdoc />
+    public async Task<HashSet<int>> GetUserStreamedSongIdsAsync(int userId, IEnumerable<int> songMetadataIds)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await SongStreamQueries.GetUserStreamedSongIdsAsync(context, userId, songMetadataIds);
     }
 }

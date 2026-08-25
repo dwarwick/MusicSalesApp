@@ -550,7 +550,7 @@ public class LikedSongsPlaylistTests
         _mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
 
         // Create real SongLikeService for integration testing
-        _songLikeService = new SongLikeService(_mockContextFactory.Object, _mockHubContext.Object);
+        _songLikeService = new SongLikeService(_mockContextFactory.Object, _mockHubContext.Object, SongLikeServiceConfiguration.RequireStream(false));
 
         _playlistService = new PlaylistService(
             _mockContextFactory.Object, 

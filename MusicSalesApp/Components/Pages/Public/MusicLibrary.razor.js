@@ -80,10 +80,12 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
         // Track continuous playback time for stream counting
         if (player && !player.isSeeking && !player.hasRecordedStream && player.songMetadataId > 0) {
             const timeDelta = audioElement.currentTime - player.lastTime;
-            // Only count if time moved forward naturally (not seeking)
-            if (timeDelta > 0 && timeDelta < MAX_TIME_DELTA_SECONDS) {
-                player.playedTime += timeDelta;
-                
+            // Clamped, not discarded - see the same block in SongPlayerInteractive.razor.js. A
+            // timeupdate gap of a second or more used to drop that playback entirely, so the counter
+            // ran behind real time and the configured threshold arrived late.
+            if (timeDelta > 0) {
+                player.playedTime += Math.min(timeDelta, MAX_TIME_DELTA_SECONDS);
+
                 // Check if we've reached the threshold
                 if (player.playedTime >= STREAM_THRESHOLD_SECONDS) {
                     player.hasRecordedStream = true;

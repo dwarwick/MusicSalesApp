@@ -40,6 +40,11 @@ public class AdminSettingsModel : BlazorBase
     protected bool _lyricsCompletionEmailsEnabled = true;
     protected bool _originalLyricsCompletionEmailsEnabled = true;
 
+    // Defaults false to match AppSettingsService: this one moves the number creator payouts are
+    // calculated from, so a load failure must never present it as on.
+    protected bool _reducedStreamQualifyingEnabled;
+    protected bool _originalReducedStreamQualifyingEnabled;
+
     // Defaults false to match AppSettingsService, so a load failure can never present the feature as
     // on when it is not - or invite an admin to "turn off" something already off.
     protected bool _directToStorageUploadEnabled;
@@ -108,6 +113,7 @@ public class AdminSettingsModel : BlazorBase
                                    || _streamQualifyingSeconds != _originalStreamQualifyingSeconds
                                    || _maxAudioUploadSizeMB != _originalMaxAudioUploadSizeMB
                                    || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB
+                                   || _reducedStreamQualifyingEnabled != _originalReducedStreamQualifyingEnabled
                                    || _directToStorageUploadEnabled != _originalDirectToStorageUploadEnabled
                                    || _lyricsConfidenceThresholdPercent != _originalLyricsConfidenceThresholdPercent
                                    || _lyricsCompletionEmailsEnabled != _originalLyricsCompletionEmailsEnabled
@@ -185,6 +191,9 @@ public class AdminSettingsModel : BlazorBase
 
         _maxImageUploadSizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
         _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
+
+        _reducedStreamQualifyingEnabled = await AppSettingsService.IsReducedStreamQualifyingEnabledAsync();
+        _originalReducedStreamQualifyingEnabled = _reducedStreamQualifyingEnabled;
 
         _directToStorageUploadEnabled = await AppSettingsService.IsDirectToStorageUploadEnabledAsync();
         _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;
@@ -671,6 +680,7 @@ public class AdminSettingsModel : BlazorBase
         _streamQualifyingSeconds = _originalStreamQualifyingSeconds;
         _maxAudioUploadSizeMB = _originalMaxAudioUploadSizeMB;
         _maxImageUploadSizeMB = _originalMaxImageUploadSizeMB;
+        _reducedStreamQualifyingEnabled = _originalReducedStreamQualifyingEnabled;
         _directToStorageUploadEnabled = _originalDirectToStorageUploadEnabled;
         _lyricsConfidenceThresholdPercent = _originalLyricsConfidenceThresholdPercent;
         _lyricsCompletionEmailsEnabled = _originalLyricsCompletionEmailsEnabled;
@@ -773,6 +783,22 @@ public class AdminSettingsModel : BlazorBase
                 Logger.LogWarning(
                     "Direct-to-storage creator uploads turned {State} by an administrator.",
                     _directToStorageUploadEnabled ? "ON" : "OFF");
+            }
+
+            // Logged loudly for the same reason as the switch above, and then some: this changes how
+            // many streams every creator is credited with, so a later question about a step in the
+            // payout figures needs a timestamped answer.
+            if (_reducedStreamQualifyingEnabled != _originalReducedStreamQualifyingEnabled)
+            {
+                await AppSettingsService.SetReducedStreamQualifyingEnabledAsync(_reducedStreamQualifyingEnabled);
+
+                Logger.LogWarning(
+                    "Reduced stream-qualifying threshold turned {State} by an administrator. Effective "
+                    + "threshold is now each creator's contracted seconds {Adjustment}.",
+                    _reducedStreamQualifyingEnabled ? "ON" : "OFF",
+                    _reducedStreamQualifyingEnabled
+                        ? $"minus {StreamQualifyingPolicy.PromotionalReductionSeconds}, floored at {StreamQualifyingPolicy.MinimumQualifyingSeconds}"
+                        : "as agreed");
             }
 
             // Written only on a change, and logged, because this one silently re-words what every

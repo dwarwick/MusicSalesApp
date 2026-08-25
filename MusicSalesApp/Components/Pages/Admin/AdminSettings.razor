@@ -3,6 +3,7 @@
 @inherits AdminSettingsModel
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Services
 @using Syncfusion.Blazor.Calendars
 @attribute [Authorize(Policy = Permissions.ManageUsers)]
 
@@ -180,6 +181,34 @@ else
                             Turning this off is the rollback if browser uploads start failing. It applies
                             the next time a creator loads the upload page, so anyone already mid-batch
                             keeps the route they started on.
+                        </strong>
+                    </small>
+                </div>
+            </div>
+
+            @* The qualifying seconds above only set what a NEW creator is contracted to. Each existing
+               creator carries the value captured when they onboarded, locked for the life of the
+               account, so this switch is the only way to move the threshold for creators already
+               signed up - and it moves it in their favour only. *@
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Promotional Stream Threshold</label>
+                    <div>
+                        <SfCheckBox TChecked="bool"
+                                    Label="@($"Count a stream {StreamQualifyingPolicy.PromotionalReductionSeconds} seconds earlier than contracted")"
+                                    @bind-Checked="_reducedStreamQualifyingEnabled" />
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        On, every creator's qualifying threshold drops by
+                        @StreamQualifyingPolicy.PromotionalReductionSeconds seconds for counting purposes
+                        — never below @StreamQualifyingPolicy.MinimumQualifyingSeconds. Their contracted
+                        value is not changed, and crediting a stream sooner than agreed is more generous
+                        than the agreement rather than a departure from it.
+                        <strong class="d-block mt-1">
+                            This exists because a listener without a subscription only hears 60 seconds of
+                            a restricted song, so a creator contracted at 60 or above can never earn a
+                            stream from a free listener at all. Expect stream counts — and therefore
+                            payouts — to step up while this is on.
                         </strong>
                     </small>
                 </div>

@@ -9,7 +9,7 @@
                 <SfButton CssClass="@GetLikeButtonClass()" 
                           OnClick="HandleLikeClick" 
                           title="@GetLikeButtonTitle()"
-                          Disabled="_isProcessing">
+                          Disabled="_isProcessing || !CanRate">
                     @if (_userLikeStatus == true)
                     {
                         <!-- Filled thumbs up when liked -->
@@ -32,7 +32,7 @@
                 <SfButton CssClass="@GetDislikeButtonClass()" 
                           OnClick="HandleDislikeClick" 
                           title="@GetDislikeButtonTitle()"
-                          Disabled="_isProcessing">
+                          Disabled="_isProcessing || !CanRate">
                     @if (_userLikeStatus == false)
                     {
                         <!-- Filled thumbs down when disliked -->

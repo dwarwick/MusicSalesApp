@@ -57,7 +57,7 @@ public class SongLikeServiceSetStateConcurrencyTests
         mockClients.Setup(c => c.All).Returns(new Mock<IClientProxy>().Object);
         mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
 
-        _service = new SongLikeService(mockContextFactory.Object, mockHubContext.Object);
+        _service = new SongLikeService(mockContextFactory.Object, mockHubContext.Object, SongLikeServiceConfiguration.RequireStream(false));
     }
 
     [TearDown]

@@ -41,7 +41,7 @@ public class SongLikeServiceTests
         mockClients.Setup(c => c.All).Returns(_mockClientProxy.Object);
         _mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
 
-        _service = new SongLikeService(_mockContextFactory.Object, _mockHubContext.Object);
+        _service = new SongLikeService(_mockContextFactory.Object, _mockHubContext.Object, SongLikeServiceConfiguration.RequireStream(false));
     }
 
     [TearDown]

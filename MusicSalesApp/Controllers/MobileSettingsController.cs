@@ -22,7 +22,11 @@ public class MobileSettingsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetMobileSettings()
     {
-        var streamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+        // The promotional reduction is applied here rather than in the app, so a mobile release does not
+        // have to ship for the flag to take effect. The per-song value the app prefers over this one is
+        // reduced the same way in MobileSongMapper.
+        var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
+        var streamQualifyingSeconds = streamQualifying.Resolve(creatorSeconds: null);
 
         return Ok(new
         {

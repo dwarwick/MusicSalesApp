@@ -55,7 +55,7 @@ public class MobileSongMapperVariantTests
     };
 
     private SongListItemDto Map(SongMetadata song)
-        => _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30);
+        => _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), new StreamQualifyingSettings(30, false));
 
     [Test]
     public void WithRenditions_PopulatesTheThumbAndHeroUrls()
@@ -162,7 +162,7 @@ public class MobileSongMapperVariantTests
     {
         var dto = _mapper.MapToPlaylistSong(
             Song(coverWidths: "128,320,640", personaWidths: "128,320"),
-            TimeSpan.FromHours(24), userPlaylistId: 5, defaultStreamQualifyingSeconds: 30);
+            TimeSpan.FromHours(24), userPlaylistId: 5, streamQualifying: new StreamQualifyingSettings(30, false));
 
         Assert.Multiple(() =>
         {
@@ -202,7 +202,7 @@ public class MobileSongMapperVariantTests
     {
         var dto = _mapper.MapToPlaylistSong(
             Song(coverWidths: "128,320,640", personaWidths: "128,320"),
-            TimeSpan.FromHours(24), userPlaylistId: 5, defaultStreamQualifyingSeconds: 30);
+            TimeSpan.FromHours(24), userPlaylistId: 5, streamQualifying: new StreamQualifyingSettings(30, false));
 
         Assert.Multiple(() =>
         {

@@ -44,6 +44,8 @@ public class MusicControllerTests
         _songMapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object);
         _mockLogger = new Mock<ILogger<MusicController>>();
         _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSecondsAsync()).ReturnsAsync(45);
+        _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSettingsAsync())
+            .ReturnsAsync(new StreamQualifyingSettings(45, false));
         _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(It.IsAny<string>()))
             .ReturnsAsync((string path) => new SongMetadata
             {
@@ -1242,5 +1244,219 @@ public class MusicControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
+    }
+
+    // --- Rating requires a stream ---
+
+    private ApplicationUser ArrangeAuthenticatedUser(int id = 1)
+    {
+        var user = new ApplicationUser { Id = id, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        return user;
+    }
+
+    private static void AssertForbiddenWithRatingMessage(IActionResult result)
+    {
+        // Not Forbid(): that sends an empty body, and the client has a message to show the user.
+        Assert.That(result, Is.InstanceOf<ObjectResult>());
+        var objectResult = (ObjectResult)result;
+        Assert.That(objectResult.StatusCode, Is.EqualTo(StatusCodes.Status403Forbidden));
+
+        var value = objectResult.Value!;
+        var error = (string)value.GetType().GetProperty("error")!.GetValue(value)!;
+        Assert.That(error, Is.EqualTo(MusicController.LikeRequiresStreamError));
+    }
+
+    [Test]
+    public async Task ToggleLike_WhenTheUserHasNotStreamedTheSong_ReturnsForbidden()
+    {
+        var user = ArrangeAuthenticatedUser();
+        _mockSongLikeService.Setup(s => s.ToggleLikeAsync(user.Id, 42))
+            .ThrowsAsync(new LikeRequiresStreamException(42, user.Id));
+
+        var result = await _controller.ToggleLike(42);
+
+        AssertForbiddenWithRatingMessage(result);
+        _mockSongLikeService.Verify(s => s.GetLikeCountsAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ToggleDislike_WhenTheUserHasNotStreamedTheSong_ReturnsForbidden()
+    {
+        var user = ArrangeAuthenticatedUser();
+        _mockSongLikeService.Setup(s => s.ToggleDislikeAsync(user.Id, 42))
+            .ThrowsAsync(new LikeRequiresStreamException(42, user.Id));
+
+        var result = await _controller.ToggleDislike(42);
+
+        AssertForbiddenWithRatingMessage(result);
+        _mockSongLikeService.Verify(s => s.GetLikeCountsAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task SetLikeState_WhenTheUserHasNotStreamedTheSong_ReturnsForbidden()
+    {
+        var user = ArrangeAuthenticatedUser();
+        _mockSongLikeService.Setup(s => s.SetLikeStateAsync(user.Id, 42, true))
+            .ThrowsAsync(new LikeRequiresStreamException(42, user.Id));
+
+        var result = await _controller.SetLikeState(42, new MusicController.SetLikeStateRequest { Status = true });
+
+        AssertForbiddenWithRatingMessage(result);
+        _mockSongLikeService.Verify(s => s.GetLikeCountsAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    // --- likes/user-status reports eligibility ---
+
+    [Test]
+    public async Task GetBulkUserLikeStatus_ReturnsAnEntryPerRequestedIdWithEligibility()
+    {
+        // One entry per requested ID, not only the songs already rated: an unrated song is exactly the
+        // case where the client needs to know whether the buttons should be live.
+        var user = ArrangeAuthenticatedUser();
+        _mockSongLikeService.Setup(s => s.GetBulkUserLikeStatusAsync(user.Id, It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new Dictionary<int, bool?> { [1] = true });
+        _mockStreamCountService.Setup(s => s.GetUserStreamedSongIdsAsync(user.Id, It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new HashSet<int> { 1, 2 });
+
+        var result = await _controller.GetBulkUserLikeStatus("1,2,3");
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var items = ((OkObjectResult)result).Value as IEnumerable<object>;
+        Assert.That(items, Is.Not.Null);
+
+        var entries = items!.Select(item => new
+        {
+            Id = (int)item.GetType().GetProperty("songMetadataId")!.GetValue(item)!,
+            Status = (bool?)item.GetType().GetProperty("userLikeStatus")!.GetValue(item),
+            HasStreamed = (bool)item.GetType().GetProperty("hasStreamed")!.GetValue(item)!
+        }).ToList();
+
+        Assert.That(entries.Select(e => e.Id), Is.EqualTo(new[] { 1, 2, 3 }));
+
+        Assert.That(entries[0].Status, Is.True);
+        Assert.That(entries[0].HasStreamed, Is.True);
+
+        Assert.That(entries[1].Status, Is.Null, "Streamed but never rated.");
+        Assert.That(entries[1].HasStreamed, Is.True);
+
+        Assert.That(entries[2].Status, Is.Null);
+        Assert.That(entries[2].HasStreamed, Is.False, "Neither streamed nor rated.");
+    }
+
+    // --- Bulk endpoints accept the IDs in a body ---
+
+    [Test]
+    public async Task PostBulkUserLikeStatus_ReturnsTheSameShapeAsTheQueryStringForm()
+    {
+        // The POST form exists because the ID list outgrows a query string; it must not diverge.
+        var user = ArrangeAuthenticatedUser();
+        _mockSongLikeService.Setup(s => s.GetBulkUserLikeStatusAsync(user.Id, It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new Dictionary<int, bool?> { [1] = true });
+        _mockStreamCountService.Setup(s => s.GetUserStreamedSongIdsAsync(user.Id, It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new HashSet<int> { 1 });
+
+        var fromQuery = await _controller.GetBulkUserLikeStatus("1,2");
+        var fromBody = await _controller.PostBulkUserLikeStatus(
+            new MusicController.BulkSongIdsRequest { Ids = [1, 2] });
+
+        Assert.That(Describe(fromBody), Is.EqualTo(Describe(fromQuery)));
+
+        static string Describe(IActionResult result) =>
+            string.Join("|", ((IEnumerable<object>)((OkObjectResult)result).Value!)
+                .Select(item => string.Join(
+                    ",",
+                    item.GetType().GetProperties().Select(p => $"{p.Name}={p.GetValue(item)}"))));
+    }
+
+    [Test]
+    public async Task PostBulkLikeCounts_ReturnsAnEntryPerRequestedId()
+    {
+        _mockSongLikeService.Setup(s => s.GetBulkLikeDislikeCountsAsync(It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new Dictionary<int, (int likeCount, int dislikeCount)> { [1] = (7, 2) });
+
+        var result = await _controller.PostBulkLikeCounts(
+            new MusicController.BulkSongIdsRequest { Ids = [1, 2] });
+
+        var items = ((OkObjectResult)result).Value as IEnumerable<object>;
+        var entries = items!.Select(item => new
+        {
+            Id = (int)item.GetType().GetProperty("songMetadataId")!.GetValue(item)!,
+            Likes = (int)item.GetType().GetProperty("likeCount")!.GetValue(item)!
+        }).ToList();
+
+        Assert.That(entries.Select(e => e.Id), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(entries[0].Likes, Is.EqualTo(7));
+        Assert.That(entries[1].Likes, Is.Zero, "A song with no likes still gets an entry.");
+    }
+
+    [Test]
+    public async Task PostBulkLikeCounts_DropsDuplicateAndNonPositiveIds()
+    {
+        _mockSongLikeService.Setup(s => s.GetBulkLikeDislikeCountsAsync(It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new Dictionary<int, (int likeCount, int dislikeCount)>());
+
+        var result = await _controller.PostBulkLikeCounts(
+            new MusicController.BulkSongIdsRequest { Ids = [5, 5, 0, -3, 6] });
+
+        var items = ((OkObjectResult)result).Value as IEnumerable<object>;
+        var ids = items!.Select(item => (int)item.GetType().GetProperty("songMetadataId")!.GetValue(item)!).ToList();
+
+        Assert.That(ids, Is.EqualTo(new[] { 5, 6 }));
+    }
+
+    [Test]
+    public async Task PostBulkLikeCounts_WithNoBody_ReturnsAnEmptyResult()
+    {
+        var result = await _controller.PostBulkLikeCounts(null!);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That((IEnumerable<object>)((OkObjectResult)result).Value!, Is.Empty);
+    }
+
+    [Test]
+    public async Task PostBulkLikeCounts_BeyondTheCap_IsRejected()
+    {
+        // A body has no natural size limit the way a query string did, so the bound has to be explicit.
+        var tooMany = Enumerable.Range(1, MusicController.MaxBulkSongIds + 1).ToList();
+
+        var result = await _controller.PostBulkLikeCounts(
+            new MusicController.BulkSongIdsRequest { Ids = tooMany });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSongLikeService.Verify(
+            s => s.GetBulkLikeDislikeCountsAsync(It.IsAny<IEnumerable<int>>()), Times.Never);
+    }
+
+    [Test]
+    public async Task PostBulkUserLikeStatus_WithoutAUser_IsUnauthorized()
+    {
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null!);
+
+        var result = await _controller.PostBulkUserLikeStatus(
+            new MusicController.BulkSongIdsRequest { Ids = [1] });
+
+        Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
+    }
+
+    [Test]
+    public async Task GetBulkUserLikeStatus_WithRepeatedIds_ReturnsEachIdOnce()
+    {
+        // The MAUI client turns this list straight into a dictionary, so a repeated ID in the query
+        // string would throw there rather than in the controller.
+        var user = ArrangeAuthenticatedUser();
+        _mockSongLikeService.Setup(s => s.GetBulkUserLikeStatusAsync(user.Id, It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new Dictionary<int, bool?>());
+        _mockStreamCountService.Setup(s => s.GetUserStreamedSongIdsAsync(user.Id, It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new HashSet<int>());
+
+        var result = await _controller.GetBulkUserLikeStatus("5,5,6");
+
+        var items = ((OkObjectResult)result).Value as IEnumerable<object>;
+        var ids = items!.Select(item => (int)item.GetType().GetProperty("songMetadataId")!.GetValue(item)!).ToList();
+
+        Assert.That(ids, Is.EqualTo(new[] { 5, 6 }));
     }
 }
