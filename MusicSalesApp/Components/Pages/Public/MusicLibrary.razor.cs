@@ -121,6 +121,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected bool _hasActiveSubscription;
     private bool _isAdmin;
     private int? _currentUserId;
+
+    /// <summary>
+    /// Which songs the signed-in user has streamed - what entitles them to rate. Resolved once for the
+    /// whole page and fed to every card's LikeDislikeButtons, instead of each of several hundred cards
+    /// asking the database for itself. Empty when signed out, and on a load failure - failing closed
+    /// only dims the thumbs; the server enforces the real rule either way.
+    /// </summary>
+    private HashSet<int> _streamedSongIds = new();
+
     private Dictionary<int, int?> _creatorUserIdMap = new Dictionary<int, int?>();
     private Dictionary<string, int?> _creatorIdMap = new Dictionary<string, int?>();
     protected TipDialogModel _tipDialog;
@@ -177,6 +186,22 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
 
         DispatchUiUpdate(() => _streamCounts[songMetadataId] = newCount);
+
+        // The cards' LikeDislikeButtons take their eligibility from this page, so mid-listen
+        // enablement from ANOTHER tab or device arrives here too - the per-card hub handlers that used
+        // to provide it are gone, that being the point of the bulk set. One query per broadcast for the
+        // one song broadcast about, only while it is still unstreamed, and only for a signed-in user -
+        // not the per-card fan-out this page just got rid of.
+        if (_currentUserId is int userId && !_streamedSongIds.Contains(songMetadataId))
+        {
+            DispatchUiUpdate(async () =>
+            {
+                if (await StreamCountService.HasUserStreamedSongAsync(userId, songMetadataId))
+                {
+                    _streamedSongIds.Add(songMetadataId);
+                }
+            });
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -202,6 +227,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
                 _streamQualifying = await AppSettingsService.GetStreamQualifyingSettingsAsync();
                 await LoadFiles();
+                await LoadStreamedSongIdsAsync();
             }
             catch (Exception ex)
             {
@@ -793,6 +819,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         _error = null;
         await LoadFiles();
+        // Everything the first-render block loads after LoadFiles has to come back with it, or a
+        // recovered failure leaves the page half-loaded for the rest of the circuit. Eligibility is the
+        // one that bites: the cards get their KnownHasStreamed from this set, and a supplied instance
+        // never self-corrects - without this line, a retry left every thumb dimmed until a full reload.
+        await LoadStreamedSongIdsAsync();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -901,6 +932,31 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected int GetSongMetadataId(string fileName)
     {
         return _songMetadataIds.TryGetValue(fileName, out var id) ? id : 0;
+    }
+
+    /// <summary>
+    /// One bulk query for the whole page. Must run after <see cref="LoadFiles"/>, which is what fills
+    /// <see cref="_songMetadataIds"/>.
+    /// </summary>
+    private async Task LoadStreamedSongIdsAsync()
+    {
+        if (!_currentUserId.HasValue || _songMetadataIds.Count == 0)
+            return;
+
+        try
+        {
+            _streamedSongIds = await StreamCountService.GetUserStreamedSongIdsAsync(
+                _currentUserId.Value, _songMetadataIds.Values);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading streamed-song eligibility for user {UserId}", _currentUserId);
+        }
+    }
+
+    protected bool HasUserStreamedSong(string fileName)
+    {
+        return _streamedSongIds.Contains(GetSongMetadataId(fileName));
     }
 
     protected int GetSongStreamCount(string fileName)
@@ -1421,6 +1477,31 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Call StreamCountService directly (bypasses HTTP which loses auth context in Blazor Server)
             var newCount = await StreamCountService.IncrementStreamCountAsync(songMetadataId, _currentUserId, _isAdmin);
             _streamCounts[songMetadataId] = newCount;
+
+            // This card's LikeDislikeButtons get their eligibility from the page's bulk set, so the
+            // thumbs only come alive mid-listen if the set moves too. Asked back from the database
+            // rather than assumed, because the increment can decline to record - a creator playing
+            // their own song, most notably - and assuming would light buttons the server will refuse.
+            //
+            // Its own try/catch: the stream above is already recorded, so a failure here must neither
+            // log as a failed recording nor skip the repaint the new count needs.
+            if (_currentUserId.HasValue && !_streamedSongIds.Contains(songMetadataId))
+            {
+                try
+                {
+                    if (await StreamCountService.HasUserStreamedSongAsync(_currentUserId.Value, songMetadataId))
+                    {
+                        _streamedSongIds.Add(songMetadataId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex,
+                        "MusicLibrary: Stream recorded for song {SongMetadataId} but the rating-eligibility re-check failed; thumbs stay dimmed until reload",
+                        songMetadataId);
+                }
+            }
+
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)

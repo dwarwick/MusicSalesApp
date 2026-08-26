@@ -250,7 +250,8 @@ else
                                       IsAiVocals="IsAiVocalsSong(f.Name)"
                                       IsAiLyrics="IsAiLyricsSong(f.Name)"
                                       CssClass="card-ai-content-badges" />
-                    <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
+                    <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false"
+                                        KnownHasStreamed="HasUserStreamedSong(f.Name)" />
                 </div>
 
                 <!-- Song Title -->
@@ -270,7 +271,12 @@ else
                     <div class="card-artist-name">
                         @if (!string.IsNullOrEmpty(artistInfo.PersonaImageUrl))
                         {
-                            <img src="@artistInfo.PersonaImageUrl" alt="@artistInfo.DisplayName" class="card-persona-image" />
+                            @* Lazy for the same reason the CoverArt above is: one of these renders per
+                               card, and the library has hundreds of cards. Eager, they all fired at
+                               page load - and Cloudflare's rate limit counts every request, cached or
+                               not, so the burst got real image requests 429'd. *@
+                            <img src="@artistInfo.PersonaImageUrl" alt="@artistInfo.DisplayName" class="card-persona-image"
+                                 loading="lazy" decoding="async" />
                         }
                         <a href="@artistInfo.LinkUrl" @onclick:stopPropagation="true" title="View all songs by @artistInfo.DisplayName">@artistInfo.DisplayName</a>
                     </div>

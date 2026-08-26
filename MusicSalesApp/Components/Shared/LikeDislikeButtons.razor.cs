@@ -16,6 +16,24 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
     [Parameter]
     public bool VerticalLayout { get; set; } = false;
 
+    /// <summary>
+    /// Set when the host page already knows whether the current user has streamed this song, which is
+    /// what entitles them to rate it. Null means the component finds out for itself.
+    ///
+    /// The distinction is one instance versus hundreds. On the single-song players this component can
+    /// afford its own eligibility query and its own StreamCountHub subscription - there is one of it.
+    /// The music library renders one per card, and self-managed instances there meant one DB query per
+    /// card per load, plus one DB query per card on every stream broadcast site-wide: a single stream
+    /// anywhere fanned out to hundreds of queries on every connected library circuit. The library
+    /// resolves eligibility once in bulk and feeds each card through this parameter instead; supplied
+    /// instances run no eligibility query and take no hub subscription.
+    ///
+    /// Decided at first render: a page that wants the supplied mode must pass a value from the start
+    /// (the library always does), not flip from null later.
+    /// </summary>
+    [Parameter]
+    public bool? KnownHasStreamed { get; set; }
+
     protected int _likeCount = 0;
     protected int _dislikeCount = 0;
     protected bool? _userLikeStatus = null; // true = liked, false = disliked, null = no preference
@@ -43,6 +61,13 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
             _previousSongMetadataId = SongMetadataId;
             _needsDataReload = true;
         }
+
+        // Supplied eligibility stays live across parent re-renders, so when the library records a
+        // stream and refreshes its bulk set, the affected card's buttons come alive on that render.
+        if (KnownHasStreamed.HasValue)
+        {
+            _hasStreamed = KnownHasStreamed.Value;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -53,10 +78,16 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
             LikeCountHubClient.OnLikeCountReceived += HandleLikeCountReceived;
             await LikeCountHubClient.StartAsync();
 
-            // The three pages that host these buttons are also the three that record streams, so this is
-            // how the buttons come alive part-way through a listen rather than waiting for a page reload.
-            StreamCountHubClient.OnStreamCountReceived += HandleStreamCountReceived;
-            await StreamCountHubClient.StartAsync();
+            // The pages that host these buttons are also the pages that record streams, so this is how
+            // the buttons come alive part-way through a listen rather than waiting for a page reload.
+            // Only in self-managed mode: a supplied instance leaves mid-listen updates to its host,
+            // because hundreds of per-card handlers each re-querying on every broadcast is exactly the
+            // fan-out KnownHasStreamed exists to remove.
+            if (KnownHasStreamed is null)
+            {
+                StreamCountHubClient.OnStreamCountReceived += HandleStreamCountReceived;
+                await StreamCountHubClient.StartAsync();
+            }
         }
 
         if ((firstRender || _needsDataReload) && SongMetadataId > 0)
@@ -105,7 +136,13 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
                 {
                     _currentUserId = userId.Value;
                     _userLikeStatus = await SongLikeService.GetUserLikeStatusAsync(userId.Value, SongMetadataId);
-                    _hasStreamed = await StreamCountService.HasUserStreamedSongAsync(userId.Value, SongMetadataId);
+
+                    // Only self-managed instances ask the database; the library answers this for all
+                    // of its cards in one query and supplies the answer as a parameter.
+                    if (KnownHasStreamed is null)
+                    {
+                        _hasStreamed = await StreamCountService.HasUserStreamedSongAsync(userId.Value, SongMetadataId);
+                    }
                 }
             }
         }
