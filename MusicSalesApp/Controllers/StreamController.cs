@@ -14,10 +14,18 @@ namespace MusicSalesApp.Controllers;
 /// Serves encrypted HLS: the per-listener manifest, and the content key it points at.
 ///
 /// <para>
-/// These two endpoints are the entire security boundary for audio. The segments themselves are
-/// public — anyone may fetch them, and doing so yields AES-128 ciphertext. What is not public is the
-/// key, and the only route to it is <see cref="GetKey"/>, behind a token this app minted seconds
-/// earlier for one song and one listener.
+/// These two endpoints are the entire security boundary for audio, and it has two halves doing
+/// different jobs. <see cref="GetKey"/> guards the AES-128 content key behind a token this app
+/// minted seconds earlier for one song. <see cref="GetManifest"/> guards <em>reach</em>: it stamps a
+/// read SAS onto each segment it names and onto no others, so a listener can fetch exactly what
+/// they were given.
+/// </para>
+///
+/// <para>
+/// Both halves are load-bearing, because neither works alone. A song has exactly one content key
+/// and every segment is encrypted with it, so the key cannot tell a preview listener from a
+/// subscriber — both must be able to decrypt what they receive. Preview enforcement is therefore
+/// entirely a question of which segments are reachable, and lives in the manifest rather than here.
 /// </para>
 ///
 /// <para>
@@ -150,9 +158,17 @@ public class StreamController : ControllerBase
     /// The 16-byte AES-128 content key.
     ///
     /// <para>
-    /// Everything protecting the catalogue narrows to this method. The checks are, in order: an
-    /// <c>Origin</c>/<c>Referer</c> the site recognises, when any are configured; a valid unexpired
-    /// key token issued for <em>this</em> song; and the song still being published.
+    /// The checks are, in order: an <c>Origin</c>/<c>Referer</c> the site recognises, when any are
+    /// configured; a valid unexpired key token issued for <em>this</em> song; and the song still
+    /// being published.
+    /// </para>
+    ///
+    /// <para>
+    /// Note what is <b>not</b> checked: the token's <c>HasFullAccess</c>. A preview listener is
+    /// entitled to this key and cannot play their preview without it, and there is no narrower key
+    /// to give them — one key encrypts the whole song. Their preview is enforced by the segments
+    /// their manifest named and signed, per the class remarks. Adding an entitlement check here
+    /// would break previews without closing anything.
     /// </para>
     /// </summary>
     [HttpGet("{songMetadataId:int}/key")]
@@ -168,6 +184,9 @@ public class StreamController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden);
         }
 
+        // Validity only; the payload's entitlement is deliberately not consulted here. See the
+        // remarks above - the key is the same for every listener of this song by construction, and
+        // what separates them is which segments they hold a SAS for.
         if (!_tokens.TryValidate(token, songMetadataId, HlsTokenKind.Key, out _))
         {
             return Unauthorized();

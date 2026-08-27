@@ -1,6 +1,5 @@
 using System;
 using Azure.Storage.Blobs;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -11,17 +10,26 @@ namespace MusicSalesApp.Tests.Services;
 
 /// <summary>
 /// The credential every segment URL carries, now that the streaming container is private.
+///
+/// <para>
+/// The property that matters most here is scope. A song has one content key, so a preview listener
+/// necessarily receives the same key a subscriber does; the only thing that keeps their preview a
+/// preview is that they cannot fetch the segments their manifest left out. That holds only while
+/// each SAS is signed for one blob.
+/// </para>
 /// </summary>
 [TestFixture]
 public class HlsSegmentSasProviderTests
 {
+    private const string SegmentPath = "0123456789abcdef0123456789abcdef/seg-000.ts";
+
     /// <summary>A key-based connection string, so the client can actually sign. Not a real account.</summary>
     private const string ConnectionString =
         "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;"
         + "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
         + "EndpointSuffix=core.windows.net";
 
-    private static HlsSegmentSasProvider Create(HlsOptions options = null, IMemoryCache cache = null)
+    private static HlsSegmentSasProvider Create(HlsOptions options = null)
     {
         var factory = new Mock<IBlobContainerFactory>();
         factory.Setup(f => f.GetStreamingContainer())
@@ -29,7 +37,6 @@ public class HlsSegmentSasProviderTests
 
         return new HlsSegmentSasProvider(
             factory.Object,
-            cache ?? new MemoryCache(new MemoryCacheOptions()),
             Options.Create(options ?? new HlsOptions()),
             Mock.Of<ILogger<HlsSegmentSasProvider>>());
     }
@@ -37,7 +44,7 @@ public class HlsSegmentSasProviderTests
     [Test]
     public void GetReadSasQuery_ProducesASignedReadOnlyQuery()
     {
-        var query = Create().GetReadSasQuery();
+        var query = Create().GetReadSasQuery(SegmentPath);
 
         Assert.Multiple(() =>
         {
@@ -56,43 +63,35 @@ public class HlsSegmentSasProviderTests
         });
     }
 
-    [Test]
-    public void GetReadSasQuery_IsCached()
-    {
-        var provider = Create();
-
-        var first = provider.GetReadSasQuery();
-        var second = provider.GetReadSasQuery();
-
-        // Signing is cheap, but the manifest endpoint is on the playback path and re-signing per
-        // request would be pure waste.
-        Assert.That(second, Is.EqualTo(first));
-    }
-
     /// <summary>
-    /// The cache must expire well before the SAS does.
+    /// The regression test for the free preview being defeatable.
     ///
     /// <para>
-    /// Caching for the SAS's full lifetime would eventually hand out one with seconds left on it,
-    /// and playback would fail part-way through a song for no visible reason. An eighth is arbitrary
-    /// but generous: every SAS served still has at least seven eighths of its life left.
+    /// Segment names are deterministic — <c>seg-000.ts</c>, <c>seg-001.ts</c>, … — and the package
+    /// folder appears in the URL of every segment the listener legitimately received. So with a
+    /// container-scoped credential (<c>sr=c</c>), a non-subscriber holding the ten segments of their
+    /// preview could construct the URL of the eleventh, fetch it with the same signature, and
+    /// decrypt it with the key they were correctly given. Scoping the signature to one blob is the
+    /// only thing standing between a 60-second preview and the whole song.
     /// </para>
     /// </summary>
     [Test]
-    public void GetReadSasQuery_IsCachedForFarLessThanTheSasLifetime()
+    public void GetReadSasQuery_SignsForOneBlobRatherThanTheWholeContainer()
     {
-        var cache = new Mock<IMemoryCache>();
-        var entry = new Mock<ICacheEntry>();
-        entry.SetupAllProperties();
+        var provider = Create();
 
-        object ignored;
-        cache.Setup(c => c.TryGetValue(It.IsAny<object>(), out ignored)).Returns(false);
-        cache.Setup(c => c.CreateEntry(It.IsAny<object>())).Returns(entry.Object);
+        var granted = provider.GetReadSasQuery("stream/seg-000.ts");
+        var withheld = provider.GetReadSasQuery("stream/seg-001.ts");
 
-        var lifetime = TimeSpan.FromHours(8);
-        Create(new HlsOptions { SegmentSasLifetime = lifetime }, cache.Object).GetReadSasQuery();
+        Assert.Multiple(() =>
+        {
+            // sr=b is the blob-scoped resource designator; sr=c would be the container.
+            Assert.That(granted, Does.Contain("sr=b"));
+            Assert.That(granted, Does.Not.Contain("sr=c"));
 
-        Assert.That(entry.Object.AbsoluteExpirationRelativeToNow, Is.LessThan(lifetime / 2));
+            // Different blob, different signature - so the credential for one cannot fetch the other.
+            Assert.That(withheld, Is.Not.EqualTo(granted));
+        });
     }
 
     [Test]
@@ -100,9 +99,18 @@ public class HlsSegmentSasProviderTests
     {
         // A misconfiguration here would otherwise mint a SAS that is already expired, disabling
         // playback in a way that looks like a player bug rather than a settings mistake.
-        var query = Create(new HlsOptions { SegmentSasLifetime = TimeSpan.Zero }).GetReadSasQuery();
+        var query = Create(new HlsOptions { SegmentSasLifetime = TimeSpan.Zero }).GetReadSasQuery(SegmentPath);
 
         Assert.That(query, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public void GetReadSasQuery_WithNoBlobPath_ReturnsNullRatherThanSigningTheContainer()
+    {
+        // Guards the shape of the mistake this class exists to prevent: an empty path must not
+        // degrade into a credential that is broader than the caller asked for.
+        Assert.That(Create().GetReadSasQuery(""), Is.Null);
+        Assert.That(Create().GetReadSasQuery(null), Is.Null);
     }
 
     [Test]
@@ -118,10 +126,9 @@ public class HlsSegmentSasProviderTests
 
         var provider = new HlsSegmentSasProvider(
             factory.Object,
-            new MemoryCache(new MemoryCacheOptions()),
             Options.Create(new HlsOptions()),
             Mock.Of<ILogger<HlsSegmentSasProvider>>());
 
-        Assert.That(provider.GetReadSasQuery(), Is.Null);
+        Assert.That(provider.GetReadSasQuery(SegmentPath), Is.Null);
     }
 }

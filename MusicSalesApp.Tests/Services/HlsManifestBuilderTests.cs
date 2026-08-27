@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Services;
@@ -229,7 +230,7 @@ public class HlsManifestBuilderTests
     }
 
     /// <summary>
-    /// The streaming container is private, so every segment URL has to carry the container SAS.
+    /// The streaming container is private, so every segment URL has to carry a read SAS.
     ///
     /// <para>
     /// A missed one 403s at the player, and because segments are fetched lazily it would not fail
@@ -239,28 +240,88 @@ public class HlsManifestBuilderTests
     [Test]
     public void Rewrite_StampsTheSegmentSasOntoEverySegment()
     {
-        const string sas = "sv=2024-01-01&se=2026-01-01&sig=abc%2Bdef";
-
-        var result = HlsManifestBuilder.Rewrite(RawManifest(3), SegmentBase, KeyUri, null, sas);
+        var result = HlsManifestBuilder.Rewrite(RawManifest(3), SegmentBase, KeyUri, null, SasFor);
 
         var segments = SegmentLines(result);
 
         Assert.That(segments, Has.Length.EqualTo(3));
-        Assert.That(segments, Has.All.Contains("?" + sas));
-        Assert.That(segments[0], Is.EqualTo(SegmentBase + "seg-000.ts?" + sas));
+        Assert.That(segments[0], Is.EqualTo(SegmentBase + "seg-000.ts?" + SasFor("seg-000.ts")));
+        Assert.That(segments[2], Is.EqualTo(SegmentBase + "seg-002.ts?" + SasFor("seg-002.ts")));
+    }
+
+    /// <summary>
+    /// Each segment gets the credential minted for <em>that</em> segment.
+    ///
+    /// <para>
+    /// This is what makes a truncated preview mean anything. There is one content key per song, so a
+    /// preview listener holds the same key a subscriber does and the truncation is the only thing
+    /// limiting them - but segment names are deterministic, so with one credential covering them all
+    /// the omitted segments would be a guessable filename away. Passing the factory the file name and
+    /// using what it returns for that file is the whole mechanism.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void Rewrite_AsksForACredentialPerSegmentRatherThanOneForAllOfThem()
+    {
+        var asked = new List<string>();
+
+        var result = HlsManifestBuilder.Rewrite(
+            RawManifest(3),
+            SegmentBase,
+            KeyUri,
+            previewLimit: null,
+            fileName =>
+            {
+                asked.Add(fileName);
+                return SasFor(fileName);
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(asked, Is.EqualTo(new[] { "seg-000.ts", "seg-001.ts", "seg-002.ts" }));
+
+            // No segment carries another's signature.
+            Assert.That(SegmentLines(result)[0], Does.Not.Contain(SasFor("seg-001.ts")));
+        });
+    }
+
+    /// <summary>
+    /// A truncated preview must not hand out credentials for the segments it withheld.
+    ///
+    /// <para>
+    /// The point of asking per segment is that the request never happens for a segment the listener
+    /// is not entitled to - so there is nothing for them to replay against the omitted blobs.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void Rewrite_WhenTruncated_NeverMintsACredentialForAWithheldSegment()
+    {
+        var asked = new List<string>();
+
+        HlsManifestBuilder.Rewrite(
+            RawManifest(40),
+            SegmentBase,
+            KeyUri,
+            TimeSpan.FromSeconds(60),
+            fileName =>
+            {
+                asked.Add(fileName);
+                return SasFor(fileName);
+            });
+
+        Assert.That(asked, Has.Count.LessThan(40), "a preview must not sign the whole song");
+        Assert.That(asked, Has.None.EqualTo("seg-039.ts"));
     }
 
     [Test]
     public void Rewrite_DoesNotStampTheSasOntoTheKeyUri()
     {
-        const string sas = "sv=2024-01-01&sig=abc";
-
-        var result = HlsManifestBuilder.Rewrite(RawManifest(3), SegmentBase, KeyUri, null, sas);
+        var result = HlsManifestBuilder.Rewrite(RawManifest(3), SegmentBase, KeyUri, null, SasFor);
 
         // The key comes from this app, not from storage. Appending a storage SAS to it would at best
         // be noise and at worst break the token the key endpoint validates.
         Assert.That(result, Does.Contain($"URI=\"{KeyUri}\""));
-        Assert.That(result, Does.Not.Contain($"{KeyUri}?{sas}"));
+        Assert.That(result, Does.Not.Contain($"{KeyUri}?"));
     }
 
     [Test]
@@ -269,8 +330,12 @@ public class HlsManifestBuilderTests
         // What an unsigned manifest looks like. The builder still emits one rather than failing, so
         // the fault surfaces at the player instead of turning every request into a 500 - the SAS
         // provider has already logged the real cause.
-        var result = HlsManifestBuilder.Rewrite(RawManifest(2), SegmentBase, KeyUri, null, segmentSasQuery: null);
+        var result = HlsManifestBuilder.Rewrite(RawManifest(2), SegmentBase, KeyUri, null, segmentSasFactory: null);
 
         Assert.That(SegmentLines(result), Has.All.Not.Contains("?"));
     }
+
+    /// <summary>A stand-in for a real signature, distinct per blob exactly as the signed one is.</summary>
+    private static string SasFor(string segmentFileName)
+        => $"sv=2024-01-01&se=2026-01-01&sr=b&sig=sig-for-{segmentFileName}";
 }

@@ -78,16 +78,26 @@ public sealed class HlsManifestBuilder : IHlsManifestBuilder
             return null;
         }
 
+        var folder = HlsPackagePaths.Folder(request.HlsStreamId);
+
         var segmentBase = new Uri(
             _containerFactory.GetStreamingContainerUri().AbsoluteUri.TrimEnd('/')
-            + "/" + HlsPackagePaths.Folder(request.HlsStreamId) + "/");
+            + "/" + folder + "/");
 
-        // Null only when SAS signing is unavailable, which the provider has already logged as an
-        // error. The manifest is still returned - every segment would 403, but a manifest with
+        // Signed per segment, so the listener ends up holding credentials for exactly the segments
+        // this manifest names. On a truncated preview that is what makes the truncation real: with a
+        // container-wide credential the omitted segments are a guessable filename away, since the
+        // content key is necessarily the same one for the whole song.
+        //
+        // The provider returns null only when SAS signing is unavailable, which it has already
+        // logged. The manifest is still returned - every segment would 403, but a manifest with
         // unsigned URLs fails visibly at the player rather than silently here.
-        var segmentSas = _sasProvider.GetReadSasQuery();
-
-        return Rewrite(raw, segmentBase, request.KeyUri, request.PreviewLimit, segmentSas);
+        return Rewrite(
+            raw,
+            segmentBase,
+            request.KeyUri,
+            request.PreviewLimit,
+            fileName => _sasProvider.GetReadSasQuery($"{folder}/{fileName}"));
     }
 
     /// <summary>
@@ -103,16 +113,17 @@ public sealed class HlsManifestBuilder : IHlsManifestBuilder
     /// <param name="segmentBaseUri">Absolute URI of the package folder, with a trailing slash.</param>
     /// <param name="keyUri">The tokenised key URL to substitute in.</param>
     /// <param name="previewLimit">Null for the full song.</param>
-    /// <param name="segmentSasQuery">
-    /// Read SAS for the streaming container, without the leading <c>?</c>, or null when the container
-    /// needs no credential. The container is private, so in practice this is always supplied.
+    /// <param name="segmentSasFactory">
+    /// Given a segment's file name, the read SAS query for that <em>one</em> blob without the leading
+    /// <c>?</c> — or null when segments need no credential. Per segment rather than one query for
+    /// them all, because a shared credential would reach the segments a preview deliberately omits.
     /// </param>
     public static string Rewrite(
         string rawManifest,
         Uri segmentBaseUri,
         string keyUri,
         TimeSpan? previewLimit,
-        string? segmentSasQuery = null)
+        Func<string, string?>? segmentSasFactory = null)
     {
         ArgumentNullException.ThrowIfNull(rawManifest);
         ArgumentNullException.ThrowIfNull(segmentBaseUri);
@@ -175,14 +186,16 @@ public sealed class HlsManifestBuilder : IHlsManifestBuilder
             output.AppendJoin('\n', pending).Append('\n');
             pending.Clear();
 
-            var segmentUri = new Uri(segmentBaseUri, line.Trim()).AbsoluteUri;
+            var fileName = line.Trim();
+            var segmentUri = new Uri(segmentBaseUri, fileName).AbsoluteUri;
 
-            // The streaming container is private, so the URL carries a container read SAS. Appended
-            // here rather than folded into segmentBaseUri because Uri resolution against a base
-            // holding a query string would discard it.
-            if (!string.IsNullOrEmpty(segmentSasQuery))
+            // The streaming container is private, so the URL carries a read SAS for this blob.
+            // Appended here rather than folded into segmentBaseUri because Uri resolution against a
+            // base holding a query string would discard it.
+            var segmentSas = segmentSasFactory?.Invoke(fileName);
+            if (!string.IsNullOrEmpty(segmentSas))
             {
-                segmentUri += "?" + segmentSasQuery;
+                segmentUri += "?" + segmentSas;
             }
 
             output.Append(segmentUri).Append('\n');
