@@ -67,6 +67,11 @@ function Get-MediaProcessingSettings {
     $mediaConnection = Require-Setting (Get-MediaProcessingSettingValue $settings "Azure" "StorageAccountConnectionString") "Azure:StorageAccountConnectionString"
     $mediaContainer = Require-Setting (Get-MediaProcessingSettingValue $settings "Azure" "ContainerName") "Azure:ContainerName"
 
+    # The encrypted-HLS container, on the same premium account. Private like every other container:
+    # segment URLs carry a container read SAS the manifest builder stamps on. Everything the
+    # Function writes here is AES-128 ciphertext plus a manifest whose key URI is a placeholder.
+    $streamingContainer = Require-Setting (Get-MediaProcessingSettingValue $settings "Azure" "StreamingContainerName") "Azure:StreamingContainerName"
+
     # "AzureLowSpeed" is the standard general-purpose account. Premium accounts have no Queue
     # service at all, which is the entire reason there are two storage accounts - and why the
     # queues live on the account whose name refers to its tier.
@@ -75,6 +80,7 @@ function Get-MediaProcessingSettings {
     $transcodeQueue = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "TranscodeQueueName") "AzureLowSpeed:TranscodeQueueName"
     $probeQueue = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "ProbeQueueName") "AzureLowSpeed:ProbeQueueName"
     $matchQueue = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "MatchQueueName") "AzureLowSpeed:MatchQueueName"
+    $packageQueue = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "PackageQueueName") "AzureLowSpeed:PackageQueueName"
 
     $apiKeyProperty = $settings.PSObject.Properties["MediaProcessingApiKey"]
     $apiKey = if ($null -ne $apiKeyProperty) { $apiKeyProperty.Value } else { $null }
@@ -111,9 +117,11 @@ function Get-MediaProcessingSettings {
         "MediaProcessing:TranscodeQueueName"   = $transcodeQueue
         "MediaProcessing:ProbeQueueName"       = $probeQueue
         "MediaProcessing:MatchQueueName"       = $matchQueue
+        "MediaProcessing:PackageQueueName"     = $packageQueue
 
         "MediaProcessing:StagingContainerName" = $stagingContainer
         "MediaProcessing:MediaContainerName"   = $mediaContainer
+        "MediaProcessing:StreamingContainerName" = $streamingContainer
 
         "CallbackBaseUrl"                      = $callbackBaseUrl
         "MediaProcessingApiKey"                = $apiKey

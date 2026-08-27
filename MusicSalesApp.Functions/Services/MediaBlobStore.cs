@@ -84,6 +84,27 @@ public interface IMediaBlobStore
         Stream content,
         string contentType,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes one file of an encrypted HLS package into the streaming container.
+    ///
+    /// <para>
+    /// Only ciphertext produced by <c>IHlsPackager</c> and the manifest describing it may be written
+    /// here. The container is private, but its contents are handed to listeners under a container
+    /// read SAS, so anything unencrypted put here goes straight to whoever is listening.
+    /// </para>
+    ///
+    /// <para>
+    /// Overwrites unconditionally, which is what makes a queue redelivery idempotent: the folder is
+    /// the <c>HlsStreamId</c> the web app minted and put in the message, so a second attempt
+    /// rewrites the same paths rather than orphaning a folder per try.
+    /// </para>
+    /// </summary>
+    Task UploadStreamingAsync(
+        string blobPath,
+        Stream content,
+        string contentType,
+        CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -91,6 +112,7 @@ public sealed class MediaBlobStore : IMediaBlobStore
 {
     private readonly Lazy<BlobContainerClient> _staging;
     private readonly Lazy<BlobContainerClient> _media;
+    private readonly Lazy<BlobContainerClient> _streaming;
 
     /// <remarks>
     /// Both clients are built on first use rather than here. The two accounts serve different
@@ -111,6 +133,15 @@ public sealed class MediaBlobStore : IMediaBlobStore
         {
             var opts = options.Value;
             return new BlobContainerClient(opts.MediaStorageConnectionString, opts.MediaContainerName);
+        });
+
+        // Same account as _media, different container. Lazy for the same reason the others are: a
+        // settings mistake on the streaming container must not break the upload path, which never
+        // touches it.
+        _streaming = new Lazy<BlobContainerClient>(() =>
+        {
+            var opts = options.Value;
+            return new BlobContainerClient(opts.MediaStorageConnectionString, opts.StreamingContainerName);
         });
     }
 
@@ -205,6 +236,23 @@ public sealed class MediaBlobStore : IMediaBlobStore
     {
         content.Position = 0;
         await _media.Value.GetBlobClient(blobPath).UploadAsync(
+            content,
+            new BlobUploadOptions
+            {
+                HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task UploadStreamingAsync(
+        string blobPath,
+        Stream content,
+        string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        content.Position = 0;
+        await _streaming.Value.GetBlobClient(blobPath).UploadAsync(
             content,
             new BlobUploadOptions
             {

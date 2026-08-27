@@ -32,7 +32,7 @@ public class MobileSongMapperVariantTests
         _personas.Setup(s => s.GetPersonaImageSasUrl(It.IsAny<string>(), It.IsAny<TimeSpan>()))
             .Returns((string path, TimeSpan _) => $"https://persona.test/{path}?sig=abc");
 
-        _mapper = new MobileSongMapper(_storage.Object, _personas.Object);
+        _mapper = new MobileSongMapper(_storage.Object, _personas.Object, Mock.Of<IHlsStreamUrlFactory>());
     }
 
     private static SongMetadata Song(string coverWidths = null, string personaWidths = null) => new()

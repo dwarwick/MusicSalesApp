@@ -1,3 +1,5 @@
+import { attach as attachHls, detach as detachHls, effectiveDuration } from '/js/hls-player.js';
+
 // Volume persistence via localStorage
 const VOLUME_STORAGE_KEY = 'streamtunes_volume';
 const DEFAULT_VOLUME = 0.4;
@@ -31,7 +33,12 @@ function resolveAudioElement(audioElement) {
 let playerState = {
     isRestricted: false,
     maxDuration: 60,
-    hasReachedLimit: false
+    hasReachedLimit: false,
+
+    // The current track's true length, from the server. A free-preview listener's manifest is
+    // truncated, so the media element only knows about the first 60 seconds. Held per player rather
+    // than per module because a playlist changes track without re-initialising.
+    trackLengthSeconds: 0
 };
 
 // Stream tracking state for album player
@@ -45,7 +52,7 @@ let streamTracker = {
     isSeeking: false
 };
 
-export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30) {
+export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30, trackLengthSeconds = 0) {
     audioElement = resolveAudioElement(audioElement);
     if (!audioElement) return;
 
@@ -53,6 +60,7 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
     playerState.isRestricted = isRestricted;
     playerState.maxDuration = maxDuration;
     playerState.hasReachedLimit = false;
+    playerState.trackLengthSeconds = trackLengthSeconds;
 
     // Update stream threshold from server-provided value
     STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
@@ -110,17 +118,18 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
         dotNetRef.invokeMethodAsync('UpdateTime', audioElement.currentTime);
     });
 
-    audioElement.addEventListener('durationchange', () => {
-        if (!isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
-            dotNetRef.invokeMethodAsync('UpdateDuration', audioElement.duration);
+    // Reports the SONG length, not the media element's. On a free preview the manifest is truncated
+    // to 60s, so the element would report a one-minute song and the preview marker would sit at the
+    // far right of the bar - telling the listener the opposite of what it means.
+    const reportDuration = () => {
+        const duration = effectiveDuration(audioElement, playerState.trackLengthSeconds);
+        if (duration > 0) {
+            dotNetRef.invokeMethodAsync('UpdateDuration', duration);
         }
-    });
+    };
 
-    audioElement.addEventListener('loadedmetadata', () => {
-        if (!isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
-            dotNetRef.invokeMethodAsync('UpdateDuration', audioElement.duration);
-        }
-    });
+    audioElement.addEventListener('durationchange', reportDuration);
+    audioElement.addEventListener('loadedmetadata', reportDuration);
 
     audioElement.addEventListener('ended', () => {
         dotNetRef.invokeMethodAsync('AudioEnded');
@@ -129,13 +138,15 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
     // Set initial volume from saved preference
     audioElement.volume = getSavedVolume();
 
-    // Force load the metadata if not already loaded
-    if (audioElement.readyState >= 1 && !isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
-        dotNetRef.invokeMethodAsync('UpdateDuration', audioElement.duration);
-    } else {
-        // Trigger metadata load
-        audioElement.load();
-    }
+    // Report the duration if the element already has it.
+    //
+    // The else branch used to call load(), and on this player that was actively harmful: attach()
+    // runs at the top of this same function, so load() at the bottom reset the element and tore
+    // down the MediaSource hls.js had just attached. hls.js keeps fetching the manifest, key and
+    // segments regardless, so the network tab looks perfect while play() rejects with
+    // NotSupportedError. Duration arrives without it - hls.js raises loadedmetadata once it has
+    // parsed the manifest, and the native path calls load() inside attach().
+    reportDuration();
 }
 
 // updateRestrictionState() was removed with the redesign: it was exported but never invoked
@@ -167,7 +178,7 @@ export function seekToPosition(audioElement, offsetX, progressBarWidth, isRestri
     audioElement = resolveAudioElement(audioElement);
     if (audioElement && progressBarWidth > 0) {
         const percentage = offsetX / progressBarWidth;
-        let newTime = audioElement.duration * percentage;
+        let newTime = effectiveDuration(audioElement, playerState.trackLengthSeconds) * percentage;
 
         // Enforce max duration limit for restricted users
         if (isRestricted && newTime > maxDuration) {
@@ -199,17 +210,25 @@ export function getDuration(audioElement) {
 export function setTrackSource(audioElement, src) {
     audioElement = resolveAudioElement(audioElement);
     if (audioElement && src) {
-        audioElement.src = src;
-        audioElement.load();
+        // attach() tears down any previous hls.js instance before creating the next one. A
+        // playlist changes source on every track, so without that a thirty-track playlist ends up
+        // with thirty live players each holding a worker and a fetch loop.
+        // No load() here: attach() does it on the native path, and calling it after attachMedia()
+        // would tear down the MediaSource hls.js just attached.
+        attachHls(audioElement, src);
     }
 }
 
 // Change the track source for album playback (used when transitioning to next/previous track)
 // isRestricted parameter updates the player state for the new track
 // songMetadataId updates the stream tracking for the new track
-export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0, streamThresholdSeconds = null) {
+export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0, streamThresholdSeconds = null, trackLengthSeconds = 0) {
     audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
+        // The new track has its own length; keeping the previous one would mislabel it and put the
+        // preview marker in the wrong place.
+        playerState.trackLengthSeconds = trackLengthSeconds;
+
         // Update restriction state if provided
         if (isRestricted !== null) {
             playerState.isRestricted = isRestricted;
@@ -234,11 +253,10 @@ export function changeTrack(audioElement, newSrc, isRestricted = null, songMetad
         audioElement.pause();
         audioElement.currentTime = 0;
 
-        // Set new source
-        audioElement.src = newSrc;
-
-        // Load and play
-        audioElement.load();
+        // Set new source. attach() disposes the outgoing hls.js instance first.
+        // Set new source. attach() disposes the outgoing hls.js instance and, on the native path,
+        // calls load() itself - doing it here would tear down the MediaSource on the hls.js path.
+        attachHls(audioElement, newSrc);
 
         const playWhenReady = () => {
             audioElement.play().catch(err => {
@@ -268,7 +286,7 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
         const width = rect.width;
         if (width > 0) {
             const percentage = Math.max(0, Math.min(1, offsetX / width));
-            let newTime = audioElement.duration * percentage;
+            let newTime = effectiveDuration(audioElement, playerState.trackLengthSeconds) * percentage;
 
             // Enforce max duration limit for restricted users (uses current state)
             if (playerState.isRestricted && newTime > playerState.maxDuration) {
@@ -403,4 +421,14 @@ export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) 
     document.addEventListener('touchend', () => {
         isDragging = false;
     });
+}
+/**
+ * Releases the hls.js instance attached to this element.
+ *
+ * Called from the component's DisposeAsync. Matters more here than on the single-song player: a
+ * playlist attaches a new instance per track, so leaving the last one alive leaves a worker and a
+ * segment fetch loop running after the page is gone.
+ */
+export function disposeAudioPlayer(audioElement) {
+    detachHls(resolveAudioElement(audioElement));
 }

@@ -82,6 +82,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Map file names to song metadata IDs
     private Dictionary<string, int> _songMetadataIds = new Dictionary<string, int>();
 
+    // File name to the song's true length in seconds, from SongMetadata rather than from the media
+    // element - see where it is populated.
+    private Dictionary<string, double> _songTrackLengths = new Dictionary<string, double>();
+
     // Map song metadata IDs to stream counts
     private Dictionary<int, int> _streamCounts = new Dictionary<int, int>();
 
@@ -259,7 +263,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             var isRestricted = IsCurrentPlayingTrackRestricted();
             var songMetadataId = GetCurrentPlayingSongMetadataId();
             var streamQualifyingSeconds = GetCurrentPlayingStreamQualifyingSeconds();
-            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, isRestricted, PREVIEW_DURATION_SECONDS, songMetadataId, streamQualifyingSeconds);
+            // The song's true length goes to JS as well, because a preview listener's media element
+            // only knows about the first 60 seconds.
+            var trackLengthSeconds = GetTrackLengthSeconds(_playingFileName);
+
+            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, isRestricted, PREVIEW_DURATION_SECONDS, songMetadataId, streamQualifyingSeconds, trackLengthSeconds);
             await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
             await _jsModule.InvokeVoidAsync("setupCardVolumeBarDrag", _activeVolumeBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
 
@@ -271,10 +279,27 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 initialTrackUrl = await GetTrackStreamUrlAsync(_playingFileName);
             }
 
-            if (!string.IsNullOrWhiteSpace(initialTrackUrl))
+            if (string.IsNullOrWhiteSpace(initialTrackUrl))
             {
-                await _jsModule.InvokeVoidAsync("setTrackSource", _activeAudioElement, initialTrackUrl);
+                // Play used to be attempted regardless, which produced the least helpful failure
+                // available: the element had no source, so play() rejected with
+                // "NotSupportedError: no supported source was found" - an error describing the
+                // symptom while the actual reason sat in the server log, invisible to whoever was
+                // looking at the browser. Stop here instead, and say so on both sides.
+                Logger.LogWarning(
+                    "No playable source for {FileName}; not attempting playback.",
+                    _playingFileName);
+
+                await _jsModule.InvokeVoidAsync(
+                    "reportNoSource",
+                    $"No playable source for '{_playingFileName}'.");
+
+                _isActuallyPlaying = false;
+                await InvokeAsync(StateHasChanged);
+                return;
             }
+
+            await _jsModule.InvokeVoidAsync("setTrackSource", _activeAudioElement, initialTrackUrl);
 
             // Auto-play when card is initialized
             await _jsModule.InvokeVoidAsync("playCard", _activeAudioElement);
@@ -353,6 +378,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 // mounted player. Leaving them attached would keep animation loops running against
                 // a page that is going away.
                 await _jsModule.InvokeVoidAsync("disposeLazyCardAnimations");
+
+                // Same reasoning for the audio: the hls.js instance holds a worker and a segment
+                // fetch loop that would outlive the page.
+                await _jsModule.InvokeVoidAsync("disposeAudioPlayer", _activeAudioElement);
 
                 await _jsModule.DisposeAsync();
                 _jsModule = null;
@@ -532,6 +561,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 {
                     // Store the metadata ID
                     _songMetadataIds[audioFile.Name] = songMeta.Id;
+
+                    // The song's TRUE length, which the media element can no longer be asked for:
+                    // a free-preview listener gets a manifest truncated to 60 seconds, so the
+                    // element honestly reports a one-minute song. Showing that would mislabel every
+                    // track and peg the preview marker at the end of the bar.
+                    if (songMeta.TrackLength.HasValue)
+                    {
+                        _songTrackLengths[audioFile.Name] = songMeta.TrackLength.Value;
+                    }
                     // Store the stream count
                     _streamCounts[songMeta.Id] = songMeta.NumberOfStreams;
                     // Track if this song should be displayed on the home page
@@ -929,6 +967,23 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         };
     }
 
+
+    /// <summary>
+    /// The song's true length in seconds, or 0 when it is unknown.
+    ///
+    /// <para>
+    /// Comes from <c>SongMetadata.TrackLength</c> rather than from the media element, because a
+    /// free-preview listener is served a manifest truncated to <see cref="PREVIEW_DURATION_SECONDS"/>
+    /// and the element therefore reports a one-minute song. Displaying that would mislabel every
+    /// track and push the preview marker to the far right of the progress bar — the opposite of what
+    /// the marker is for.
+    /// </para>
+    /// </summary>
+    private double GetTrackLengthSeconds(string fileName)
+        => !string.IsNullOrEmpty(fileName) && _songTrackLengths.TryGetValue(fileName, out var length)
+            ? length
+            : 0;
+
     protected int GetSongMetadataId(string fileName)
     {
         return _songMetadataIds.TryGetValue(fileName, out var id) ? id : 0;
@@ -1050,11 +1105,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private class StreamUrlResponseDto
-    {
-        public string Url { get; set; }
-    }
-
     private bool IsImageFile(string fileName)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -1127,35 +1177,52 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _songTitles.TryGetValue(fileName, out var title) ? title : null;
     }
 
-    protected string GetStreamUrl(string fileName)
-    {
-        return $"api/music/{SafeEncodePath(fileName)}";
-    }
-
     /// <summary>
-    /// Gets a direct SAS URL for streaming a track from blob storage.
-    /// Falls back to the controller streaming endpoint if SAS URL is unavailable.
+    /// The encrypted-HLS manifest URL for one card's track.
+    ///
+    /// <para>
+    /// This used to fetch <c>api/music/url/{path}</c> to obtain a SAS — the server asking itself a
+    /// question over HTTP — and fall back to <c>api/music/{path}</c>, an anonymous proxy that served
+    /// the plaintext MP3 to anyone. Both are gone, and there is deliberately no fallback: a fallback
+    /// here would be a way to get the audio without the encryption.
+    /// </para>
+    ///
+    /// <para>
+    /// The row is fetched at play time rather than held for every card on the page. The page carries
+    /// only file-name-to-id for its whole grid, and loading full metadata for every card to serve
+    /// the one the listener eventually clicks would be the wrong trade.
+    /// </para>
     /// </summary>
     private async Task<string> GetTrackStreamUrlAsync(string fileName)
     {
-        var safePath = SafeEncodePath(fileName);
-
-        // Preferred: direct SAS URL from Blob Storage via API
-        try
+        var songMetadataId = GetSongMetadataId(fileName);
+        if (songMetadataId <= 0)
         {
-            var result = await Http.GetFromJsonAsync<StreamUrlResponseDto>($"api/music/url/{safePath}");
-            if (!string.IsNullOrWhiteSpace(result?.Url))
-            {
-                return result.Url;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Failed to get SAS URL for {FileName}; using fallback", fileName);
+            Logger.LogWarning("No metadata id for {FileName}; it cannot be played.", fileName);
+            return null;
         }
 
-        // Fallback: stream through the MusicController
-        return $"api/music/{safePath}";
+        var metadata = await SongMetadataService.GetByIdAsync(songMetadataId);
+        if (metadata == null)
+        {
+            return null;
+        }
+
+        // IsCurrentPlayingTrackRestricted already encodes every exemption this page applies -
+        // subscription, admin, featured song, own song - so the entitlement is simply its inverse.
+        var url = HlsStreamUrls.BuildManifestUrl(
+            metadata,
+            _currentUserId,
+            !IsCurrentPlayingTrackRestricted());
+
+        if (url == null)
+        {
+            Logger.LogWarning(
+                "Song {SongMetadataId} has no encrypted HLS package, so it cannot be played yet.",
+                songMetadataId);
+        }
+
+        return url;
     }
 
     protected CoverArtSource GetAlbumArtSource(string fileName)

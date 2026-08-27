@@ -158,10 +158,11 @@ public class MobilePlaylistController : ControllerBase
 
         var entries = await _playlistService.GetPlaylistSongsAsync(playlistId);
         var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
+        var streamContext = await BuildStreamContextAsync(userId);
 
         var songs = entries
             .Where(up => up.SongMetadata != null && !string.IsNullOrEmpty(up.SongMetadata.Mp3BlobPath))
-            .Select(up => _songMapper.MapToPlaylistSong(up.SongMetadata, SasLifetime, up.Id, streamQualifying))
+            .Select(up => _songMapper.MapToPlaylistSong(up.SongMetadata, SasLifetime, up.Id, streamQualifying, null, streamContext))
             .ToList();
 
         return Ok(new MobilePlaylistSongsDto
@@ -184,11 +185,12 @@ public class MobilePlaylistController : ControllerBase
 
         var recommended = await _recommendationService.GetRecommendedPlaylistAsync(userId);
         var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
+        var streamContext = await BuildStreamContextAsync(userId);
 
         // Materialize the SongMetadata (navigation property was included by service)
         var songs = recommended
             .Where(r => r.SongMetadata != null && !string.IsNullOrEmpty(r.SongMetadata.Mp3BlobPath))
-            .Select(r => _songMapper.MapToPlaylistSong(r.SongMetadata, SasLifetime, userPlaylistId: null, streamQualifying))
+            .Select(r => _songMapper.MapToPlaylistSong(r.SongMetadata, SasLifetime, userPlaylistId: null, streamQualifying, null, streamContext))
             .ToList();
 
         return Ok(new MobilePlaylistSongsDto
@@ -289,9 +291,12 @@ public class MobilePlaylistController : ControllerBase
 
         var available = await _playlistService.GetAvailableSongsForPlaylistAsync(userId, playlistId);
         var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
+
+        // hasSub was checked above and is true on this path, so the context is already known.
+        var streamContext = new MobileStreamContext(userId, true);
         var dtos = available
             .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
-            .Select(m => _songMapper.MapToPlaylistSong(m, SasLifetime, userPlaylistId: null, streamQualifying))
+            .Select(m => _songMapper.MapToPlaylistSong(m, SasLifetime, userPlaylistId: null, streamQualifying, null, streamContext))
             .ToList();
         return Ok(new { songs = dtos, requiresSubscription = false });
     }
@@ -345,4 +350,16 @@ public class MobilePlaylistController : ControllerBase
         var ok = await _playlistService.ReorderPlaylistAsync(playlistId, userId, request.UserPlaylistIds);
         return ok ? NoContent() : BadRequest(new { message = "Failed to reorder playlist." });
     }
+
+    /// <summary>
+    /// Who the playback URLs in this response are for.
+    ///
+    /// <para>
+    /// Resolved once per response rather than per song: entitlement is then baked into each
+    /// manifest token, so a playlist of a hundred tracks costs one subscription lookup rather than a
+    /// hundred, and a subscription lapsing mid-song does not cut the audio off.
+    /// </para>
+    /// </summary>
+    private async Task<MobileStreamContext> BuildStreamContextAsync(int userId)
+        => new(userId, await _subscriptionService.HasActiveSubscriptionAsync(userId));
 }

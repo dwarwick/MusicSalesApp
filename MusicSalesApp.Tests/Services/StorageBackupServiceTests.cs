@@ -19,6 +19,7 @@ public class StorageBackupServiceTests
     private const string MusicContainer = "musiccontainer";
     private const string PersonaContainer = "persona-images";
     private const string KeysContainer = "dataprotection-keys";
+    private const string StreamingContainer = "musicstreaming";
 
     private DbContextOptions<AppDbContext> _options = null!;
     private TestFactory _factory = null!;
@@ -63,7 +64,8 @@ public class StorageBackupServiceTests
         {
             StorageAccountConnectionString = "UseDevelopmentStorage=true",
             ContainerName = MusicContainer,
-            PersonaImageContainerName = PersonaContainer
+            PersonaImageContainerName = PersonaContainer,
+            StreamingContainerName = StreamingContainer
         };
 
         _clock = new ManualTimeProvider();
@@ -98,10 +100,10 @@ public class StorageBackupServiceTests
             Assert.That(stored.ActiveLockKey, Is.EqualTo(1));
             Assert.That(stored.HangfireJobId, Is.EqualTo("job-1"));
             Assert.That(stored.TriggerSource, Is.EqualTo(StorageBackupTriggerSources.Admin));
-            Assert.That(stored.Containers, Has.Count.EqualTo(2));
+            Assert.That(stored.Containers, Has.Count.EqualTo(3));
             Assert.That(
                 stored.Containers.Select(container => container.DestinationContainerName),
-                Is.EquivalentTo(new[] { "backup-musiccontainer", "backup-persona-images" }));
+                Is.EquivalentTo(new[] { "backup-musiccontainer", "backup-persona-images", "backup-musicstreaming" }));
         });
     }
 
@@ -496,7 +498,7 @@ public class StorageBackupServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(context.StorageBackupRuns.Count(), Is.EqualTo(1));
-            Assert.That(finished.Containers, Has.Count.EqualTo(2));
+            Assert.That(finished.Containers, Has.Count.EqualTo(3));
             Assert.That(finished.Status, Is.EqualTo(StorageBackupRunStatus.Completed));
             Assert.That(finished.CopiedCount, Is.Zero);
             Assert.That(finished.SkippedCount, Is.EqualTo(1));
@@ -606,7 +608,7 @@ public class StorageBackupServiceTests
         {
             Assert.That(active, Is.Not.Null);
             Assert.That(active!.Id, Is.EqualTo(run.Id));
-            Assert.That(active.Containers, Has.Count.EqualTo(2));
+            Assert.That(active.Containers, Has.Count.EqualTo(3));
         });
     }
 
@@ -620,10 +622,10 @@ public class StorageBackupServiceTests
     }
 
     [Test]
-    public void GetConfiguredContainerNames_ReturnsTheMediaAndPersonaContainers()
+    public void GetConfiguredContainerNames_ReturnsTheMediaPersonaAndStreamingContainers()
         => Assert.That(
             _service.GetConfiguredContainerNames(),
-            Is.EqualTo(new[] { MusicContainer, PersonaContainer }));
+            Is.EqualTo(new[] { MusicContainer, PersonaContainer, StreamingContainer }));
 
     /// <summary>
     /// The Data Protection key ring is excluded on purpose: it regenerates automatically if lost,
@@ -735,5 +737,64 @@ public class StorageBackupServiceTests
         : IDbContextFactory<AppDbContext>
     {
         public AppDbContext CreateDbContext() => new(options);
+    }
+
+
+    /// <summary>
+    /// The encrypted-HLS container is backed up like any other, and that is the whole point.
+    ///
+    /// <para>
+    /// Every byte in it is derived from the playback master, so skipping it looks like an easy
+    /// saving. It is not: the database is not restored alongside these containers, so after a
+    /// blob-only restore every <c>SongMetadata</c> row still carries its <c>HlsStreamId</c> and every
+    /// one of them points at a folder that would not exist. The catalogue would be silently
+    /// unplayable with a database that looked perfectly healthy.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task Backup_CopiesTheStreamingContainerAlongsideTheMedia()
+    {
+        SetupContainer(MusicContainer, Blob("song.mp3"));
+        SetupContainer(StreamingContainer, Blob("abc/seg-000.ts"));
+
+        var run = await _service.StartBackupAsync(1, "admin@example.com", false);
+        await _service.RunAsync(run.Id);
+
+        _gateway.Verify(
+            gateway => gateway.CopyAsync(
+                StreamingContainer,
+                $"backup-{StreamingContainer}",
+                "abc/seg-000.ts",
+                It.IsAny<string>(),
+                It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task Restore_PutsTheStreamingContainerBack()
+    {
+        SetupContainer($"backup-{StreamingContainer}", Blob("abc/seg-000.ts"));
+
+        var run = await _service.StartRestoreAsync(
+            1,
+            "admin@example.com",
+            new[] { StreamingContainer },
+            StorageRestoreScope.MissingAndDiffering,
+            overwriteNewerLive: true);
+
+        await _service.RunAsync(run.Id);
+
+        _gateway.Verify(
+            gateway => gateway.CopyAsync(
+                $"backup-{StreamingContainer}",
+                StreamingContainer,
+                "abc/seg-000.ts",
+                It.IsAny<string>(),
+                It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

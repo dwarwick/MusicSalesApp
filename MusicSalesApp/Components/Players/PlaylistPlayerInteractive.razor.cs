@@ -340,7 +340,7 @@ namespace MusicSalesApp.Components.Players
                 _dotNetRef = DotNetObjectReference.Create(this);
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/PlaylistPlayerInteractive.razor.js");
 
-                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds());
+                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds(), GetTrackLengthSeconds(_currentTrackIndex) ?? 0);
                 await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
                 await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
 
@@ -518,6 +518,9 @@ namespace MusicSalesApp.Components.Players
             {
                 if (_jsModule != null)
                 {
+                    // Releases the hls.js instance for the track that was playing. A playlist
+                    // attaches a new one per track, so the last one outlives the page without this.
+                    await _jsModule.InvokeVoidAsync("disposeAudioPlayer", _audioElement);
                     await _jsModule.DisposeAsync();
                 }
             }
@@ -1637,29 +1640,72 @@ namespace MusicSalesApp.Components.Players
         /// Calls the storage service directly (Blazor Server runs on the server).
         /// Falls back to the controller streaming endpoint if SAS URL generation fails.
         /// </summary>
+        /// <summary>
+        /// The encrypted-HLS manifest URL for one track, or empty when it has no package yet.
+        ///
+        /// <para>
+        /// This used to mint a read SAS straight to the MP3 — 24 hours for a subscriber, 2 for
+        /// everyone else — with the anonymous <c>api/music/{path}</c> proxy as a fallback. Both are
+        /// gone: the SAS was a link to the complete plaintext file, and the fallback served the same
+        /// file to anyone at all. There is deliberately no fallback now, because a fallback would be
+        /// a way to get the audio without the encryption.
+        /// </para>
+        ///
+        /// <para>
+        /// Entitlement is baked into the token here rather than expressed as a URL lifetime, so a
+        /// non-subscriber receives a manifest that describes only the preview window.
+        /// </para>
+        /// </summary>
         private string GetTrackStreamUrl(string fileName)
         {
-            try
+            if (!_metadataLookup.TryGetValue(fileName, out var metadata) || metadata == null)
             {
-                var hasAccess = _hasActiveSubscription;
-                var lifetime = hasAccess ? TimeSpan.FromHours(24) : TimeSpan.FromHours(2);
-                var uri = AzureStorageService.GetReadSasUri(fileName, lifetime);
-                if (uri != null)
-                {
-                    return uri.ToString();
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Failed to get SAS URL for track {FileName}; using fallback", fileName);
+                Logger.LogWarning("No metadata for track {FileName}; it cannot be played.", fileName);
+                return string.Empty;
             }
 
-            return $"api/music/{SafeEncodePath(fileName)}";
+            var url = HlsStreamUrls.BuildManifestUrl(metadata, _currentUserId, HasFullAccessTo(metadata));
+
+            if (url == null)
+            {
+                Logger.LogWarning(
+                    "Song {SongMetadataId} has no encrypted HLS package, so it cannot be played yet.",
+                    metadata.Id);
+            }
+
+            return url ?? string.Empty;
         }
 
         /// <summary>
-        /// Gets SAS URLs for all tracks by calling the storage service directly.
-        /// No HTTP round-trips needed since Blazor Server runs on the server.
+        /// Whether this listener may hear the whole of one track.
+        ///
+        /// <para>
+        /// Mirrors the per-track exemptions the progress bar already applies: a creator listening to
+        /// their own song, an admin, and a featured song are all unrestricted regardless of
+        /// subscription. Deciding it per track rather than once for the playlist matters, because a
+        /// creator's own playlist can mix their songs with other people's.
+        /// </para>
+        /// </summary>
+        private bool HasFullAccessTo(Models.SongMetadata metadata)
+        {
+            if (_hasActiveSubscription || _isAdmin)
+            {
+                return true;
+            }
+
+            if (metadata.DisplayOnHomePage)
+            {
+                return true;
+            }
+
+            return metadata.Creator != null
+                && _currentUserId.HasValue
+                && metadata.Creator.UserId == _currentUserId.Value;
+        }
+
+        /// <summary>
+        /// Manifest URLs for every track, built in-process. No HTTP round-trips, since Blazor Server
+        /// runs on the server.
         /// </summary>
         private List<string> GetTrackStreamUrlsBatch(List<StorageFileInfo> tracks)
         {
@@ -1714,7 +1760,7 @@ namespace MusicSalesApp.Components.Players
 
             if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
             {
-                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds());
+                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds(), GetTrackLengthSeconds(_currentTrackIndex) ?? 0);
                 _isPlaying = true;
             }
 
@@ -1798,7 +1844,7 @@ namespace MusicSalesApp.Components.Players
 
                 if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
                 {
-                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds());
+                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds(), GetTrackLengthSeconds(_currentTrackIndex) ?? 0);
                     _isPlaying = true; // Set to true since changeTrack auto-plays the next song
                 }
                 await InvokeAsync(StateHasChanged);

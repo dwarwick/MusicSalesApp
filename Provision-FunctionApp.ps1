@@ -336,11 +336,19 @@ $queuesToCreate = @(
     $values["MediaProcessing:TranscodeQueueName"],
     $values["MediaProcessing:ProbeQueueName"],
     $values["MediaProcessing:MatchQueueName"],
+    $values["MediaProcessing:PackageQueueName"],
 
     # HandleTranscodePoison triggers on this one, and a queue trigger will not create it. Its name
     # is the transcode queue's plus "-poison" - the same expression the trigger binds to - so the
     # two cannot drift.
-    "$($values["MediaProcessing:TranscodeQueueName"])-poison"
+    "$($values["MediaProcessing:TranscodeQueueName"])-poison",
+
+    # Same for HandlePackagePoison. This one matters more than it looks: packaging returns its
+    # message to the queue whenever the worker itself could not run, so a genuinely broken source is
+    # only distinguishable from a run of unlucky workers by the retries running out. Without this
+    # queue, a song the backfill can never package leaves its run waiting for a callback that never
+    # comes, and the run never completes.
+    "$($values["MediaProcessing:PackageQueueName"])-poison"
 )
 
 foreach ($queueName in $queuesToCreate) {
@@ -377,19 +385,57 @@ if ($PSCmdlet.ShouldProcess("$stagingAccountName/$stagingContainer", "Create con
     Write-Host "Container '$stagingContainer' is present (public access off)."
 }
 
+
 # ---------------------------------------------------------------------------
-# Blob CORS, so the browser can PUT directly to staging
+# Streaming container
 #
-# Without this a browser upload fails at the preflight with nothing in Serilog, Application Insights
-# or Azure - the request never reaches anything that logs.
+# Holds the encrypted-HLS packages: AES-128 ciphertext segments plus a manifest whose EXT-X-KEY URI
+# is a placeholder the API substitutes per request. None of it is playable without a content key,
+# which only api/stream/{id}/key hands out, and only against a token that lives about a minute.
+#
+# PRIVATE, like every other container here. The original design made this the one public container,
+# so segment URLs would be stable and need no credential - but both storage accounts set
+# allowBlobPublicAccess=false, and that guardrail is worth more than stable URLs. This account holds
+# every song master and the Data Protection key rings, for Production as well as Test, and Test and
+# Production share it. Segment URLs carry a container read SAS instead, stamped on by the manifest
+# builder; signing is local, so it costs no request, and the bytes are ciphertext either way.
+#
+# Segments still go straight from storage to the listener rather than through the SmarterASP shared
+# host, which was the point - that is unchanged.
+#
+# On the PREMIUM account, beside the media container - not the standard one the queues use.
+# ---------------------------------------------------------------------------
+$streamingContainer = $values["MediaProcessing:StreamingContainerName"]
+
+if ($PSCmdlet.ShouldProcess("$mediaAccountName/$streamingContainer", "Create container")) {
+    Invoke-Az @(
+        "storage", "container", "create",
+        "--name", $streamingContainer,
+        "--connection-string", $values["MediaStorageConnectionString"],
+        "--public-access", "off",
+        "--only-show-errors",
+        "--output", "none") | Out-Null
+    Write-Host "Container '$streamingContainer' is present (public access off)."
+}
+# ---------------------------------------------------------------------------
+# Blob CORS
+#
+# Two accounts need it, for opposite directions:
+#
+#   - Staging (Standard): PUT, so the browser can upload a song straight to storage.
+#   - Streaming (Premium): GET, so hls.js can fetch encrypted segments.
+#
+# The second one is easy to miss and fails in a way that looks like a player bug. A native
+# <audio src> load is NOT subject to CORS, but hls.js fetches every segment by XHR, and XHR is.
+# Storage happily serves the segment - the browser then refuses to let the page read it, so the
+# console shows "ERR_FAILED 200 (OK)" and playback simply never starts.
 #
 # TWO THINGS TO UNDERSTAND BEFORE CHANGING THIS.
 #
-# It is account-and-service scoped, not container scoped. Test and Production share this storage
-# account, so enabling CORS for one enables it on the other's account in the same call. That is
-# acceptable because CORS is not authentication - every blob still requires a SAS and no container
-# has public access - but it does mean this step cannot be confined to one environment. The app-level
-# feature flag is what makes the rollouts independent.
+# It is account-and-service scoped, not container scoped. Test and Production share both accounts,
+# so enabling CORS for one enables it on the other's containers in the same call. That is acceptable
+# because CORS is not authentication - every blob still requires a SAS and no container has public
+# access - but it does mean this step cannot be confined to one environment.
 #
 # And `az storage cors add` APPENDS. Re-running without the check below duplicates the rule every
 # time. Deliberately no `cors clear`: that would wipe the other environment's rule, exactly the
@@ -411,12 +457,6 @@ if ($Environment -ne "Production") {
     $corsOrigins += @("https://localhost:7217", "http://localhost:5000", "https://localhost:5001")
 }
 
-$existingCorsJson = Invoke-Az @(
-    "storage", "cors", "list",
-    "--services", "b",
-    "--connection-string", $values["StagingStorageConnectionString"],
-    "--output", "json") -AllowFailure
-
 # Both shapes handled: `az storage cors list` returns these as comma-delimited STRINGS, not the
 # arrays the rest of its JSON would lead you to expect.
 function ConvertTo-CorsList {
@@ -426,59 +466,109 @@ function ConvertTo-CorsList {
     return @($Value | ForEach-Object { "$_".Trim() })
 }
 
-# An origin only counts as already allowed if the rule granting it also permits the method and the
-# headers a browser PUT actually needs. Matching on origin alone made an unrelated rule - a GET-only
-# one added by hand, or by an older version of this script - report success and skip the PUT rule
-# entirely, so uploads failed with a bare TypeError that appears in no server-side log. That is the
-# exact failure this whole block exists to prevent, and a green provisioning run would have hidden it.
-$originsAllowedForPut = @()
-if ($LASTEXITCODE -eq 0) {
-    $parsedCors = ($existingCorsJson | Out-String) | ConvertFrom-Json
-    # Projected explicitly rather than via member enumeration, for the same Set-StrictMode reason the
-    # lifecycle block documents below - an account with no CORS rules yet returns an empty array.
-    foreach ($rule in @($parsedCors)) {
-        $ruleOrigins = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedOrigins"))
-        if ($ruleOrigins.Count -eq 0) { continue }
+function Set-BlobCorsRule {
+    <#
+        .SYNOPSIS
+            Ensures every origin is allowed for the given methods on one storage account.
 
-        $ruleMethods = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedMethods"))
-        $ruleHeaders = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedHeaders"))
+        .DESCRIPTION
+            Shared by the staging (PUT) and streaming (GET) rules because the careful part is
+            identical and was learned the hard way - see RequiredMethod below. Adds only the origins
+            that are missing, and never clears, so the other environment's rule survives.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [string]$AccountName,
+        [Parameter(Mandatory = $true)] [string]$ConnectionString,
+        [Parameter(Mandatory = $true)] [string[]]$Methods,
 
-        $allowsPut = @($ruleMethods | Where-Object { $_ -eq "PUT" }).Count -gt 0
-        $allowsHeaders = @($ruleHeaders | Where-Object { $_ -eq "*" }).Count -gt 0
+        # The one method that decides whether an existing rule already covers an origin. Matching on
+        # origin alone made an unrelated rule - a GET-only one added by hand, or by an older version
+        # of this script - report success and skip adding the PUT rule entirely, so uploads failed
+        # with a bare TypeError that appears in no server-side log. A green provisioning run would
+        # have hidden it.
+        [Parameter(Mandatory = $true)] [string]$RequiredMethod,
 
-        if ($allowsPut -and $allowsHeaders) {
-            $originsAllowedForPut += $ruleOrigins
+        [Parameter(Mandatory = $true)] [string[]]$Origins,
+        [Parameter(Mandatory = $true)] [string]$Purpose
+    )
+
+    $existingJson = Invoke-Az @(
+        "storage", "cors", "list",
+        "--services", "b",
+        "--connection-string", $ConnectionString,
+        "--output", "json") -AllowFailure
+
+    $alreadyAllowed = @()
+    if ($LASTEXITCODE -eq 0) {
+        $parsed = ($existingJson | Out-String) | ConvertFrom-Json
+        # Projected explicitly rather than via member enumeration, for the same Set-StrictMode reason
+        # the lifecycle block documents below - an account with no CORS rules yet returns an empty
+        # array.
+        foreach ($rule in @($parsed)) {
+            $ruleOrigins = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedOrigins"))
+            if ($ruleOrigins.Count -eq 0) { continue }
+
+            $ruleMethods = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedMethods"))
+            $ruleHeaders = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedHeaders"))
+
+            $allowsMethod = @($ruleMethods | Where-Object { $_ -eq $RequiredMethod }).Count -gt 0
+            $allowsHeaders = @($ruleHeaders | Where-Object { $_ -eq "*" }).Count -gt 0
+
+            if ($allowsMethod -and $allowsHeaders) {
+                $alreadyAllowed += $ruleOrigins
+            }
         }
+    }
+
+    $missing = @($Origins | Where-Object { $alreadyAllowed -notcontains $_ })
+
+    if ($missing.Count -eq 0) {
+        Write-Host "Blob CORS on $AccountName already allows $Purpose from $($Origins -join ', ')."
+        return
+    }
+
+    if ($PSCmdlet.ShouldProcess($AccountName, "Allow blob CORS ($Purpose) from $($missing -join ', ')")) {
+        # Allowed and exposed headers are '*' deliberately, while origins never are. The Azure
+        # storage JS SDK's header set shifts between versions, and hls.js needs Range on a segment
+        # plus the length headers back; a missing allowed-header surfaces as the same opaque
+        # preflight failure as no CORS at all. Origins stay explicit because they are the part that
+        # actually decides who may spend a leaked SAS.
+        # Built as one array first: `Invoke-Az @(...) + $more` would call Invoke-Az with the first
+        # array and then try to add to its result.
+        $corsArgs = @(
+            "storage", "cors", "add",
+            "--services", "b",
+            "--methods") + $Methods + @(
+            "--origins") + $missing + @(
+            "--allowed-headers", "*",
+            "--exposed-headers", "*",
+            "--max-age", "3600",
+            "--connection-string", $ConnectionString,
+            "--output", "none")
+
+        Invoke-Az $corsArgs | Out-Null
+
+        Write-Host "Blob CORS on $AccountName now allows $Purpose from $($missing -join ', ')."
     }
 }
 
-$missingOrigins = @($corsOrigins | Where-Object { $originsAllowedForPut -notcontains $_ })
+# Staging: the browser PUTs a song straight to storage.
+Set-BlobCorsRule `
+    -AccountName $stagingAccountName `
+    -ConnectionString $values["StagingStorageConnectionString"] `
+    -Methods @("PUT", "OPTIONS") `
+    -RequiredMethod "PUT" `
+    -Origins $corsOrigins `
+    -Purpose "PUT"
 
-if ($missingOrigins.Count -eq 0) {
-    Write-Host "Blob CORS already allows PUT from $($corsOrigins -join ', ')."
-}
-elseif ($PSCmdlet.ShouldProcess($stagingAccountName, "Allow blob CORS from $($missingOrigins -join ', ')")) {
-    # Allowed and exposed headers are '*' deliberately, while origins never are. The Azure storage
-    # JS SDK's header set shifts between versions, and a missing allowed-header surfaces as the same
-    # opaque preflight failure as no CORS at all. Origins stay explicit because they are the part
-    # that actually decides who may spend a leaked SAS.
-    # Built as one array first: `Invoke-Az @(...) + $more` would call Invoke-Az with the first array
-    # and then try to add to its result.
-    $corsArgs = @(
-        "storage", "cors", "add",
-        "--services", "b",
-        "--methods", "PUT", "OPTIONS",
-        "--origins") + $missingOrigins + @(
-        "--allowed-headers", "*",
-        "--exposed-headers", "*",
-        "--max-age", "3600",
-        "--connection-string", $values["StagingStorageConnectionString"],
-        "--output", "none")
-
-    Invoke-Az $corsArgs | Out-Null
-
-    Write-Host "Blob CORS now allows $($missingOrigins -join ', ')."
-}
+# Streaming: hls.js GETs every encrypted segment by XHR, which is CORS-checked.
+Set-BlobCorsRule `
+    -AccountName $mediaAccountName `
+    -ConnectionString $values["MediaStorageConnectionString"] `
+    -Methods @("GET", "HEAD", "OPTIONS") `
+    -RequiredMethod "GET" `
+    -Origins $corsOrigins `
+    -Purpose "GET"
 
 # ---------------------------------------------------------------------------
 # Staging lifecycle rule

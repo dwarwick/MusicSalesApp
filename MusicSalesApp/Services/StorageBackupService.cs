@@ -86,11 +86,26 @@ public sealed class StorageBackupService : IStorageBackupService
         // Revisit this if the app ever enables Identity's ProtectPersonalData, or starts protecting
         // anything long-lived and persisted. At that point losing the ring becomes permanent data
         // loss and the key-ring container must be added back here.
+        //
+        // (Encrypted-HLS content keys do NOT trip that condition: they are wrapped with a config-held
+        // key, precisely so they do not depend on a ring designed to be disposable.)
+        //
+        // The streaming container IS backed up, even though every byte in it is derived from the
+        // playback master sitting in ContainerName and could in principle be rebuilt by re-running
+        // the packaging pass over the whole catalogue.
+        //
+        // The reason is that a restore has to return a *working product*, and the database is not
+        // restored alongside these containers. After a blob-only restore every SongMetadata row
+        // still carries its HlsStreamId, so every row points at a folder that would not exist -
+        // the manifest endpoint fails for every song while the database looks perfectly healthy.
+        // Rebuilding instead means the catalogue stays down for however long a full re-encode takes.
+        // One extra copy of the audio corpus is cheap next to that outage.
         var names = new List<string>();
         foreach (var name in new[]
                  {
                      options.ContainerName,
-                     options.PersonaImageContainerName
+                     options.PersonaImageContainerName,
+                     options.StreamingContainerName
                  })
         {
             if (string.IsNullOrWhiteSpace(name))

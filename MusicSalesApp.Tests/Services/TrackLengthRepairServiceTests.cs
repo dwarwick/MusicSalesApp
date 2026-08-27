@@ -274,6 +274,16 @@ public class TrackLengthRepairServiceTests
         public Task EnqueueCoverArtMatchAsync(CoverArtMatchRequest request, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
+        public bool IsPackagingConfigured => true;
+
+        public List<AudioPackageRequest> PackageRequests { get; } = new();
+
+        public Task EnqueuePackageAsync(AudioPackageRequest request, CancellationToken cancellationToken = default)
+        {
+            PackageRequests.Add(request);
+            return Task.CompletedTask;
+        }
+
         public Task EnqueueProbesAsync(IEnumerable<AudioProbeRequest> requests, CancellationToken cancellationToken = default)
         {
             Probes.AddRange(requests);

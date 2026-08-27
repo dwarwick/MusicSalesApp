@@ -23,6 +23,18 @@ public sealed class FunctionOptions
 
     public string MediaContainerName { get; set; }
 
+    /// <summary>
+    /// The container encrypted HLS packages are written to, on the same premium account as
+    /// <see cref="MediaContainerName"/>.
+    ///
+    /// <para>
+    /// Private, and everything written here must already be ciphertext. It is served to listeners
+    /// with a container read SAS the web app stamps onto segment URLs, so anything unencrypted put
+    /// here would be handed straight to whoever is listening.
+    /// </para>
+    /// </summary>
+    public string StreamingContainerName { get; set; }
+
     /// <summary>Site root for callbacks - https://davidtest.dev or https://streamtunes.net.</summary>
     public string CallbackBaseUrl { get; set; }
 

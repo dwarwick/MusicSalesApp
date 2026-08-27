@@ -132,6 +132,86 @@ public class SongMetadata
     public double? TrackLength { get; set; }
 
     /// <summary>
+    /// The folder in the streaming container holding this song's encrypted HLS package, or null
+    /// when it has not been packaged yet.
+    ///
+    /// <para>
+    /// Null is the whole rollout mechanism: the backfill selects on it, so a run is resumable with
+    /// no per-item state, and a song without a package simply is not playable through the encrypted
+    /// path yet. Repackaging mints a <b>new</b> id rather than reusing this one, which is what makes
+    /// a package immutable at its path — no cache-busting version is needed, and a half-written
+    /// folder from a failed run can never be confused with the live one.
+    /// </para>
+    ///
+    /// <para>
+    /// Not <see cref="MediaGuid"/>, deliberately. Pre-July-2026 songs have no media GUID, and
+    /// minting one for them would change what <c>SongMediaPaths.FacebookImageFor</c> resolves to
+    /// and break share images already circulating.
+    /// </para>
+    /// </summary>
+    public Guid? HlsStreamId { get; set; }
+
+    /// <summary>
+    /// This song's AES-128 content key, wrapped. Never the raw key — see <c>IHlsContentKeyProtector</c>.
+    ///
+    /// <para>
+    /// Wrapped with a config-held key rather than ASP.NET Data Protection on purpose. The Data
+    /// Protection ring is deliberately excluded from backup (see
+    /// <c>StorageBackupService.GetConfiguredContainerNames</c>) because everything it protects is
+    /// transient; a content key is neither transient nor reproducible, and losing the ring would
+    /// mean re-encoding the entire catalogue.
+    /// </para>
+    /// </summary>
+    [MaxLength(256)]
+    public string HlsKeyProtected { get; set; }
+
+    /// <summary>The package's initialisation vector, lowercase hex, as written into the manifest.</summary>
+    [MaxLength(32)]
+    public string HlsIv { get; set; }
+
+    /// <summary>
+    /// How many segments the package holds. Used to sanity-check a restored package against what
+    /// storage actually contains, so a partial restore is caught by the audit rather than by a
+    /// listener hearing a song cut off.
+    /// </summary>
+    public int? HlsSegmentCount { get; set; }
+
+    /// <summary>The manifest's <c>#EXT-X-TARGETDURATION</c>, in seconds.</summary>
+    public double? HlsTargetDurationSeconds { get; set; }
+
+    /// <summary>When the current package was produced. Null exactly when <see cref="HlsStreamId"/> is.</summary>
+    public DateTime? HlsPackagedAt { get; set; }
+
+    /// <summary>
+    /// Bumped whenever the playback audio at <see cref="Mp3BlobPath"/> is rewritten in place.
+    ///
+    /// <para>
+    /// The audio counterpart of <see cref="CoverArtVariantVersion"/>, and it exists for the same
+    /// reason: under the GUID scheme the playback blob lives at a fixed path, <c>MusicController</c>
+    /// serves it with a year-long <c>immutable</c> cache header, and the MAUI app keys its offline
+    /// cache on a hash of the path. Without a version there is nothing for either cache to notice,
+    /// so a re-transcoded song would serve its old bytes to browsers for a year and to already-synced
+    /// devices forever.
+    /// </para>
+    ///
+    /// <para>
+    /// Harmless until now only because nothing re-transcodes a published song. Emitted as
+    /// <c>?v={n}</c> on audio URLs and as <c>AudioVersion</c> on the mobile DTO.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Starts at 0, not 1</b> — unlike <see cref="CoverArtVariantVersion"/>. The MAUI client folds
+    /// the version into its cache key only when it is greater than zero
+    /// (<c>StableRemoteAssetKey.GetPathHash</c>), so zero is the one value that hashes identically to
+    /// the parameter never having existed. Shipping this column at 1 would change every audio cache
+    /// key at once and silently re-download every user's entire offline library. Zero means "never
+    /// rewritten since first publish", which is true of every existing row and every new upload; the
+    /// first in-place rewrite makes it 1.
+    /// </para>
+    /// </summary>
+    public int AudioContentVersion { get; set; }
+
+    /// <summary>
     /// When this record was created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
+using MusicSalesApp.Middleware;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Controllers
@@ -92,11 +93,42 @@ namespace MusicSalesApp.Controllers
         }
 
         /// <summary>
-        /// Returns all active songs with metadata, album art SAS URLs, and streaming SAS URLs.
-        /// Used by the MAUI Android app to populate the music library.
+        /// Returns all active songs with metadata, album art SAS URLs and playback URLs.
+        /// Used by the MAUI app to populate the music library.
         /// </summary>
+        /// <remarks>
+        /// Three things about this action were wrong together, and each made the others worse.
+        ///
+        /// <para>
+        /// It had <b>no authentication of any kind</b> — no API key, no cookie, no bearer — so a
+        /// single unauthenticated request returned a playable URL for every song in the catalogue.
+        /// <c>[RequireMobileApiKey]</c> now gates it. <c>[AllowAnonymous]</c> stays alongside the
+        /// explicit schemes so in-app browsing before sign-in still works and
+        /// <c>HttpContext.User</c> is still populated for the entitlement check — without the
+        /// schemes listed, the MAUI bearer token is ignored, since this app's default authenticate
+        /// scheme is the Identity cookie.
+        /// </para>
+        ///
+        /// <para>
+        /// It carried <c>[ResponseCache(Duration = 300)]</c> while stamping <b>per-caller</b>
+        /// credentials into the body. A shared cache could serve one listener's URLs to another,
+        /// and the entitlement baked into them belonged to whoever happened to miss the cache
+        /// first. It is <c>NoStore</c> now. If the five minutes are ever needed back for cold-start
+        /// latency, cache the catalogue <em>query</em> server-side and stamp the URLs after the
+        /// cache read — never the HTTP response.
+        /// </para>
+        ///
+        /// <para>
+        /// And it minted 24-hour SAS URLs straight to the MP3s. Those are still produced for the
+        /// mobile app, which has not moved to encrypted HLS yet, but the mapper now also emits an
+        /// <c>HlsUrl</c> and the SAS disappears once mobile uses it.
+        /// </para>
+        /// </remarks>
         [HttpGet("songs")]
-        [ResponseCache(Duration = 300)] // Cache for 5 minutes
+        [RequireMobileApiKey]
+        [Authorize(AuthenticationSchemes = "Identity.Application,Bearer")]
+        [AllowAnonymous]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> GetSongs()
         {
             var allMetadata = await _songMetadataService.GetAllAsync();
@@ -117,15 +149,39 @@ namespace MusicSalesApp.Controllers
             var lyrics = await _lyricsService.GetForSongsAsync(playable.Select(m => m.Id))
                          ?? new Dictionary<int, SongLyrics>();
 
+            // Resolved once for the whole catalogue rather than per song. Entitlement is then baked
+            // into each manifest token, so playing a track hours later does not re-query it - and a
+            // subscription that lapses mid-song does not cut the audio off.
+            var streamContext = await BuildStreamContextAsync();
+
             var songs = playable
                 .Select(m => _songMapper.MapToSongListItem(
                     m,
                     sasLifetime,
                     streamQualifying,
-                    lyrics.TryGetValue(m.Id, out var songLyrics) ? songLyrics : null))
+                    lyrics.TryGetValue(m.Id, out var songLyrics) ? songLyrics : null,
+                    streamContext))
                 .ToList();
 
             return Ok(songs);
+        }
+
+        /// <summary>
+        /// Who the playback URLs in this response are for.
+        ///
+        /// <para>
+        /// Anonymous is a legitimate answer, not a failure: an unauthenticated listener still gets a
+        /// manifest, truncated to the free preview. That is a real improvement over what this
+        /// endpoint used to do, which was hand anyone a link to the whole file.
+        /// </para>
+        /// </summary>
+        private async Task<MobileStreamContext> BuildStreamContextAsync()
+        {
+            var user = await _userManager.GetUserAsync(User);
+
+            return new MobileStreamContext(
+                user?.Id,
+                user != null && await _subscriptionService.HasActiveSubscriptionAsync(user.Id));
         }
 
         // Legacy / fallback streaming endpoint (server proxy)
@@ -163,9 +219,18 @@ namespace MusicSalesApp.Controllers
             return File(stream, contentType, enableRangeProcessing: true);
         }
 
-        // Preferred: obtain a short-lived SAS URL so the browser can stream directly from Blob Storage
-        // Non-subscribers and unauthenticated users get shorter-lived URLs (for preview only)
-        // Subscribers get longer-lived URLs for full access
+        /// <summary>
+        /// A short-lived SAS URL so the browser can fetch a media blob directly from Blob Storage.
+        ///
+        /// <para>
+        /// <b>Images only.</b> This used to hand out SAS URLs for audio as well, and the subscription
+        /// check only chose between a 24-hour and a 2-hour lifetime — so an anonymous caller still
+        /// received a working link to the complete MP3. Audio now goes through
+        /// <c>StreamController</c> as encrypted HLS, and <see cref="IsRegisteredPublicMediaPathAsync"/>
+        /// no longer admits an audio path at all, which is what makes that impossible rather than
+        /// merely unused.
+        /// </para>
+        /// </summary>
         [HttpGet("url/{*fileName}")]
         [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> GetStreamUrl(string fileName)
@@ -176,19 +241,9 @@ namespace MusicSalesApp.Controllers
             if (!await IsRegisteredPublicMediaPathAsync(fileName))
                 return NotFound();
 
-            // Check if user is authenticated and has active subscription
-            var user = await _userManager.GetUserAsync(User);
-            bool hasAccess = false;
-            
-            if (user != null)
-            {
-                hasAccess = await _subscriptionService.HasActiveSubscriptionAsync(user.Id);
-            }
-
-            // Subscribers get 24 hour SAS URLs for full streaming
-            // Non-subscribers get 2 hour SAS URLs (sufficient for preview but needs refresh for extended use)
-            var lifetime = hasAccess ? TimeSpan.FromHours(24) : TimeSpan.FromHours(2);
-            var uri = _storageService.GetReadSasUri(fileName, lifetime);
+            // Images are not gated by subscription and never were, so there is no entitlement check
+            // left here to make. The lifetime is uniform for the same reason.
+            var uri = _storageService.GetReadSasUri(fileName, TimeSpan.FromHours(2));
 
             return Ok(new { url = uri.ToString() });
         }
@@ -221,8 +276,16 @@ namespace MusicSalesApp.Controllers
 
             if (!isVariant)
             {
-                return string.Equals(metadata.Mp3BlobPath, fileName, StringComparison.Ordinal)
-                    || string.Equals(metadata.ImageBlobPath, fileName, StringComparison.Ordinal);
+                // Cover art only. Mp3BlobPath used to be admitted here, which made this an
+                // unauthenticated download of any published song: GET api/music/{guid}/{guid}-music.mp3
+                // returned the whole file to anyone who knew the path, with no account, no
+                // subscription and no preview limit. Encrypting the audio would have been
+                // decorative while this stood.
+                //
+                // Audio is now served exclusively through StreamController as encrypted HLS, where
+                // the manifest is per-listener and the key is gated. Lyrics artifacts are handled
+                // above; nothing else on a song is public.
+                return string.Equals(metadata.ImageBlobPath, fileName, StringComparison.Ordinal);
             }
 
             // A rendition is public only when its master is this song's registered cover art, which
@@ -574,7 +637,18 @@ namespace MusicSalesApp.Controllers
         /// <summary>
         /// Returns a single song DTO by title (for deep linking from shared URLs).
         /// </summary>
+        /// <remarks>
+        /// Gated the same way as <see cref="GetSongs"/>, and it needed it more. A song title is
+        /// public information - it is in the shared URL this endpoint exists to serve - so an
+        /// unauthenticated caller could turn any title into a working link to the plaintext MP3,
+        /// one song at a time, without even needing to know a blob path. The only caller is the MAUI
+        /// app, whose client already sends the API key and the bearer token.
+        /// </remarks>
         [HttpGet("song-by-title/{*title}")]
+        [RequireMobileApiKey]
+        [Authorize(AuthenticationSchemes = "Identity.Application,Bearer")]
+        [AllowAnonymous]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> GetSongByTitle(string title)
         {
             if (string.IsNullOrWhiteSpace(title))
@@ -592,11 +666,15 @@ namespace MusicSalesApp.Controllers
             if (song == null)
                 return NotFound(new { error = "Song not found" });
 
-            var sasLifetime = TimeSpan.FromHours(24);
+            // Two hours rather than the catalogue listing's 24: this is one song fetched at the
+            // moment it is opened, so a long-lived link buys nothing. Passed to the mapper rather
+            // than overwriting its output afterwards, which minted a second SAS to discard the
+            // first.
+            var sasLifetime = TimeSpan.FromHours(2);
             var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
             var songLyrics = await _lyricsService.GetForSongAsync(song.Id);
-            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime, streamQualifying, songLyrics);
-            mappedSong.StreamUrl = _storageService.GetReadSasUri(song.Mp3BlobPath!, TimeSpan.FromHours(2)).ToString();
+            var mappedSong = _songMapper.MapToSongListItem(
+                song, sasLifetime, streamQualifying, songLyrics, await BuildStreamContextAsync());
 
             var streamCount = await _streamCountService.GetStreamCountAsync(song.Id);
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(song.Id);
@@ -620,6 +698,8 @@ namespace MusicSalesApp.Controllers
                 lyricsTimingsPath = mappedSong.LyricsTimingsPath,
                 lyricsVersion = mappedSong.LyricsVersion,
                 streamUrl = mappedSong.StreamUrl,
+                hlsUrl = mappedSong.HlsUrl,
+                audioVersion = mappedSong.AudioVersion,
                 streamCount,
                 streamQualifyingSeconds = mappedSong.StreamQualifyingSeconds,
                 trackLengthSeconds = mappedSong.TrackLengthSeconds,

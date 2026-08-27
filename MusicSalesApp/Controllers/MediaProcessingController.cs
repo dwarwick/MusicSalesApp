@@ -26,6 +26,7 @@ public class MediaProcessingController : ControllerBase
 {
     private readonly IMediaProcessingCompletionService _completionService;
     private readonly IAudioProbeResultHandler _probeResultHandler;
+    private readonly IHlsPackagingResultHandler _packagingResultHandler;
     private readonly IUploadProgressNotifier _progressNotifier;
     private readonly ICoverArtMatchNotifier _matchNotifier;
     private readonly ILyricsAlignmentCompletionService _lyricsCompletionService;
@@ -42,6 +43,7 @@ public class MediaProcessingController : ControllerBase
     public MediaProcessingController(
         IMediaProcessingCompletionService completionService,
         IAudioProbeResultHandler probeResultHandler,
+        IHlsPackagingResultHandler packagingResultHandler,
         IUploadProgressNotifier progressNotifier,
         ICoverArtMatchNotifier matchNotifier,
         ILyricsAlignmentCompletionService lyricsCompletionService,
@@ -51,6 +53,7 @@ public class MediaProcessingController : ControllerBase
     {
         _completionService = completionService;
         _probeResultHandler = probeResultHandler;
+        _packagingResultHandler = packagingResultHandler;
         _progressNotifier = progressNotifier;
         _matchNotifier = matchNotifier;
         _lyricsCompletionService = lyricsCompletionService;
@@ -76,6 +79,31 @@ public class MediaProcessingController : ControllerBase
         }
 
         await _completionService.CompleteAsync(result, cancellationToken);
+        return Ok();
+    }
+
+
+    /// <summary>
+    /// The result of one encrypted-HLS packaging run.
+    ///
+    /// <para>
+    /// <b>This is the only callback whose body carries a secret</b> — the song's content key, in the
+    /// clear. It is safe because the whole route is gated by <c>X-Media-Processing-Key</c> and runs
+    /// over HTTPS, but it means the body must never be logged, echoed in an error, or included in a
+    /// diagnostic dump.
+    /// </para>
+    /// </summary>
+    [HttpPost("package-result")]
+    public async Task<IActionResult> PackageResult(
+        [FromBody] AudioPackageResult result,
+        CancellationToken cancellationToken)
+    {
+        if (result is null || result.SongMetadataId <= 0)
+        {
+            return BadRequest(new { message = "A song id is required." });
+        }
+
+        await _packagingResultHandler.HandleAsync(result, cancellationToken);
         return Ok();
     }
 

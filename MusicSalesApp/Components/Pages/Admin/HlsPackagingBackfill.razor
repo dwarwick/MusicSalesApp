@@ -1,0 +1,258 @@
+@page "/admin/hls-packaging-backfill"
+@rendermode InteractiveServer
+@inherits HlsPackagingBackfillModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@using Syncfusion.Blazor.DropDowns
+@using Syncfusion.Blazor.Grids
+@using Syncfusion.Blazor.ProgressBar
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Encrypted HLS Packaging</PageTitle>
+
+<div class="container-fluid my-4">
+
+    <h3>Encrypted HLS Packaging</h3>
+
+    <div class="alert alert-info">
+        Packages songs as encrypted HLS &mdash; the AES-128 segments and manifest the players stream.
+        New uploads are packaged automatically; this is the one-off pass over everything uploaded
+        beforehand.
+        <hr />
+        <strong>A song with no package cannot be played.</strong> Until this run finishes, songs it
+        has not reached yet will fail to start on the website.
+        <hr />
+        <strong>This run writes only to this environment's container:</strong>
+        @if (_targetContainers.Count > 0)
+        {
+            <text>@string.Join(", ", _targetContainers)</text>
+        }
+        else
+        {
+            <text>(none configured)</text>
+        }
+        <br />
+        Run it here first, confirm the result, then repeat on the next environment.
+        <hr />
+        <strong>Two steps.</strong> When it finishes, run a
+        <a href="/admin/storage-backup">Storage Backup</a>. Until you do there is no recoverable copy
+        of the packages this produced, and a blob restore would leave every song pointing at a folder
+        that no longer exists.
+    </div>
+
+    <div class="alert alert-warning">
+        Unlike the image backfill, <strong>the work does not run on this server</strong> &mdash; it
+        runs in the Azure Function app, one instance per queued song. This page only dispatches, so
+        the run stays <em>Awaiting callbacks</em> long after the button stops doing anything, and the
+        counts below advance as results come back.
+        <hr />
+        <strong>How much runs at once.</strong> <code>host.json</code> pins <code>batchSize: 1</code>,
+        so Azure adds one Function instance per queued message and songs are packaged in parallel.
+        Dispatch is capped at 24 in flight so a large catalogue does not ask for hundreds of
+        instances at once. Two things make a <em>small</em> run look serial anyway: the Consumption
+        scale controller ramps up gradually, and each new instance cold-starts a worker carrying a
+        144&nbsp;MB package with FFmpeg in it. That ramp is a one-off, so a big run parallelises far
+        better than a ten-song one suggests.
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success")">@_message</div>
+    }
+
+    @if (_activeRun != null)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">
+                    @ModeLabel(_activeRun) in progress &mdash; run @_activeRun.Id (@StatusLabel(_activeRun.Status))
+                </h5>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <strong>@ScopeLabel(_activeRun.Scope)</strong>
+                        <span>@RunCounts(_activeRun)</span>
+                    </div>
+                    <SfProgressBar Type="ProgressType.Linear"
+                                   Height="22"
+                                   Value="@PercentComplete(_activeRun)"
+                                   IsIndeterminate="@IsIndeterminate(_activeRun)"
+                                   ShowProgressValue="true">
+                    </SfProgressBar>
+                </div>
+
+                @if (_activeRun.CancellationRequestedAt.HasValue)
+                {
+                    <p class="text-muted mb-2">
+                        Cancellation requested &mdash; no further songs will be queued. Messages already
+                        on the queue will still be processed and still report back; there is no way to
+                        unsend them, and pretending otherwise would leave songs packaged but unrecorded.
+                    </p>
+                }
+
+                <SfButton CssClass="e-outline" Disabled="@_busy" OnClick="CancelRunAsync">Stop Queueing</SfButton>
+            </div>
+        </div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Actions</h5>
+
+            <div class="mb-3" style="max-width: 480px;">
+                <label class="form-label">Which songs</label>
+                <SfDropDownList TValue="HlsPackagingBackfillScope" TItem="ScopeOption"
+                                @bind-Value="_scope" DataSource="@_scopeOptions">
+                    <DropDownListFieldSettings Value="Scope" Text="Name"></DropDownListFieldSettings>
+                </SfDropDownList>
+                <div class="text-muted small mt-1">@ScopeHelp(_scope)</div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+                <SfButton CssClass="e-outline" Disabled="@ActionsDisabled" OnClick="StartDryRunAsync">
+                    Dry Run
+                </SfButton>
+                <SfButton CssClass="cta-primary" Disabled="@ActionsDisabled" OnClick="StartRunAsync">
+                    Start Packaging
+                </SfButton>
+                <SfButton CssClass="e-outline" OnClick="LoadAsync">Refresh</SfButton>
+            </div>
+
+            <div class="text-muted small mt-2">
+                <strong>Dry run</strong> selects and counts the work but queues nothing, so it tells you
+                how many songs are outstanding without spending any Function time. A real run is safe to
+                repeat after an interruption: <em>Missing</em> selects on the package being absent, so
+                re-running picks up only what is still outstanding.
+            </div>
+
+            @if (_activeRun != null)
+            {
+                <p class="mt-2 mb-0 text-muted">Actions are unavailable while a run is active.</p>
+            }
+        </div>
+    </div>
+
+
+    @if (ProjectFor(500) is { } projection500)
+    {
+        <div class="alert alert-secondary mt-3">
+            <strong>Estimating a bigger run.</strong> From the most recent completed run's measured
+            per-song cost and the concurrency it actually achieved, roughly:
+            <ul class="mb-2 mt-2">
+                <li>100 songs &asymp; <strong>@ProjectFor(100)</strong></li>
+                <li>500 songs &asymp; <strong>@projection500</strong></li>
+                <li>1000 songs &asymp; <strong>@ProjectFor(1000)</strong></li>
+            </ul>
+            This is <em>not</em> the elapsed column scaled up. A short run is dominated by Azure's
+            scale-out ramp &mdash; Consumption adds instances gradually and each new one cold-starts a
+            worker carrying a 144&nbsp;MB package with FFmpeg in it &mdash; so ten songs can look
+            almost serial while five hundred reach steady state early and hold it. The projection uses
+            per-song cost, which is a property of the work, divided by the concurrency this
+            environment reached. It errs high: longer runs generally do better than short ones.
+        </div>
+    }
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="mb-0">Run history</h4>
+    </div>
+
+    <SfGrid DataSource="@_runs" AllowPaging="true" AllowSorting="true">
+        <GridPageSettings PageSize="10"></GridPageSettings>
+        <GridColumns>
+            <GridColumn Field="@nameof(HlsPackagingBackfillRun.Id)" HeaderText="Run" Width="80"></GridColumn>
+            <GridColumn HeaderText="Mode" Width="110">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    @ModeLabel(run)
+                </Template>
+            </GridColumn>
+            <GridColumn HeaderText="Scope" Width="150">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    @ScopeLabel(run.Scope)
+                </Template>
+            </GridColumn>
+            <GridColumn HeaderText="Status" Width="150">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    @StatusLabel(run.Status)
+                </Template>
+            </GridColumn>
+            <GridColumn HeaderText="Progress" Width="200">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    @RunCounts(run)
+                </Template>
+            </GridColumn>
+            <GridColumn HeaderText="Elapsed" Width="110">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    @FormatElapsed(run)
+                </Template>
+            </GridColumn>
+            <GridColumn HeaderText="Per song" Width="110">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    @FormatPerSong(run)
+                </Template>
+            </GridColumn>
+            <GridColumn HeaderText="At once" Width="100">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    @FormatConcurrency(run)
+                </Template>
+            </GridColumn>
+            <GridColumn Field="@nameof(HlsPackagingBackfillRun.InitiatedByEmail)" HeaderText="Started by" Width="200"></GridColumn>
+            <GridColumn Field="@nameof(HlsPackagingBackfillRun.CreatedAt)" HeaderText="Created" Format="g" Width="160"></GridColumn>
+            <GridColumn HeaderText="" Width="110">
+                <Template>
+                    @{ var run = (HlsPackagingBackfillRun)context; }
+                    <SfButton CssClass="e-outline e-small" OnClick="@(() => ShowFailuresAsync(run.Id))">
+                        Failures
+                    </SfButton>
+                </Template>
+            </GridColumn>
+        </GridColumns>
+    </SfGrid>
+
+    @if (_selectedRun != null)
+    {
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Run @_selectedRun.Id failures</h5>
+
+                @if (!string.IsNullOrWhiteSpace(_selectedRun.FailureMessage))
+                {
+                    <div class="alert alert-danger">@_selectedRun.FailureMessage</div>
+                }
+
+                @if (_selectedRun.Failures == null || _selectedRun.Failures.Count == 0)
+                {
+                    <p class="text-muted mb-0">No individual song failures were recorded.</p>
+                }
+                else
+                {
+                    @if (_selectedRun.FailedCount > _selectedRun.Failures.Count)
+                    {
+                        <div class="alert alert-warning">
+                            Showing @_selectedRun.Failures.Count of @_selectedRun.FailedCount failures.
+                            Detail is capped so one systemic failure cannot write a row per song; the
+                            counts above stay exact.
+                        </div>
+                    }
+
+                    <SfGrid DataSource="@_selectedRun.Failures" AllowPaging="true">
+                        <GridPageSettings PageSize="10"></GridPageSettings>
+                        <GridColumns>
+                            <GridColumn Field="@nameof(HlsPackagingBackfillFailure.SongMetadataId)" HeaderText="Song" Width="90"></GridColumn>
+                            <GridColumn Field="@nameof(HlsPackagingBackfillFailure.FailureCode)" HeaderText="Code" Width="180"></GridColumn>
+                            <GridColumn Field="@nameof(HlsPackagingBackfillFailure.Reason)" HeaderText="Reason"></GridColumn>
+                            <GridColumn Field="@nameof(HlsPackagingBackfillFailure.OccurredAt)" HeaderText="When" Format="g" Width="160"></GridColumn>
+                        </GridColumns>
+                    </SfGrid>
+                }
+            </div>
+        </div>
+    }
+</div>

@@ -93,6 +93,9 @@ public abstract class BlazorBase : ComponentBase
     protected IImageVariantBackfillService ImageVariantBackfillService { get; set; } = default!;
 
     [Inject]
+    protected IHlsPackagingBackfillService HlsPackagingBackfillService { get; set; } = default!;
+
+    [Inject]
     protected IStreamCountService StreamCountService { get; set; } = default!;
 
     [Inject]
@@ -148,6 +151,18 @@ public abstract class BlazorBase : ComponentBase
 
     [Inject]
     protected IAzureStorageService AzureStorageService { get; set; } = default!;
+
+    /// <summary>
+    /// Builds the encrypted-HLS manifest URL a player should be pointed at.
+    ///
+    /// <para>
+    /// Injected here rather than reached over HTTP, per the rule that Blazor Server calls services
+    /// directly: the players used to fetch <c>api/music/url/{path}</c> to get a SAS, which was a
+    /// round trip from the server to itself.
+    /// </para>
+    /// </summary>
+    [Inject]
+    protected IHlsStreamUrlFactory HlsStreamUrls { get; set; } = default!;
 
     [Inject]
     protected IAdminNotificationService AdminNotificationService { get; set; } = default!;

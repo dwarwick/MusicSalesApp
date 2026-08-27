@@ -44,6 +44,7 @@ public class MediaProcessingControllerTests
         _controller = new MediaProcessingController(
             Mock.Of<IMediaProcessingCompletionService>(),
             Mock.Of<IAudioProbeResultHandler>(),
+            Mock.Of<IHlsPackagingResultHandler>(),
             _progress,
             _matchNotifier,
             Mock.Of<ILyricsAlignmentCompletionService>(),

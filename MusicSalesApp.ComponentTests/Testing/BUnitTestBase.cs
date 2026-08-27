@@ -82,6 +82,10 @@ public abstract class BUnitTestBase
     protected Mock<IImageVariantCoordinator> MockImageVariantCoordinator { get; private set; } = default!;
     protected Mock<ICoverArtUrlBuilder> MockCoverArtUrlBuilder { get; private set; } = default!;
     protected Mock<IImageVariantBackfillService> MockImageVariantBackfillService { get; private set; } = default!;
+
+    protected Mock<IHlsPackagingBackfillService> MockHlsPackagingBackfillService { get; private set; } = default!;
+
+    protected Mock<IHlsStreamUrlFactory> MockHlsStreamUrlFactory { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
     protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
 
@@ -172,6 +176,18 @@ public abstract class BUnitTestBase
             .ReturnsAsync((MusicSalesApp.Models.ImageVariantBackfillRun)null);
         MockImageVariantBackfillService.Setup(service => service.GetTargetContainerNames())
             .Returns(new[] { "musiccontainer", "persona-images" });
+
+        MockHlsPackagingBackfillService = new Mock<IHlsPackagingBackfillService>();
+        MockHlsPackagingBackfillService.Setup(service => service.GetRunsAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.HlsPackagingBackfillRun>());
+        MockHlsPackagingBackfillService.Setup(service => service.GetActiveRunAsync())
+            .ReturnsAsync((MusicSalesApp.Models.HlsPackagingBackfillRun)null);
+        MockHlsPackagingBackfillService.Setup(service => service.GetTargetContainerNames())
+            .Returns(new[] { "musicstreaming" });
+
+        // Returns null by default, which is the honest default: it means "this song has no
+        // encrypted package", the state every song is in until the backfill reaches it.
+        MockHlsStreamUrlFactory = new Mock<IHlsStreamUrlFactory>();
 
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
@@ -560,6 +576,8 @@ public abstract class BUnitTestBase
         // tests assert the URL format the browser will actually receive rather than a stub's echo.
         TestContext.Services.AddSingleton<IPersonaImageUrlBuilder>(new PersonaImageUrlBuilder());
         TestContext.Services.AddSingleton<IImageVariantBackfillService>(MockImageVariantBackfillService.Object);
+        TestContext.Services.AddSingleton<IHlsPackagingBackfillService>(MockHlsPackagingBackfillService.Object);
+        TestContext.Services.AddSingleton<IHlsStreamUrlFactory>(MockHlsStreamUrlFactory.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<IOptions<MobileAppInstallOptions>>(Options.Create(new MobileAppInstallOptions()));
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);

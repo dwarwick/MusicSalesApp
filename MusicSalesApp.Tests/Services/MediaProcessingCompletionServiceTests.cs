@@ -56,6 +56,7 @@ public class MediaProcessingCompletionServiceTests
             // it needs two real storage accounts - so it is stubbed out entirely. Every test here
             // asserts on the decisions around the copy, never on the copy itself.
             Mock.Of<IStagingToMediaCopier>(),
+            Mock.Of<IMediaProcessingQueueClient>(),
             Options.Create(new MediaProcessingOptions()),
             Mock.Of<ILogger<MediaProcessingCompletionService>>());
     }

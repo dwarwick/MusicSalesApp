@@ -26,12 +26,14 @@ builder.Services.Configure<FunctionOptions>(options =>
     options.MediaStorageConnectionString = configuration["MediaStorageConnectionString"];
     options.StagingContainerName = configuration["MediaProcessing:StagingContainerName"];
     options.MediaContainerName = configuration["MediaProcessing:MediaContainerName"];
+    options.StreamingContainerName = configuration["MediaProcessing:StreamingContainerName"];
     options.CallbackBaseUrl = configuration["CallbackBaseUrl"];
     options.MediaProcessingApiKey = configuration["MediaProcessingApiKey"];
 });
 
 builder.Services.AddSingleton<IMediaBlobStore, MediaBlobStore>();
 builder.Services.AddSingleton<IFfmpegAudioProcessor, FfmpegAudioProcessor>();
+builder.Services.AddSingleton<IHlsPackager, HlsPackager>();
 builder.Services.AddSingleton<ICoverArtRenditionGenerator, CoverArtRenditionGenerator>();
 builder.Services.AddSingleton<IOpenAiFileMatcher, OpenAiFileMatcher>();
 
