@@ -60,9 +60,23 @@ function Invoke-Az {
         if (-not $AllowFailure) {
             throw "az $((Get-RedactedAzArguments $Arguments) -join ' ') failed:`n$joined"
         }
+
+        # The whole merged stream on failure: the diagnostic is the point, and nothing parses it.
+        return $output
     }
 
-    return $output
+    # On SUCCESS, drop anything the CLI wrote to stderr.
+    #
+    # 2>&1 above merges the two streams so a failure carries its diagnostic, but az writes warnings
+    # to stderr even when it succeeds - a 32-bit-Python cryptography UserWarning on this machine,
+    # deprecation notices elsewhere - and every caller that pipes this into ConvertFrom-Json then
+    # fails with "Unexpected character encountered while parsing value: D", pointing at a script
+    # that is doing nothing wrong.
+    #
+    # PowerShell surfaces merged stderr as ErrorRecord objects and stdout as strings, so the two are
+    # separable after the fact. Filtering here fixes every JSON-parsing caller at once rather than
+    # each of them learning to strip noise.
+    return @($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
 }
 
 function Get-RedactedAzArguments {
