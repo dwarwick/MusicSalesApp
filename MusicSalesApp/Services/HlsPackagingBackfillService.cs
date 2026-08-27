@@ -51,6 +51,13 @@ public interface IHlsPackagingBackfillService
     /// Asks the running job to stop dispatching. Cooperative, and it only stops <em>dispatch</em> —
     /// messages already on the queue will still be processed and still call back. There is no way to
     /// unsend them, and pretending otherwise would leave songs packaged but unrecorded.
+    ///
+    /// <para>
+    /// A run that has already finished dispatching is <b>ended outright</b> rather than flagged: at
+    /// that point the Hangfire job has returned, so no cooperative flag has a reader, and the run
+    /// would otherwise keep <c>ActiveLockKey</c> until every straggler called back — which a
+    /// dead-lettered message never does.
+    /// </para>
     /// </summary>
     Task RequestCancellationAsync(int runId);
 
@@ -231,6 +238,30 @@ public sealed class HlsPackagingBackfillService : IHlsPackagingBackfillService
         }
 
         run.CancellationRequestedAt = DateTime.UtcNow;
+
+        // Once dispatch is over there is nobody left to observe the flag: the Hangfire job has
+        // returned and everything after it happens in callbacks. Leaving the run in
+        // AwaitingCallbacks would make cancelling appear to work while the run went on holding
+        // ActiveLockKey - and if a dispatched message never calls back at all (dead-lettered, or a
+        // Function that never ran), it would hold that lock forever and StartAsync would refuse
+        // every future run until someone edited the database. Cancelling here therefore ends the run
+        // outright, which is what an operator pressing cancel at this point means.
+        //
+        // Callbacks still landing afterwards stay harmless: they update the counters, and the
+        // completion check acts only on AwaitingCallbacks, so none of them resurrects a run that was
+        // deliberately stopped.
+        if (run.Status == HlsPackagingBackfillStatus.AwaitingCallbacks)
+        {
+            run.Status = HlsPackagingBackfillStatus.Cancelled;
+            run.CompletedAt = DateTime.UtcNow;
+            run.ActiveLockKey = null;
+
+            _logger.LogInformation(
+                "HLS packaging run {RunId} cancelled while awaiting callbacks; {Outstanding} message(s) may still be in flight.",
+                runId,
+                run.OutstandingCount);
+        }
+
         await context.SaveChangesAsync();
     }
 
@@ -493,7 +524,13 @@ public sealed class HlsPackagingBackfillService : IHlsPackagingBackfillService
 
         run.Status = status;
         run.CompletedAt = DateTime.UtcNow;
-        run.FailureMessage = failureMessage;
+
+        // Truncated to the column's width. FailureMessage is nvarchar(2000) and this is handed a raw
+        // ex.Message - an AggregateException's, or a SQL error quoting a whole statement, runs well
+        // past that and throws on save. This is also the path that releases ActiveLockKey, so
+        // throwing here would stand the run's lock up permanently while reporting nothing at all:
+        // the failure that mattered would be replaced by a DbUpdateException about a string length.
+        run.FailureMessage = Truncate(failureMessage, 2000);
 
         // Releasing the lock is what allows the next run to start. Held until here even on the
         // failure path, so a run that died mid-dispatch does not leave a second one racing its
@@ -502,6 +539,9 @@ public sealed class HlsPackagingBackfillService : IHlsPackagingBackfillService
 
         await context.SaveChangesAsync();
     }
+
+    private static string? Truncate(string? value, int maxLength)
+        => string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
 
     private sealed record PackagingCandidate(int SongMetadataId, string SourceBlobPath, Guid HlsStreamId);
 }

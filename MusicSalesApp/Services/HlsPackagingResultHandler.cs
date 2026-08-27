@@ -61,7 +61,7 @@ public sealed class HlsPackagingResultHandler : IHlsPackagingResultHandler
                 result.SongMetadataId,
                 result.HlsStreamId);
 
-            await _sweeper.SweepAsync(result.HlsStreamId, cancellationToken);
+            await SweepAbandonedAsync(song, result.HlsStreamId, cancellationToken);
             await RecordBackfillOutcomeAsync(context, result, succeeded: false, "The song was deleted while it was being packaged.", cancellationToken);
             return;
         }
@@ -76,7 +76,7 @@ public sealed class HlsPackagingResultHandler : IHlsPackagingResultHandler
 
             // The song is untouched and keeps whatever package it already had. A failed repackage
             // must never take a working song off the air.
-            await _sweeper.SweepAsync(result.HlsStreamId, cancellationToken);
+            await SweepAbandonedAsync(song, result.HlsStreamId, cancellationToken);
             await RecordBackfillOutcomeAsync(context, result, succeeded: false, result.Diagnostic ?? result.FailureCode, cancellationToken);
             return;
         }
@@ -87,7 +87,7 @@ public sealed class HlsPackagingResultHandler : IHlsPackagingResultHandler
                 "Packaging song {SongMetadataId} reported success without key material; refusing to record it.",
                 result.SongMetadataId);
 
-            await _sweeper.SweepAsync(result.HlsStreamId, cancellationToken);
+            await SweepAbandonedAsync(song, result.HlsStreamId, cancellationToken);
             await RecordBackfillOutcomeAsync(context, result, succeeded: false, "The packager reported success but sent no key.", cancellationToken);
             return;
         }
@@ -117,7 +117,7 @@ public sealed class HlsPackagingResultHandler : IHlsPackagingResultHandler
                 "Packaging song {SongMetadataId} reported a key that is not valid hex.",
                 result.SongMetadataId);
 
-            await _sweeper.SweepAsync(result.HlsStreamId, cancellationToken);
+            await SweepAbandonedAsync(song, result.HlsStreamId, cancellationToken);
             await RecordBackfillOutcomeAsync(context, result, succeeded: false, "The packager sent a malformed key.", cancellationToken);
             return;
         }
@@ -148,12 +148,52 @@ public sealed class HlsPackagingResultHandler : IHlsPackagingResultHandler
     }
 
     /// <summary>
-    /// Advances the backfill run this song belonged to, if any, and saves everything in one write.
+    /// Removes a package folder, unless the song's row is currently being served from it.
+    ///
+    /// <para>
+    /// The guard is what stops a failure from taking a working song off the air. Queue delivery is
+    /// at-least-once, so a message whose first attempt succeeded and was recorded can be redelivered;
+    /// if that second attempt then fails, the failure callback names the very <c>HlsStreamId</c> the
+    /// row now points at. Sweeping it unguarded would delete the live package and leave a perfectly
+    /// healthy song answering 503 - the exact outcome the failure paths are written to avoid.
+    /// </para>
+    ///
+    /// <para>
+    /// A null song is the deleted-mid-flight case, where nothing points at the folder and sweeping
+    /// is the whole point.
+    /// </para>
+    /// </summary>
+    private async Task SweepAbandonedAsync(SongMetadata? song, Guid streamId, CancellationToken cancellationToken)
+    {
+        if (song is not null && song.HlsStreamId == streamId)
+        {
+            _logger.LogWarning(
+                "Not sweeping HLS package {StreamId}: song {SongMetadataId} is currently served from it. "
+                + "This is a redelivered message whose earlier attempt already succeeded.",
+                streamId,
+                song.Id);
+
+            return;
+        }
+
+        await _sweeper.SweepAsync(streamId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Commits the song, then advances the backfill run this song belonged to, if any.
     ///
     /// <para>
     /// A run completes on its last callback rather than when its Hangfire job returns — the job only
     /// dispatches messages, and the work happens in Azure. That is the same shape the media-integrity
     /// audit uses.
+    /// </para>
+    ///
+    /// <para>
+    /// The song is committed <b>first and on its own</b>. If the run bookkeeping then fails, this
+    /// method throws, the callback answers non-2xx, and the queue redelivers — and the redelivery
+    /// lands on the idempotency branch above, which calls back in here and finishes the bookkeeping.
+    /// The opposite order has no such recovery: it would leave a counted song unrecorded, and the
+    /// retry would count it twice.
     /// </para>
     /// </summary>
     private async Task RecordBackfillOutcomeAsync(
@@ -163,62 +203,147 @@ public sealed class HlsPackagingResultHandler : IHlsPackagingResultHandler
         string? failureReason,
         CancellationToken cancellationToken)
     {
-        if (result.BackfillRunId is { } runId)
+        await context.SaveChangesAsync(cancellationToken);
+
+        if (result.BackfillRunId is not { } runId)
         {
-            var run = await context.HlsPackagingBackfillRuns
-                .Include(r => r.Failures)
-                .FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
-
-            if (run != null)
-            {
-                if (succeeded)
-                {
-                    run.SucceededCount++;
-
-                    // Only successes contribute: a failed song's time says nothing about how long
-                    // packaging one takes, and would drag the per-song average toward whatever the
-                    // failure happened to cost.
-                    run.TotalProcessingSeconds += Math.Max(0, result.ProcessingSeconds);
-                }
-                else
-                {
-                    run.FailedCount++;
-
-                    // Bounded so one systemic failure cannot write a row per song in the catalogue.
-                    if (run.Failures.Count < HlsPackagingBackfillRun.MaxRecordedFailures)
-                    {
-                        run.Failures.Add(new HlsPackagingBackfillFailure
-                        {
-                            SongMetadataId = result.SongMetadataId,
-                            FailureCode = Truncate(result.FailureCode, 100),
-                            Reason = Truncate(failureReason, 1000),
-                            OccurredAt = DateTime.UtcNow
-                        });
-                    }
-                }
-
-                run.LastCallbackAt = DateTime.UtcNow;
-
-                // A run finishes on its last callback, not when its Hangfire job returns - the job
-                // only dispatched messages. Completion is therefore decided here, and only once
-                // dispatch has actually finished: while the job is still enqueueing, an outstanding
-                // count of zero just means the callbacks are keeping up with it.
-                if (run.Status == HlsPackagingBackfillStatus.AwaitingCallbacks && run.OutstandingCount == 0)
-                {
-                    run.Status = HlsPackagingBackfillStatus.Completed;
-                    run.CompletedAt = DateTime.UtcNow;
-                    run.ActiveLockKey = null;
-
-                    _logger.LogInformation(
-                        "HLS packaging run {RunId} completed: {Succeeded} succeeded, {Failed} failed.",
-                        run.Id,
-                        run.SucceededCount,
-                        run.FailedCount);
-                }
-            }
+            return;
         }
 
+        var now = DateTime.UtcNow;
+        var processingSeconds = Math.Max(0, result.ProcessingSeconds);
+
+        // Incremented BY THE DATABASE, not read-modify-written here.
+        //
+        // Up to MaxInFlightMessages callbacks are in flight at once and they land on whatever web
+        // instance happens to serve each one, so two of them routinely load the same row, each add
+        // one to the value they read, and one increment is lost. That is not merely a cosmetic
+        // miscount: a run completes when DispatchedCount - Succeeded - Failed reaches zero, so one
+        // lost increment means it never reaches it. The run then sits in AwaitingCallbacks forever
+        // still holding ActiveLockKey - and since StartAsync refuses to start while any run holds
+        // that lock, no future run could ever be started without someone editing the database.
+        var affected = succeeded
+            ? await context.HlsPackagingBackfillRuns
+                .Where(run => run.Id == runId)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(run => run.SucceededCount, run => run.SucceededCount + 1)
+
+                        // Only successes contribute: a failed song's time says nothing about how long
+                        // packaging one takes, and would drag the per-song average toward whatever
+                        // the failure happened to cost.
+                        .SetProperty(run => run.TotalProcessingSeconds, run => run.TotalProcessingSeconds + processingSeconds)
+                        .SetProperty(run => run.LastCallbackAt, now),
+                    cancellationToken)
+            : await context.HlsPackagingBackfillRuns
+                .Where(run => run.Id == runId)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(run => run.FailedCount, run => run.FailedCount + 1)
+                        .SetProperty(run => run.LastCallbackAt, now),
+                    cancellationToken);
+
+        if (affected == 0)
+        {
+            // The run was deleted while its messages were still being processed. The song's own
+            // package is recorded either way, which is what actually matters.
+            return;
+        }
+
+        if (!succeeded)
+        {
+            await RecordFailureRowAsync(context, runId, result, failureReason, cancellationToken);
+        }
+
+        await TryCompleteAsync(context, runId, now, cancellationToken);
+    }
+
+    /// <summary>
+    /// Records one failed song for the admin page's failure table, up to the per-run cap.
+    ///
+    /// <para>
+    /// Bounded so one systemic failure - a misconfigured queue, a Function that cannot start -
+    /// cannot write a row per song in the catalogue and turn a diagnostic aid into a second
+    /// incident. The counters stay exact regardless; only the detail is capped.
+    /// </para>
+    /// </summary>
+    private static async Task RecordFailureRowAsync(
+        AppDbContext context,
+        int runId,
+        AudioPackageResult result,
+        string? failureReason,
+        CancellationToken cancellationToken)
+    {
+        var recorded = await context.HlsPackagingBackfillFailures
+            .CountAsync(failure => failure.RunId == runId, cancellationToken);
+
+        if (recorded >= HlsPackagingBackfillRun.MaxRecordedFailures)
+        {
+            return;
+        }
+
+        context.HlsPackagingBackfillFailures.Add(new HlsPackagingBackfillFailure
+        {
+            RunId = runId,
+            SongMetadataId = result.SongMetadataId,
+            FailureCode = Truncate(result.FailureCode, 100),
+            Reason = Truncate(failureReason, 1000),
+            OccurredAt = DateTime.UtcNow
+        });
+
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Finishes the run if this was its last outstanding callback.
+    ///
+    /// <para>
+    /// Decided here rather than in the Hangfire job because the job only dispatched messages. The
+    /// status is checked as part of the UPDATE rather than before it, so two callbacks arriving at
+    /// the same moment cannot both claim the completion, and a run an operator has since cancelled
+    /// is not quietly resurrected into Completed.
+    /// </para>
+    ///
+    /// <para>
+    /// The zero check only counts once dispatch has finished: while the job is still enqueueing, an
+    /// outstanding count of zero just means the callbacks are keeping up with it.
+    /// </para>
+    /// </summary>
+    private async Task TryCompleteAsync(
+        AppDbContext context,
+        int runId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var run = await context.HlsPackagingBackfillRuns
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Id == runId, cancellationToken);
+
+        if (run is not { Status: HlsPackagingBackfillStatus.AwaitingCallbacks } || run.OutstandingCount > 0)
+        {
+            return;
+        }
+
+        var completed = await context.HlsPackagingBackfillRuns
+            .Where(candidate => candidate.Id == runId
+                && candidate.Status == HlsPackagingBackfillStatus.AwaitingCallbacks)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(candidate => candidate.Status, HlsPackagingBackfillStatus.Completed)
+                    .SetProperty(candidate => candidate.CompletedAt, now)
+
+                    // Releasing the lock is what lets the next run start.
+                    .SetProperty(candidate => candidate.ActiveLockKey, (int?)null),
+                cancellationToken);
+
+        if (completed > 0)
+        {
+            _logger.LogInformation(
+                "HLS packaging run {RunId} completed: {Succeeded} succeeded, {Failed} failed.",
+                runId,
+                run.SucceededCount,
+                run.FailedCount);
+        }
     }
 
     private static string? Truncate(string? value, int maxLength)

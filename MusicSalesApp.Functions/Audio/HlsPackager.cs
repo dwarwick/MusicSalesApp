@@ -22,8 +22,12 @@ public interface IHlsPackager
     /// Segments and encrypts <paramref name="sourcePath"/> into a fresh temporary directory.
     ///
     /// <para>
-    /// The caller owns the returned directory and must delete it recursively, including on the
-    /// failure paths — it holds the plaintext key file as well as the segments.
+    /// The caller owns the returned directory <b>only on a playable result</b>, and must then delete
+    /// it recursively — it holds the plaintext key file as well as the segments. Every other
+    /// outcome deletes it here, because a failure result deliberately carries no
+    /// <c>OutputDirectory</c>: there would be nothing for the caller to delete it by, and the
+    /// earlier contract that asked them to do it anyway left a content key on the worker after
+    /// every failure.
     /// </para>
     /// </summary>
     /// <param name="contentKey">The 16 raw bytes to encrypt with.</param>
@@ -101,6 +105,42 @@ public sealed class HlsPackager : IHlsPackager
             return HlsPackageResult.Inconclusive("LocalIoFailure", Sanitize(ex.Message));
         }
 
+        HlsPackageResult result;
+        try
+        {
+            result = await PackageIntoAsync(ffmpegPath, sourcePath, outputDirectory, contentKey, iv, cancellationToken);
+        }
+        catch
+        {
+            // Covers the cancellation rethrow too. Anything leaving by exception still has to take
+            // the key file with it.
+            TryDeleteDirectory(outputDirectory);
+            throw;
+        }
+
+        // The directory is handed over only on success, so this is the one place the failure paths
+        // can be swept - and they are the paths that most need it. Each one leaves a plaintext
+        // content.key behind on a worker whose disk a later execution reuses.
+        if (result.Status != AudioDecodeStatus.Playable)
+        {
+            TryDeleteDirectory(outputDirectory);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The packaging itself. Leaves <paramref name="outputDirectory"/> in place whatever happens, so
+    /// that its one caller decides what to keep.
+    /// </summary>
+    private async Task<HlsPackageResult> PackageIntoAsync(
+        string ffmpegPath,
+        string sourcePath,
+        string outputDirectory,
+        byte[] contentKey,
+        byte[] iv,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var keyInfoPath = await WriteKeyInfoFileAsync(outputDirectory, contentKey, iv, cancellationToken);
@@ -352,6 +392,27 @@ public sealed class HlsPackager : IHlsPackager
 
     private static string Sanitize(string diagnostic)
         => FfmpegAudioProcessor.SanitizeDecoderDiagnostic(diagnostic);
+
+    /// <summary>
+    /// Removes the packaging directory recursively. Recursive because this is the one FFmpeg call
+    /// that writes a directory rather than a file, and that directory holds the plaintext key.
+    /// </summary>
+    private void TryDeleteDirectory(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Never worth failing the execution over: the host reclaims the instance's disk. Logged
+            // as a warning because a recurring failure here means key material is accumulating.
+            _logger.LogWarning(ex, "Could not delete the HLS packaging directory {Directory}", directory);
+        }
+    }
 
     private static void TryKill(Process process)
     {

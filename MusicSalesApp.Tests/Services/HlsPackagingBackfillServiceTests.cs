@@ -300,6 +300,86 @@ public class HlsPackagingBackfillServiceTests
             () => service.StartAsync(HlsPackagingBackfillScope.Missing, false, 1, "admin@example.com"));
     }
 
+    /// <summary>
+    /// Cancelling a run that is only waiting for callbacks must actually end it.
+    ///
+    /// <para>
+    /// By that point the Hangfire job has returned, so a cooperative flag has no reader: the run
+    /// would sit in AwaitingCallbacks holding ActiveLockKey until every straggler called back. A
+    /// dead-lettered message never calls back, so "until" can mean forever - and StartAsync refuses
+    /// to start anything while the lock is held. Cancel appearing to work while quietly bricking
+    /// every future run is the worst of both.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task CancellingARunAwaitingCallbacks_ReleasesTheLockSoAnotherCanStart()
+    {
+        await using (var context = new AppDbContext(_options))
+        {
+            context.HlsPackagingBackfillRuns.Add(new HlsPackagingBackfillRun
+            {
+                Id = 700,
+                Status = HlsPackagingBackfillStatus.AwaitingCallbacks,
+                ActiveLockKey = 1,
+                TotalItemCount = 10,
+                DispatchedCount = 10,
+                SucceededCount = 9
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await _service.RequestCancellationAsync(700);
+
+        await using (var verify = new AppDbContext(_options))
+        {
+            var run = await verify.HlsPackagingBackfillRuns.SingleAsync(r => r.Id == 700);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(run.Status, Is.EqualTo(HlsPackagingBackfillStatus.Cancelled));
+                Assert.That(run.ActiveLockKey, Is.Null);
+                Assert.That(run.CompletedAt, Is.Not.Null);
+            });
+        }
+
+        // The point of releasing the lock: the next run is startable without a database edit.
+        await AddSongsAsync(Song(1));
+        Assert.DoesNotThrowAsync(() => _service.StartAsync(HlsPackagingBackfillScope.Missing, false, null, null));
+    }
+
+    /// <summary>
+    /// A run still dispatching keeps the cooperative flag, because the job is there to read it.
+    /// </summary>
+    [Test]
+    public async Task CancellingARunStillDispatching_OnlyFlagsIt()
+    {
+        await using (var context = new AppDbContext(_options))
+        {
+            context.HlsPackagingBackfillRuns.Add(new HlsPackagingBackfillRun
+            {
+                Id = 701,
+                Status = HlsPackagingBackfillStatus.Dispatching,
+                ActiveLockKey = 1
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await _service.RequestCancellationAsync(701);
+
+        await using var verify = new AppDbContext(_options);
+        var run = await verify.HlsPackagingBackfillRuns.SingleAsync(r => r.Id == 701);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(run.CancellationRequestedAt, Is.Not.Null);
+            Assert.That(run.Status, Is.EqualTo(HlsPackagingBackfillStatus.Dispatching));
+
+            // Still held: the dispatch loop is what notices the flag and finishes the run properly,
+            // and releasing it here would let a second run race the first one's callbacks.
+            Assert.That(run.ActiveLockKey, Is.EqualTo(1));
+        });
+    }
+
     private sealed class RecordingQueueClient : IMediaProcessingQueueClient
     {
         public bool Configured { get; init; } = true;

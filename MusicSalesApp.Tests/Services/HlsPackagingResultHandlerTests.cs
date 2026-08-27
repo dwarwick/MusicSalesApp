@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -25,17 +27,42 @@ public class HlsPackagingResultHandlerTests
 {
     private const int SongId = 501;
 
+    private SqliteConnection _connection = null!;
+    private List<string> _sql = null!;
     private DbContextOptions<AppDbContext> _options = null!;
     private RecordingSweeper _sweeper = null!;
     private HlsContentKeyProtector _protector = null!;
     private HlsPackagingResultHandler _handler = null!;
 
+    /// <summary>
+    /// Sqlite rather than the InMemory provider every other handler test uses, for two reasons that
+    /// both matter here.
+    ///
+    /// <para>
+    /// The handler increments the run counters with <c>ExecuteUpdateAsync</c> so that concurrent
+    /// callbacks cannot lose one, and InMemory does not implement it at all. More to the point,
+    /// InMemory could not demonstrate the property even if it did: it has no real transactions, so
+    /// the lost update this guards against is not expressible there. Same reasoning as
+    /// <c>SongLikeServiceSetStateConcurrencyTests</c>.
+    /// </para>
+    /// </summary>
     [SetUp]
     public void SetUp()
     {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+
+        _sql = new List<string>();
+
         _options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase($"hls-package-{Guid.NewGuid():N}")
+            .UseSqlite(_connection)
+            .LogTo(line => _sql.Add(line), LogLevel.Information)
             .Options;
+
+        using (var schema = new AppDbContext(_options))
+        {
+            schema.Database.EnsureCreated();
+        }
 
         _sweeper = new RecordingSweeper();
 
@@ -352,6 +379,213 @@ public class HlsPackagingResultHandlerTests
             Assert.That(run3.FailedCount, Is.EqualTo(HlsPackagingBackfillRun.MaxRecordedFailures + 1));
         });
     }
+
+    /// <summary>
+    /// A failure callback must not delete the package the song is currently served from.
+    ///
+    /// <para>
+    /// Queue delivery is at-least-once. A message whose first attempt succeeded and was recorded can
+    /// be redelivered, and if that second attempt fails, the failure names the very stream id the row
+    /// now points at. Sweeping it unguarded takes a healthy song off the air - the manifest endpoint
+    /// starts answering 503 - and nothing in the database looks wrong afterwards, which is what makes
+    /// it expensive to diagnose.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task ARedeliveredFailure_DoesNotSweepThePackageTheSongIsServedFrom()
+    {
+        var liveStreamId = Guid.NewGuid();
+        await GivenSongAsync(liveStreamId, existingKey: "v1.already-wrapped");
+
+        await _handler.HandleAsync(new AudioPackageResult
+        {
+            SongMetadataId = SongId,
+            HlsStreamId = liveStreamId,
+            Outcome = AudioProcessingOutcome.Unplayable,
+            FailureCode = "PackagingFailed",
+            Diagnostic = "the retry could not decode the source"
+        });
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(_sweeper.Swept, Does.Not.Contain(liveStreamId));
+
+            var song = await ReadSongAsync();
+            Assert.That(song.HlsStreamId, Is.EqualTo(liveStreamId), "the song keeps its working package");
+        });
+    }
+
+    /// <summary>
+    /// A failed attempt at a NEW package still sweeps that attempt's own folder.
+    ///
+    /// <para>
+    /// The guard above must not turn into "never sweep": a failed repackage leaves a partial folder
+    /// behind, and nothing else would ever remove it.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task AFailedRepackage_StillSweepsItsOwnAbandonedFolder()
+    {
+        var liveStreamId = Guid.NewGuid();
+        var attemptedStreamId = Guid.NewGuid();
+        await GivenSongAsync(liveStreamId, existingKey: "v1.already-wrapped");
+
+        await _handler.HandleAsync(new AudioPackageResult
+        {
+            SongMetadataId = SongId,
+            HlsStreamId = attemptedStreamId,
+            Outcome = AudioProcessingOutcome.Unplayable,
+            FailureCode = "PackagingFailed",
+            Diagnostic = "bad source"
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_sweeper.Swept, Does.Contain(attemptedStreamId));
+            Assert.That(_sweeper.Swept, Does.Not.Contain(liveStreamId));
+        });
+    }
+
+    /// <summary>
+    /// Many callbacks against one run must add up, and the run must finish and release its lock.
+    ///
+    /// <para>
+    /// This pins the OUTCOME the atomic increment protects, not the race itself: Sqlite serialises
+    /// everything through the one connection these tests share, so the interleaving that loses an
+    /// update cannot be staged here - this test passes against the read-modify-write it replaced.
+    /// <see cref="TheRunCounterIsIncrementedByTheDatabaseRatherThanReadModifyWritten"/> is the one
+    /// that actually discriminates.
+    /// </para>
+    ///
+    /// <para>
+    /// Up to <c>MaxInFlightMessages</c> songs are packaged at once and every one calls back
+    /// independently. Read-modify-writing the counters loses an increment whenever two land together,
+    /// and because a run completes only when
+    /// <c>DispatchedCount - SucceededCount - FailedCount</c> reaches zero, one lost increment means it
+    /// never completes: the run holds <c>ActiveLockKey</c> indefinitely, and <c>StartAsync</c> refuses
+    /// every future run while any run holds it. A miscount here does not degrade the feature, it
+    /// disables the feature permanently.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task ConcurrentCallbacks_EachCountOnce_SoTheRunCanComplete()
+    {
+        const int callbacks = 8;
+
+        var songIds = new List<int>();
+        await using (var context = new AppDbContext(_options))
+        {
+            context.HlsPackagingBackfillRuns.Add(new HlsPackagingBackfillRun
+            {
+                Id = 900,
+                Status = HlsPackagingBackfillStatus.AwaitingCallbacks,
+                ActiveLockKey = 1,
+                TotalItemCount = callbacks,
+                DispatchedCount = callbacks
+            });
+
+            for (var i = 0; i < callbacks; i++)
+            {
+                var song = new SongMetadata
+                {
+                    SongTitle = $"Song {i}",
+                    Mp3BlobPath = $"folder/song-{i}.mp3",
+                    IsActive = true,
+                    IsEnabled = true
+                };
+                context.SongMetadata.Add(song);
+                await context.SaveChangesAsync();
+                songIds.Add(song.Id);
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        // Fired together rather than in sequence: the lost update only appears when two callbacks
+        // read the same row before either has written it back.
+        await Task.WhenAll(songIds.Select(id => _handler.HandleAsync(new AudioPackageResult
+        {
+            SongMetadataId = id,
+            HlsStreamId = Guid.NewGuid(),
+            BackfillRunId = 900,
+            KeyHex = Convert.ToHexString(HlsContentKeyProtector.CreateContentKey()).ToLowerInvariant(),
+            IvHex = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
+            SegmentCount = 10,
+            TargetDurationSeconds = 6,
+            ProcessingSeconds = 12,
+            Outcome = AudioProcessingOutcome.Playable
+        })));
+
+        await using var verify = new AppDbContext(_options);
+        var run = await verify.HlsPackagingBackfillRuns.SingleAsync(r => r.Id == 900);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(run.SucceededCount, Is.EqualTo(callbacks), "an increment was lost");
+            Assert.That(run.OutstandingCount, Is.Zero);
+            Assert.That(run.Status, Is.EqualTo(HlsPackagingBackfillStatus.Completed));
+            Assert.That(run.ActiveLockKey, Is.Null, "a stranded lock blocks every future run");
+        });
+    }
+
+    /// <summary>
+    /// The counter must be incremented relative to its own column, in the database.
+    ///
+    /// <para>
+    /// This is the assertion the outcome test above cannot make. Up to <c>MaxInFlightMessages</c>
+    /// songs are packaged at once and each calls back independently, so two callbacks routinely load
+    /// the same run row, each add one to the value they read, and one increment is lost. Because a
+    /// run completes only when <c>DispatchedCount - SucceededCount - FailedCount</c> reaches zero,
+    /// one lost increment means it never completes: it holds <c>ActiveLockKey</c> indefinitely and
+    /// <c>StartAsync</c> refuses every future run while any run holds it. A miscount here does not
+    /// degrade the feature, it disables it permanently and needs a database edit to recover.
+    /// </para>
+    ///
+    /// <para>
+    /// So the SQL is inspected directly. An atomic increment names the column on both sides
+    /// (<c>SET "SucceededCount" = "SucceededCount" + 1</c>); a read-modify-write assigns a
+    /// parameter computed from a value read moments earlier - the same value the other callback read.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task TheRunCounterIsIncrementedByTheDatabaseRatherThanReadModifyWritten()
+    {
+        await GivenSongAsync();
+
+        await using (var context = new AppDbContext(_options))
+        {
+            context.HlsPackagingBackfillRuns.Add(new HlsPackagingBackfillRun
+            {
+                Id = 901,
+                Status = HlsPackagingBackfillStatus.AwaitingCallbacks,
+                ActiveLockKey = 1,
+                TotalItemCount = 2,
+                DispatchedCount = 2
+            });
+            await context.SaveChangesAsync();
+        }
+
+        _sql.Clear();
+        await _handler.HandleAsync(Success(Guid.NewGuid(), runId: 901));
+
+        var update = _sql.FirstOrDefault(sql =>
+            sql.Contains("UPDATE", StringComparison.OrdinalIgnoreCase)
+            && sql.Contains("SucceededCount", StringComparison.Ordinal));
+
+        Assert.That(update, Is.Not.Null, "the run counter was never updated at all");
+
+        var mentions = Regex.Matches(update!, "SucceededCount").Count;
+
+        Assert.That(
+            mentions,
+            Is.GreaterThan(1),
+            "the counter was assigned a value computed in memory rather than incremented in the "
+            + "database, so two concurrent callbacks would lose one of the increments and the run "
+            + "would never complete. SQL was: " + update);
+    }
+
+    [TearDown]
+    public void TearDown() => _connection?.Dispose();
 
     private sealed class RecordingSweeper : IHlsPackageSweeper
     {
