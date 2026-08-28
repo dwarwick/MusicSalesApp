@@ -33,6 +33,8 @@ public class MobileAuthControllerTests
     private Mock<IAccountDeletionService> _mockAccountDeletionService;
     private Mock<IAdminNotificationService> _mockAdminNotificationService;
     private Mock<ILogger<MobileAuthController>> _mockLogger;
+    private Mock<IAppleIdentityTokenValidator> _mockAppleIdentityTokenValidator;
+    private Mock<IAppleTokenRevocationService> _mockAppleTokenRevocationService;
     private IMobileExternalAuthTokenService _mobileExternalAuthTokenService;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -86,6 +88,9 @@ public class MobileAuthControllerTests
         _mockAccountDeletionService = new Mock<IAccountDeletionService>();
         _mockAdminNotificationService = new Mock<IAdminNotificationService>();
         _mockLogger = new Mock<ILogger<MobileAuthController>>();
+        _mockAppleIdentityTokenValidator = new Mock<IAppleIdentityTokenValidator>();
+        _mockAppleIdentityTokenValidator.SetupGet(x => x.IsConfigured).Returns(true);
+        _mockAppleTokenRevocationService = new Mock<IAppleTokenRevocationService>();
         _mobileExternalAuthTokenService = new MobileExternalAuthTokenService(CreateDataProtectionProvider());
 
         // Default setups
@@ -132,7 +137,9 @@ public class MobileAuthControllerTests
             _mockAccountDeletionService.Object,
             _mockAdminNotificationService.Object,
             _context,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockAppleIdentityTokenValidator.Object,
+            _mockAppleTokenRevocationService.Object);
 
         var services = new ServiceCollection()
             .AddSingleton(_mockAspNetAuthenticationService.Object)
@@ -489,6 +496,397 @@ public class MobileAuthControllerTests
     }
 
     #endregion
+
+    #region Apple Auth Tests
+
+    private void SetupAppleToken(string subject, string email = "", bool emailVerified = true, bool isPrivateEmail = false)
+    {
+        _mockAppleIdentityTokenValidator
+            .Setup(x => x.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((true, new AppleIdentityTokenPayload(subject, email, emailVerified, isPrivateEmail), string.Empty));
+    }
+
+    [Test]
+    public async Task AppleToken_NewAppleUser_ReturnsPendingRegistration()
+    {
+        SetupAppleToken("apple-sub-key", "new-apple@test.com");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-apple@test.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "token" });
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        var response = ok!.Value as MobileAppleTokenResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.RequiresRegistration, Is.True);
+        Assert.That(response.PendingRegistrationToken, Is.Not.Empty);
+        Assert.That(response.Email, Is.EqualTo("new-apple@test.com"));
+        Assert.That(response.Login, Is.Null);
+    }
+
+    [Test]
+    public async Task AppleToken_FirstAuthorizationEmailOnlyInRequest_UsesRequestEmail()
+    {
+        // Apple omits the email claim in some first-authorization tokens and passes it alongside
+        // instead, so the request body is a legitimate fallback - but only a fallback.
+        SetupAppleToken("apple-sub-key", email: string.Empty);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("relayed@privaterelay.appleid.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest
+        {
+            IdentityToken = "token",
+            Email = "relayed@privaterelay.appleid.com",
+            FullName = "Relay User"
+        });
+
+        var response = (result as OkObjectResult)!.Value as MobileAppleTokenResponse;
+        Assert.That(response!.RequiresRegistration, Is.True);
+        Assert.That(response.Email, Is.EqualTo("relayed@privaterelay.appleid.com"));
+
+        // The relay address must survive into the pending payload, because Apple will never
+        // hand it to us again.
+        Assert.That(
+            _mobileExternalAuthTokenService.TryUnprotectPendingRegistration(
+                response.PendingRegistrationToken, out var payload),
+            Is.True);
+        Assert.That(payload.LoginProvider, Is.EqualTo(ExternalLoginProviders.Apple));
+        Assert.That(payload.ProviderKey, Is.EqualTo("apple-sub-key"));
+        Assert.That(payload.Email, Is.EqualTo("relayed@privaterelay.appleid.com"));
+    }
+
+    [Test]
+    public async Task AppleToken_ReturningUserWithNoEmailAnywhere_ResolvesBySubject()
+    {
+        // The regression this whole design exists for: on every sign-in after the first, Apple
+        // sends only the subject. Resolving by email would strand the user.
+        var existingUser = CreateTestUser(id: 55, emailConfirmed: true);
+        SetupAppleToken("apple-sub-key", email: string.Empty);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync(existingUser);
+        _mockUserManager.Setup(x => x.GetRolesAsync(existingUser))
+            .ReturnsAsync(new List<string> { Roles.User });
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "token" });
+
+        var response = (result as OkObjectResult)!.Value as MobileAppleTokenResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.RequiresRegistration, Is.False);
+        Assert.That(response.Login, Is.Not.Null);
+        Assert.That(response.Login!.Token, Is.Not.Empty);
+        Assert.That(response.Login.UserId, Is.EqualTo(existingUser.Id));
+        _mockUserManager.Verify(x => x.FindByEmailAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task AppleToken_ExistingPasswordUserByEmail_LinksAppleLoginAndPromotesRole()
+    {
+        var existingUser = CreateTestUser(id: 42, emailConfirmed: false);
+        SetupAppleToken("apple-sub-key", existingUser.Email!);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync(existingUser.Email!))
+            .ReturnsAsync(existingUser);
+        _mockUserManager.Setup(x => x.GetLoginsAsync(existingUser))
+            .ReturnsAsync(new List<UserLoginInfo>());
+        _mockUserManager.Setup(x => x.AddLoginAsync(existingUser, It.IsAny<UserLoginInfo>()))
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetRolesAsync(existingUser))
+            .ReturnsAsync(new List<string> { Roles.User });
+        _mockAuthService.Setup(x => x.MarkEmailVerifiedAndPromoteRoleAsync(existingUser))
+            .ReturnsAsync((true, string.Empty));
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "token" });
+
+        var response = (result as OkObjectResult)!.Value as MobileAppleTokenResponse;
+        Assert.That(response!.RequiresRegistration, Is.False);
+        Assert.That(response.Login, Is.Not.Null);
+        _mockUserManager.Verify(x => x.AddLoginAsync(
+            existingUser,
+            It.Is<UserLoginInfo>(login =>
+                login.LoginProvider == ExternalLoginProviders.Apple &&
+                login.ProviderKey == "apple-sub-key")), Times.Once);
+        _mockAuthService.Verify(x => x.MarkEmailVerifiedAndPromoteRoleAsync(existingUser), Times.Once);
+    }
+
+    [Test]
+    public async Task AppleToken_SuspendedExistingPasswordUser_DoesNotLinkOrPromote()
+    {
+        var existingUser = CreateTestUser(id: 42, emailConfirmed: false);
+        existingUser.IsSuspended = true;
+        SetupAppleToken("apple-sub-key", existingUser.Email!);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync(existingUser.Email!))
+            .ReturnsAsync(existingUser);
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "token" });
+
+        Assert.That(result, Is.InstanceOf<UnauthorizedObjectResult>());
+        _mockUserManager.Verify(x => x.AddLoginAsync(It.IsAny<ApplicationUser>(), It.IsAny<UserLoginInfo>()), Times.Never);
+        _mockAuthService.Verify(x => x.MarkEmailVerifiedAndPromoteRoleAsync(It.IsAny<ApplicationUser>()), Times.Never);
+    }
+
+    [Test]
+    public async Task AppleToken_SuspendedLinkedUser_ReturnsUnauthorized()
+    {
+        var existingUser = CreateTestUser(id: 55, emailConfirmed: true);
+        existingUser.IsSuspended = true;
+        SetupAppleToken("apple-sub-key");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync(existingUser);
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "token" });
+
+        Assert.That(result, Is.InstanceOf<UnauthorizedObjectResult>());
+    }
+
+    [Test]
+    public async Task AppleToken_NoEmailAndNoExistingUser_ReturnsBadRequest()
+    {
+        SetupAppleToken("apple-sub-key", email: string.Empty);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "token" });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task AppleToken_InvalidIdentityToken_ReturnsBadRequestWithValidatorMessage()
+    {
+        _mockAppleIdentityTokenValidator
+            .Setup(x => x.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((false, (AppleIdentityTokenPayload)null!, "Apple sign-in could not be verified."));
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "bad" });
+
+        var badRequest = result as BadRequestObjectResult;
+        Assert.That(badRequest, Is.Not.Null);
+        Assert.That(badRequest!.Value!.ToString(), Does.Contain("Apple sign-in could not be verified."));
+    }
+
+    [Test]
+    public async Task AppleToken_NotConfigured_ReturnsServiceUnavailable()
+    {
+        _mockAppleIdentityTokenValidator.SetupGet(x => x.IsConfigured).Returns(false);
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest { IdentityToken = "token" });
+
+        var status = result as ObjectResult;
+        Assert.That(status, Is.Not.Null);
+        Assert.That(status!.StatusCode, Is.EqualTo(503));
+    }
+
+    [Test]
+    public async Task RegisterWithApple_NewUser_CreatesVerifiedUserAndLinksAppleLogin()
+    {
+        var payload = new MobilePendingExternalRegistrationTokenPayload(
+            ExternalLoginProviders.Apple,
+            "apple-sub-key",
+            "new-apple@test.com",
+            "New Apple User");
+        var token = _mobileExternalAuthTokenService.ProtectPendingRegistration(payload);
+
+        ApplicationUser createdUser = null;
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-apple@test.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.CreateAsync(It.IsAny<ApplicationUser>()))
+            .Callback<ApplicationUser>(u => { u.Id = 77; createdUser = u; })
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetLoginsAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(new List<UserLoginInfo>());
+        _mockUserManager.Setup(x => x.AddLoginAsync(It.IsAny<ApplicationUser>(), It.IsAny<UserLoginInfo>()))
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetRolesAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(new List<string> { Roles.User });
+        _mockAuthService.Setup(x => x.MarkEmailVerifiedAndPromoteRoleAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync((true, string.Empty));
+
+        var result = await _controller.RegisterWithApple(new MobileAppleRegisterRequest
+        {
+            PendingRegistrationToken = token,
+            AcceptTermsOfUse = true,
+            AcceptPrivacyPolicy = true,
+            AcceptRefundPolicy = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(createdUser, Is.Not.Null);
+        Assert.That(createdUser.Email, Is.EqualTo("new-apple@test.com"));
+        Assert.That(createdUser.EmailConfirmed, Is.True);
+        _mockUserManager.Verify(x => x.AddLoginAsync(
+            It.IsAny<ApplicationUser>(),
+            It.Is<UserLoginInfo>(login =>
+                login.LoginProvider == ExternalLoginProviders.Apple &&
+                login.ProviderKey == "apple-sub-key")), Times.Once);
+        _mockAdminNotificationService.Verify(x => x.NotifyUserRegisteredAsync("new-apple@test.com"), Times.Once);
+    }
+
+    [Test]
+    public async Task RegisterWithApple_MissingConsent_ReturnsBadRequest()
+    {
+        var token = _mobileExternalAuthTokenService.ProtectPendingRegistration(
+            new MobilePendingExternalRegistrationTokenPayload(
+                ExternalLoginProviders.Apple, "apple-sub-key", "new-apple@test.com", string.Empty));
+
+        var result = await _controller.RegisterWithApple(new MobileAppleRegisterRequest
+        {
+            PendingRegistrationToken = token,
+            AcceptTermsOfUse = true,
+            AcceptPrivacyPolicy = false,
+            AcceptRefundPolicy = true
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockUserManager.Verify(x => x.CreateAsync(It.IsAny<ApplicationUser>()), Times.Never);
+    }
+
+    [Test]
+    public async Task RegisterWithApple_GoogleToken_IsRejected()
+    {
+        // A pending token minted for one provider must not be redeemable at the other's endpoint.
+        var token = _mobileExternalAuthTokenService.ProtectPendingRegistration(
+            new MobilePendingExternalRegistrationTokenPayload(
+                ExternalLoginProviders.Google, "google-provider-key", "x@test.com", string.Empty));
+
+        var result = await _controller.RegisterWithApple(new MobileAppleRegisterRequest
+        {
+            PendingRegistrationToken = token,
+            AcceptTermsOfUse = true,
+            AcceptPrivacyPolicy = true,
+            AcceptRefundPolicy = true
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockUserManager.Verify(x => x.CreateAsync(It.IsAny<ApplicationUser>()), Times.Never);
+    }
+
+    [Test]
+    public async Task AppleToken_ReturningUser_StoresTheRefreshTokenForLaterRevocation()
+    {
+        var existingUser = CreateTestUser(id: 55, emailConfirmed: true);
+        SetupAppleToken("apple-sub-key");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync(existingUser);
+        _mockUserManager.Setup(x => x.GetRolesAsync(existingUser))
+            .ReturnsAsync(new List<string> { Roles.User });
+        _mockAppleTokenRevocationService.SetupGet(x => x.IsConfigured).Returns(true);
+        _mockAppleTokenRevocationService
+            .Setup(x => x.ExchangeAuthorizationCodeAsync("auth-code", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("apple-refresh-token");
+
+        await _controller.AppleToken(new MobileAppleTokenRequest
+        {
+            IdentityToken = "token",
+            AuthorizationCode = "auth-code"
+        });
+
+        Assert.That(existingUser.AppleRefreshToken, Is.EqualTo("apple-refresh-token"));
+        _mockUserManager.Verify(x => x.UpdateAsync(existingUser), Times.Once);
+    }
+
+    [Test]
+    public async Task AppleToken_NewUser_ParksTheRefreshTokenInThePendingToken()
+    {
+        // The authorization code is single-use and expires in five minutes, so it is exchanged now
+        // and the result carried through registration rather than the code itself.
+        SetupAppleToken("apple-sub-key", "new-apple@test.com");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-apple@test.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockAppleTokenRevocationService.SetupGet(x => x.IsConfigured).Returns(true);
+        _mockAppleTokenRevocationService
+            .Setup(x => x.ExchangeAuthorizationCodeAsync("auth-code", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("apple-refresh-token");
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest
+        {
+            IdentityToken = "token",
+            AuthorizationCode = "auth-code"
+        });
+
+        var response = (result as OkObjectResult)!.Value as MobileAppleTokenResponse;
+        Assert.That(
+            _mobileExternalAuthTokenService.TryUnprotectPendingRegistration(
+                response!.PendingRegistrationToken, out var payload),
+            Is.True);
+        Assert.That(payload.ExternalRefreshToken, Is.EqualTo("apple-refresh-token"));
+    }
+
+    [Test]
+    public async Task RegisterWithApple_PersistsTheParkedRefreshToken()
+    {
+        var token = _mobileExternalAuthTokenService.ProtectPendingRegistration(
+            new MobilePendingExternalRegistrationTokenPayload(
+                ExternalLoginProviders.Apple, "apple-sub-key", "new-apple@test.com", "New Apple User",
+                "apple-refresh-token"));
+
+        ApplicationUser createdUser = null;
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-apple@test.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.CreateAsync(It.IsAny<ApplicationUser>()))
+            .Callback<ApplicationUser>(u => { u.Id = 78; createdUser = u; })
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetLoginsAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(new List<UserLoginInfo>());
+        _mockUserManager.Setup(x => x.AddLoginAsync(It.IsAny<ApplicationUser>(), It.IsAny<UserLoginInfo>()))
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetRolesAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(new List<string> { Roles.User });
+        _mockAuthService.Setup(x => x.MarkEmailVerifiedAndPromoteRoleAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync((true, string.Empty));
+
+        await _controller.RegisterWithApple(new MobileAppleRegisterRequest
+        {
+            PendingRegistrationToken = token,
+            AcceptTermsOfUse = true,
+            AcceptPrivacyPolicy = true,
+            AcceptRefundPolicy = true
+        });
+
+        Assert.That(createdUser, Is.Not.Null);
+        Assert.That(createdUser.AppleRefreshToken, Is.EqualTo("apple-refresh-token"));
+    }
+
+    [Test]
+    public async Task AppleToken_WhenRevocationServiceUnconfigured_SignInStillSucceeds()
+    {
+        var existingUser = CreateTestUser(id: 55, emailConfirmed: true);
+        SetupAppleToken("apple-sub-key");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Apple, "apple-sub-key"))
+            .ReturnsAsync(existingUser);
+        _mockUserManager.Setup(x => x.GetRolesAsync(existingUser))
+            .ReturnsAsync(new List<string> { Roles.User });
+        _mockAppleTokenRevocationService.SetupGet(x => x.IsConfigured).Returns(false);
+
+        var result = await _controller.AppleToken(new MobileAppleTokenRequest
+        {
+            IdentityToken = "token",
+            AuthorizationCode = "auth-code"
+        });
+
+        var response = (result as OkObjectResult)!.Value as MobileAppleTokenResponse;
+        Assert.That(response!.Login, Is.Not.Null);
+        Assert.That(existingUser.AppleRefreshToken, Is.Null);
+        _mockAppleTokenRevocationService.Verify(
+            x => x.ExchangeAuthorizationCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    #endregion
+
+
 
     #region VerifyCode — Role Upgrade Tests
 

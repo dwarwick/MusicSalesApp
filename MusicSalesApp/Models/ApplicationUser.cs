@@ -30,4 +30,12 @@ public class ApplicationUser : IdentityUser<int>
     // Last known browser timezone from the user, stored as an IANA timezone ID.
     [MaxLength(100)]
     public string TimeZoneId { get; set; }
+
+    // Sign in with Apple refresh token, captured at sign-in purely so the account-deletion path
+    // can call Apple's revoke endpoint - Apple requires that of any app offering Sign in with
+    // Apple. Deliberately NOT protected with ASP.NET Data Protection: that key ring is excluded
+    // from backup because everything it protects is transient, and this token has to survive for
+    // the life of the account. Null for every user who did not sign in with Apple.
+    [MaxLength(512)]
+    public string AppleRefreshToken { get; set; }
 }

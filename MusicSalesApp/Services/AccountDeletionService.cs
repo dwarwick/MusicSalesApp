@@ -13,19 +13,22 @@ public class AccountDeletionService : IAccountDeletionService
     private readonly ICreatorPersonaService _creatorPersonaService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<AccountDeletionService> _logger;
+    private readonly IAppleTokenRevocationService _appleTokenRevocationService;
 
     public AccountDeletionService(
         IDbContextFactory<AppDbContext> dbContextFactory,
         ICreatorService creatorService,
         ICreatorPersonaService creatorPersonaService,
         UserManager<ApplicationUser> userManager,
-        ILogger<AccountDeletionService> logger)
+        ILogger<AccountDeletionService> logger,
+        IAppleTokenRevocationService appleTokenRevocationService = null)
     {
         _dbContextFactory = dbContextFactory;
         _creatorService = creatorService;
         _creatorPersonaService = creatorPersonaService;
         _userManager = userManager;
         _logger = logger;
+        _appleTokenRevocationService = appleTokenRevocationService;
     }
 
     public async Task<IdentityResult> DeleteAccountAsync(ApplicationUser user)
@@ -42,6 +45,10 @@ public class AccountDeletionService : IAccountDeletionService
         }
 
         var creatorId = creator?.Id;
+
+        // Apple requires an app offering Sign in with Apple to revoke the user's grant when the
+        // account is deleted. Do it before the row goes, because the token is unrecoverable after.
+        await RevokeAppleGrantAsync(user);
 
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
 
@@ -112,5 +119,35 @@ public class AccountDeletionService : IAccountDeletionService
         }
 
         return await _userManager.DeleteAsync(user);
+    }
+    /// <summary>
+    /// Best-effort: a failure here must not strand the user with an account they asked us to
+    /// delete. Nothing happens for users who never signed in with Apple, or before a Sign in with
+    /// Apple key is configured.
+    /// </summary>
+    private async Task RevokeAppleGrantAsync(ApplicationUser user)
+    {
+        if (_appleTokenRevocationService?.IsConfigured != true
+            || string.IsNullOrWhiteSpace(user.AppleRefreshToken))
+        {
+            return;
+        }
+
+        try
+        {
+            var revoked = await _appleTokenRevocationService.RevokeRefreshTokenAsync(user.AppleRefreshToken);
+            if (revoked)
+            {
+                _logger.LogInformation("Revoked the Sign in with Apple grant for user {UserId}", user.Id);
+            }
+            else
+            {
+                _logger.LogWarning("Could not revoke the Sign in with Apple grant for user {UserId}", user.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Sign in with Apple revocation threw for user {UserId}", user.Id);
+        }
     }
 }
