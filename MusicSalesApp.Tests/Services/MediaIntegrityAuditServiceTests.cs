@@ -27,6 +27,7 @@ public class MediaIntegrityAuditServiceTests
     private Mock<IAzureStorageService> _storage = null!;
     private Mock<IEmailService> _email = null!;
     private Mock<IBackgroundJobClient> _jobs = null!;
+    private Mock<IHlsPackageIntegrityChecker> _hlsPackages = null!;
     private RecordingQueueClient _queue = null!;
     private MediaIntegrityAuditService _service = null!;
     private AudioProbeResultHandler _handler = null!;
@@ -54,12 +55,21 @@ public class MediaIntegrityAuditServiceTests
             [AppSettingKeys.EmailAdminEmail] = "audit-admin@example.com"
         }).Build();
 
+        // A checker that finds nothing, so these tests keep asserting the probe pipeline. The package
+        // sweep is a separate question with its own fixture, and stubbing it also keeps the audit from
+        // reaching for a storage account it has no business touching in a unit test.
+        _hlsPackages = new Mock<IHlsPackageIntegrityChecker>();
+        _hlsPackages
+            .Setup(checker => checker.CheckAsync(It.IsAny<System.Threading.CancellationToken>()))
+            .ReturnsAsync(new HlsPackageIntegrityReport());
+
         _service = new MediaIntegrityAuditService(
             _factory,
             _queue,
             _email.Object,
             configuration,
             _jobs.Object,
+            _hlsPackages.Object,
             Mock.Of<ILogger<MediaIntegrityAuditService>>());
 
         _handler = new AudioProbeResultHandler(

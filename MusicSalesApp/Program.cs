@@ -533,6 +533,9 @@ try
     builder.Services.AddSingleton<IHlsSegmentSasProvider, HlsSegmentSasProvider>();
     builder.Services.AddSingleton<IHlsManifestBuilder, HlsManifestBuilder>();
 
+    // Scoped, not singleton: it takes a DbContext factory and runs inside the audit's Hangfire job.
+    builder.Services.AddScoped<IHlsPackageIntegrityChecker, HlsPackageIntegrityChecker>();
+
     builder.Services.AddCascadingAuthenticationState();
 
     builder.Services.AddSyncfusionBlazor();

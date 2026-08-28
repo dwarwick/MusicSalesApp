@@ -83,6 +83,32 @@
         naming warnings @_selectedRun.NamingWarningCount; missing originals @_selectedRun.OriginalSourceMissingCount;
         confirmed failures @_selectedRun.ConfirmedUnplayableCount; inconclusive @_selectedRun.InconclusiveCount.
     </p>
+
+    @* Shown only when it says something. A permanent "0 missing" line is one nobody reads on the
+       night it stops being zero. *@
+    @if (_selectedRun.HlsPackageCheckInconclusive)
+    {
+        <div class="alert alert-warning">
+            <strong>Encrypted HLS packages could not be checked.</strong>
+            Storage was unreachable during the sweep, so this run says nothing about whether the
+            catalogue is playable.
+        </div>
+    }
+    else if (_selectedRun.HlsPackagesMissingCount > 0)
+    {
+        <div class="alert alert-danger">
+            <strong>
+                @_selectedRun.HlsPackagesMissingCount of @_selectedRun.HlsPackagesCheckedCount songs
+                have an encrypted HLS package recorded that storage does not hold, or does not hold
+                completely.
+            </strong>
+            Those songs will not play &mdash; the stream endpoint answers 503 for each of them. This
+            is what a restore that missed the streaming container looks like. Repair it from
+            <a href="/admin/hls-packaging-backfill">HLS packaging</a> using the
+            <em>RepairMissing</em> scope, which selects on the package being absent and needs no
+            database edit.
+        </div>
+    }
     <SfGrid DataSource="@_selectedRun.Items" AllowPaging="true" AllowSorting="true">
         <GridPageSettings PageSize="25"></GridPageSettings>
         <GridColumns>
