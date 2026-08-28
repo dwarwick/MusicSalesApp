@@ -18,7 +18,18 @@ public interface IStorageBackupBlobGateway
 
     Task<bool> ContainerExistsAsync(string containerName, CancellationToken cancellationToken);
 
-    /// <summary>Creates the container if absent. Always private — never inherits the source container's access level.</summary>
+    /// <summary>
+    /// Creates the container if absent. Always private — never inherits the source container's
+    /// access level.
+    ///
+    /// <para>
+    /// That applies to the encrypted-HLS streaming container too. It was going to be the one public
+    /// container in the product, but both storage accounts set <c>allowBlobPublicAccess: false</c>
+    /// and that guardrail is worth keeping: the premium account holds every song master and the
+    /// Data Protection key rings, for Production as well as Test. Segments carry a container read
+    /// SAS instead (<see cref="IHlsSegmentSasProvider"/>), so there is nothing here to choose.
+    /// </para>
+    /// </summary>
     Task EnsureContainerAsync(string containerName, CancellationToken cancellationToken);
 
     /// <summary>

@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Azure.Storage.Blobs;
@@ -447,6 +448,7 @@ try
         options.TranscodeQueueName = storageSection["TranscodeQueueName"] ?? MediaProcessingQueues.Transcode;
         options.ProbeQueueName = storageSection["ProbeQueueName"] ?? MediaProcessingQueues.Probe;
         options.MatchQueueName = storageSection["MatchQueueName"] ?? MediaProcessingQueues.CoverArtMatch;
+        options.PackageQueueName = storageSection["PackageQueueName"] ?? MediaProcessingQueues.Package;
     });
     builder.Services.AddSingleton<IMediaProcessingQueueClient, MediaProcessingQueueClient>();
 
@@ -458,6 +460,9 @@ try
     builder.Services.AddScoped<ISongUploadJobService, SongUploadJobService>();
     builder.Services.AddScoped<IMediaProcessingCompletionService, MediaProcessingCompletionService>();
     builder.Services.AddScoped<IAudioProbeResultHandler, AudioProbeResultHandler>();
+    builder.Services.AddScoped<IHlsPackagingResultHandler, HlsPackagingResultHandler>();
+    builder.Services.AddScoped<IHlsPackagingBackfillService, HlsPackagingBackfillService>();
+    builder.Services.AddSingleton<IHlsPackageSweeper, HlsPackageSweeper>();
 
     // Lyrics alignment runs in a *second* Function app - Python on Linux, because Demucs and the
     // forced aligner are PyTorch and a Function app is pinned to one language runtime. It is invoked
@@ -509,6 +514,28 @@ try
     // image-variant backfill has no way to write into the backup-* containers.
     builder.Services.AddSingleton<IBlobContainerFactory, BlobContainerFactory>();
 
+    // Encrypted HLS delivery.
+    //
+    // The content-key protector is deliberately NOT built on ASP.NET Data Protection. That key ring
+    // is excluded from backup on purpose (see StorageBackupService.GetConfiguredContainerNames)
+    // because everything it protects is transient and regenerating it merely signs everyone out. A
+    // song's content key is neither transient nor reproducible: losing it means re-encoding the
+    // catalogue. So content keys are wrapped with a config-held key, while the short-lived stream
+    // and key tokens - which genuinely are transient - do use Data Protection.
+    builder.Services.Configure<HlsOptions>(builder.Configuration.GetSection("Hls"));
+    builder.Services.AddSingleton<IHlsContentKeyProtector, HlsContentKeyProtector>();
+    builder.Services.AddSingleton<IHlsStreamTokenService, HlsStreamTokenService>();
+    builder.Services.AddScoped<IHlsStreamUrlFactory, HlsStreamUrlFactory>();
+
+    // Caches raw manifests, which are ~2 KB and immutable at their path - repackaging mints a new
+    // HlsStreamId and therefore a new cache key, so a stale entry cannot be served.
+    builder.Services.AddMemoryCache();
+    builder.Services.AddSingleton<IHlsSegmentSasProvider, HlsSegmentSasProvider>();
+    builder.Services.AddSingleton<IHlsManifestBuilder, HlsManifestBuilder>();
+
+    // Scoped, not singleton: it takes a DbContext factory and runs inside the audit's Hangfire job.
+    builder.Services.AddScoped<IHlsPackageIntegrityChecker, HlsPackageIntegrityChecker>();
+
     builder.Services.AddCascadingAuthenticationState();
 
     builder.Services.AddSyncfusionBlazor();
@@ -547,6 +574,38 @@ try
         }
     }
 
+
+    // Ensure the encrypted-HLS streaming container exists, private.
+    //
+    // Provisioning creates it too; this covers local development and an environment deployed before
+    // it was re-provisioned. Logged, never thrown - losing streaming is bad, refusing to start the
+    // site over it is worse.
+    if (!EF.IsDesignTime)
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            await BlobContainerFactory.EnsureStreamingContainerAsync(
+                services.GetRequiredService<IBlobContainerFactory>(),
+                services.GetRequiredService<ILogger<Program>>());
+
+            // The self-healing path in wwwroot/js/hls-player.js recovers from an expired segment
+            // SAS by refetching the manifest, which stamps fresh segment credentials. That only
+            // works while the manifest's OWN token is still valid, so the SAS has to expire first.
+            // Configured the other way round, both die together and playback stops permanently -
+            // with nothing in any log to say why, because neither value is wrong on its own.
+            var hls = services.GetRequiredService<IOptions<HlsOptions>>().Value;
+            if (hls.SegmentSasLifetime >= hls.ManifestTokenLifetime)
+            {
+                services.GetRequiredService<ILogger<Program>>().LogWarning(
+                    "Hls:SegmentSasLifetime ({Sas}) is not shorter than Hls:ManifestTokenLifetime "
+                    + "({Manifest}). A segment SAS that expires mid-session cannot be recovered from, "
+                    + "because refetching the manifest needs a token that is still valid.",
+                    hls.SegmentSasLifetime,
+                    hls.ManifestTokenLifetime);
+            }
+        }
+    }
     // Configure the HTTP request pipeline.
     // Forward headers from reverse proxies (Cloudflare, IIS) so Request.Scheme
     // reflects the original client request. This ensures OG meta tag URLs

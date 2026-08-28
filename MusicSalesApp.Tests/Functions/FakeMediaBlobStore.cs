@@ -54,6 +54,22 @@ public sealed class FakeMediaBlobStore : IMediaBlobStore
         return Task.CompletedTask;
     }
 
+    /// <summary>Every blob written into the public streaming container, by path.</summary>
+    public Dictionary<string, byte[]> StreamingWrites { get; } = new();
+
+    public Task UploadStreamingAsync(
+        string blobPath,
+        Stream content,
+        string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        using var buffer = new MemoryStream();
+        content.Position = 0;
+        content.CopyTo(buffer);
+        StreamingWrites[blobPath] = buffer.ToArray();
+        return Task.CompletedTask;
+    }
+
     public Task<byte[]> TryReadStagedAsync(string blobPath, CancellationToken cancellationToken = default)
         => Task.FromResult(StagedBlobs.TryGetValue(blobPath, out var bytes) ? bytes : null);
 

@@ -24,6 +24,19 @@ public static class MediaProcessingQueues
     public const string CoverArtMatch = "cover-art-match";
 
     /// <summary>
+    /// Base name of the queue carrying <c>AudioPackageRequest</c> messages — the encrypted-HLS pass.
+    ///
+    /// <para>
+    /// A separate queue from <see cref="Transcode"/> rather than a second step inside it, because
+    /// <c>host.json</c> pins <c>batchSize: 1</c> so one instance handles one message: folding
+    /// packaging into the transcode would put two full FFmpeg passes under a single 10-minute
+    /// Consumption ceiling. It also lets the one-time backfill reuse the same worker for songs that
+    /// were transcoded long ago.
+    /// </para>
+    /// </summary>
+    public const string Package = "audio-package";
+
+    /// <summary>
     /// Azure Storage queue names must be lowercase alphanumeric with single hyphens, so the
     /// environment suffix follows the same convention the blob containers already use
     /// (<c>musiccontainer-dev</c>), keeping both readable in the portal side by side.
@@ -40,6 +53,32 @@ public static class MediaProcessingContainers
     public const string StagingProduction = "musicuploads";
     public const string StagingTest = "musicuploads-dev";
     public const string StagingLocal = "musicuploads-local";
+
+    /// <summary>
+    /// Where the encrypted HLS segments and their manifests live, one container per environment.
+    ///
+    /// <para>
+    /// <b>Private</b>, like every other container in the product. Its contents are AES-128
+    /// ciphertext and useless without a key the API gates; segment URLs carry a container read SAS
+    /// the manifest builder stamps on per request. Serving segments straight from storage is what
+    /// keeps audio bandwidth off the SmarterASP shared host, and that part is unchanged.
+    /// </para>
+    /// <para>
+    /// It was going to be the one public container in the product, so segment URLs would need no
+    /// credential at all. Both storage accounts set <c>allowBlobPublicAccess: false</c>, and that
+    /// guardrail is worth more than credential-free URLs — this account holds every song master and
+    /// the Data Protection key rings, for Production as well as Test, and the two share it.
+    /// </para>
+    /// <para>
+    /// It sits on the same premium account as <c>musiccontainer{-env}</c>. Never put anything here
+    /// that is not encrypted.
+    /// </para>
+    /// </summary>
+    public const string StreamingProduction = "musicstreaming";
+
+    public const string StreamingTest = "musicstreaming-dev";
+
+    public const string StreamingLocal = "musicstreaming-local";
 }
 
 /// <summary>
@@ -151,6 +190,18 @@ public static class MediaProcessingRoutes
     public const string MatchProgress = ControllerRoute + "/match-progress";
 
     /// <summary>
+    /// Where a finished encrypted-HLS packaging run is posted. Terminal: throws on non-2xx.
+    ///
+    /// <para>
+    /// This is the only callback that carries a secret. The Function generates the AES key because
+    /// it is the process running FFmpeg, and it has no database to write it to — so the key travels
+    /// home over HTTPS in the body, and the web app protects it at rest. Nothing about this route
+    /// may ever be logged at a level that would render the body.
+    /// </para>
+    /// </summary>
+    public const string PackageResult = ControllerRoute + "/package-result";
+
+    /// <summary>
     /// Where a finished lyrics alignment is posted. Terminal: throws on non-2xx.
     ///
     /// <para>
@@ -236,6 +287,16 @@ public static class MediaProcessingFailureCodes
     public const string ZeroDuration = "ZeroDuration";
     public const string DecoderUnavailable = "DecoderUnavailable";
     public const string DecoderTimeout = "DecoderTimeout";
+
+    /// <summary>FFmpeg ran and failed while segmenting/encrypting. The source file is the suspect.</summary>
+    public const string PackagingFailed = "PackagingFailed";
+
+    /// <summary>
+    /// FFmpeg reported success but produced no manifest, or a manifest listing no segments. Treated
+    /// as a failure of the file rather than of the decoder: a zero-segment package would publish a
+    /// song that silently plays nothing.
+    /// </summary>
+    public const string PackagingProducedNothing = "PackagingProducedNothing";
 
     /// <summary>
     /// The reconciler swept a job that stopped reporting progress, or its enqueue never landed.

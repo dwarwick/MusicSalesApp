@@ -6,6 +6,24 @@ namespace MusicSalesApp.Services;
 
 #nullable enable
 
+
+/// <summary>
+/// Who a set of playback URLs is being minted for.
+///
+/// <para>
+/// Passed in rather than derived per song: a catalogue listing maps hundreds of rows, and resolving
+/// the caller's subscription inside the mapper would put a lookup on every one of them. Optional so
+/// the existing callers that only need metadata are unaffected — without it no HLS URL is produced,
+/// which is the correct answer for a caller that has no listener in mind.
+/// </para>
+/// </summary>
+/// <param name="UserId">The listener, or null when anonymous.</param>
+/// <param name="HasFullAccess">
+/// Whether they may hear whole songs. Baked into the token the URL carries, so entitlement is
+/// decided once here rather than re-queried on every manifest request.
+/// </param>
+public sealed record MobileStreamContext(int? UserId, bool HasFullAccess);
+
 /// <summary>
 /// Shared mapping logic from <see cref="SongMetadata"/> to DTOs used by the
 /// mobile controllers (songs list and playlist songs).
@@ -16,26 +34,29 @@ public interface IMobileSongMapper
     /// This song's lyrics row, when the caller has loaded one. Optional because most callers do
     /// not need it; pass it and the response carries a fetchable timings path.
     /// </param>
-    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null);
+    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null, MobileStreamContext? streamContext = null);
 
     /// <param name="lyrics">See <see cref="MapToSongListItem"/>.</param>
-    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null);
+    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null, MobileStreamContext? streamContext = null);
 }
 
 public class MobileSongMapper : IMobileSongMapper
 {
     private readonly IAzureStorageService _storageService;
     private readonly ICreatorPersonaService _creatorPersonaService;
+    private readonly IHlsStreamUrlFactory _hlsUrlFactory;
 
     public MobileSongMapper(
         IAzureStorageService storageService,
-        ICreatorPersonaService creatorPersonaService)
+        ICreatorPersonaService creatorPersonaService,
+        IHlsStreamUrlFactory hlsUrlFactory)
     {
         _storageService = storageService;
         _creatorPersonaService = creatorPersonaService;
+        _hlsUrlFactory = hlsUrlFactory;
     }
 
-    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null)
+    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null, MobileStreamContext? streamContext = null)
     {
         return new SongListItemDto
         {
@@ -56,6 +77,8 @@ public class MobileSongMapper : IMobileSongMapper
             LyricsTimingsPath = ResolveLyricsTimingsPath(lyrics),
             LyricsVersion = ResolveLyricsVersion(lyrics),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
+            HlsUrl = ResolveHlsUrl(m, streamContext),
+            AudioVersion = m.AudioContentVersion,
             StreamCount = m.NumberOfStreams,
             StreamQualifyingSeconds = streamQualifying.Resolve(m.Creator?.StreamQualifyingSeconds),
             TrackLengthSeconds = m.TrackLength,
@@ -69,7 +92,7 @@ public class MobileSongMapper : IMobileSongMapper
         };
     }
 
-    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null)
+    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, StreamQualifyingSettings streamQualifying, SongLyrics? lyrics = null, MobileStreamContext? streamContext = null)
     {
         return new MobilePlaylistSongDto
         {
@@ -91,6 +114,8 @@ public class MobileSongMapper : IMobileSongMapper
             LyricsTimingsPath = ResolveLyricsTimingsPath(lyrics),
             LyricsVersion = ResolveLyricsVersion(lyrics),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
+            HlsUrl = ResolveHlsUrl(m, streamContext),
+            AudioVersion = m.AudioContentVersion,
             StreamCount = m.NumberOfStreams,
             StreamQualifyingSeconds = streamQualifying.Resolve(m.Creator?.StreamQualifyingSeconds),
             TrackLengthSeconds = m.TrackLength,
@@ -179,4 +204,19 @@ public class MobileSongMapper : IMobileSongMapper
     private static int ResolveLyricsVersion(SongLyrics? lyrics) =>
         ResolveLyricsTimingsPath(lyrics) is null ? 0 : lyrics!.Version;
 
+
+    /// <summary>
+    /// The encrypted-HLS manifest URL for a song, or null when there is nothing to point at.
+    ///
+    /// <para>
+    /// Null in two ordinary cases, neither of them an error: the caller supplied no listener, and
+    /// the song has not been packaged yet. During the rollout the second is most of the catalogue,
+    /// which is exactly why this is an additional field rather than a replacement for
+    /// <c>StreamUrl</c>.
+    /// </para>
+    /// </summary>
+    private string? ResolveHlsUrl(SongMetadata m, MobileStreamContext? streamContext)
+        => streamContext is null
+            ? null
+            : _hlsUrlFactory.BuildManifestUrl(m, streamContext.UserId, streamContext.HasFullAccess);
 }

@@ -25,7 +25,9 @@ process in parallel and the web server never runs FFmpeg at all.
 | `ProcessAudioUpload` | `audio-transcode{-env}` | Transcodes one staged creator upload to MP3, reports its duration, and writes the cover art's WebP renditions. Posts live progress as it goes. |
 | `ProbeAudio` | `audio-probe{-env}` | Decodes an already-stored playback blob without producing anything, for the audit and track-length repair jobs. No progress — nobody is watching. |
 | `MatchCoverArt` | `cover-art-match{-env}` | Reads the text off a batch of staged cover art and pairs it with the audio uploaded beside it, before any song exists. Posts live progress. |
+| `PackageAudio` | `audio-package{-env}` | Packages one published song as AES-128 encrypted HLS into the `musicstreaming{-env}` container, and reports the content key back. Serves both new uploads and the one-time backfill. |
 | `HandleTranscodePoison` | `audio-transcode{-env}-poison` | Reports an upload whose message exhausted `maxDequeueCount` as failed, so the creator is told promptly and its staging is cleaned. No settings of its own — the queue name is the transcode queue's plus `-poison`, and the host creates the queue on demand. |
+| `HandlePackagePoison` | `audio-package{-env}-poison` | Same, for packaging. Load-bearing: packaging retries whenever the *worker* could not run, so exhausted retries is the only signal that separates a broken source from unlucky workers - without it a backfill run waits forever for a callback that never comes. |
 
 ⚠️ **`MediaProcessing:MatchQueueName` and `OpenAI:ApiKey` must be added by hand in the portal on an
 already-deployed app** — provisioning only pushes settings on the run that creates it. The queue name
@@ -51,6 +53,9 @@ never moves. This app therefore needs both connection strings:
 - `MediaStorageConnectionString` — Premium: read for the probe path, and write for cover-art
   renditions **only**. Every primary blob is still written by the web app. See CLAUDE.md's
   "no primary blob, no row" invariant before adding any other write here.
+  It also writes encrypted-HLS packages, but into a **different container** on the same account:
+  `musicstreaming{-env}`. It is private like the others; its contents reach listeners under a
+  container read SAS, so everything written there is ciphertext and nothing unencrypted may go in.
 
 Both are the same account-key connection strings the web app already uses (see
 `Get-MediaProcessingSettings.ps1`), so no credential change was needed when renditions moved here —

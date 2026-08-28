@@ -215,8 +215,15 @@ public class MusicControllerMediaWhitelistTests
     }
 
     [Test]
-    public async Task Stream_StillServesTheMasterCoverArtAndPlaybackBlobs()
+    public async Task Stream_StillServesTheMasterCoverArt_ButNoLongerThePlaybackBlob()
     {
+        // The playback blob used to be served here too, which made this route an unauthenticated
+        // download of any published song: no account, no subscription, no preview limit. Encrypting
+        // the audio would have been decorative while that stood.
+        //
+        // Cover art stays public - it is not gated by subscription and never was. Audio now goes
+        // through StreamController only, as encrypted HLS behind a per-listener manifest and a
+        // short-lived key token.
         RegisterSong();
         HaveBlob(CoverArt);
         HaveBlob(Playback);
@@ -224,7 +231,7 @@ public class MusicControllerMediaWhitelistTests
         Assert.Multiple(async () =>
         {
             Assert.That(await _controller.Stream(CoverArt), Is.InstanceOf<FileStreamResult>());
-            Assert.That(await _controller.Stream(Playback), Is.InstanceOf<FileStreamResult>());
+            Assert.That(await _controller.Stream(Playback), Is.InstanceOf<NotFoundResult>());
         });
     }
 

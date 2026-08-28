@@ -20,7 +20,7 @@ public class MobileSongMapperTests
             .Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
             .Returns(new Uri("https://storage.blob.core.windows.net/container/file?sig=test"));
 
-        _mapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object);
+        _mapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object, Mock.Of<IHlsStreamUrlFactory>());
     }
 
     [Test]

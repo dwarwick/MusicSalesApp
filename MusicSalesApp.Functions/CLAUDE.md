@@ -7,14 +7,16 @@ architecture, the invariants, and the traps.
 ## What this app is
 
 Every FFmpeg invocation in StreamTunes, plus the image work that used to run on the Blazor circuit.
-Four queue triggers, no HTTP triggers, no database access.
+Six queue triggers, no HTTP triggers, no database access.
 
 | Function | Queue | Does |
 |---|---|---|
 | `ProcessAudioUpload` | `audio-transcode{-env}` | One staged creator upload → playback MP3 + duration, plus the cover art's WebP renditions. Posts live progress. |
 | `ProbeAudio` | `audio-probe{-env}` | Decode an already-stored blob, produce nothing. For the media-integrity audit and nightly track-length repair. No progress — nobody is watching. |
 | `MatchCoverArt` | `cover-art-match{-env}` | Pair a batch of staged cover art with the audio dropped beside it, using vision OCR. Runs **before** any song exists. Posts live progress. |
+| `PackageAudio` | `audio-package{-env}` | One published song → an AES-128 encrypted HLS package in the streaming container. Reports the content key home; it has no database to write it to. No progress — the song is already playable through its MP3 by the time this runs. |
 | `HandleTranscodePoison` | `audio-transcode{-env}-poison` | Report an upload whose message exhausted `maxDequeueCount` as failed. See below — this is what lets the reconciler be a backstop. **Its queue is created by `Provision-FunctionApp.ps1`, because a queue trigger does not create a missing queue.** |
+| `HandlePackagePoison` | `audio-package{-env}-poison` | Report a song whose packaging exhausted its retries as failed. **Also created by `Provision-FunctionApp.ps1`.** Matters more than it looks — see below. |
 
 It exists because the Blazor app runs on SmarterASP shared hosting where every FFmpeg pass blocked a
 request thread. A single WAV upload cost three passes before a byte reached Azure.
@@ -97,6 +99,14 @@ either of those numbers means rechecking that test.
 anything at or below what it already recorded. `AudioProcessingProgressCalculator` in Common owns
 the band table and is the single definition shared by the upload page, this app and the API.
 
+**Three containers now, and the third has different rules.** Staging and media are private, as always.
+`musicstreaming{-env}` is **also private**, on the same premium account as media, and holds only
+AES-128 ciphertext and manifests whose key URI is a placeholder. Listeners reach it with a container
+read SAS the web app stamps onto segment URLs, so anything unencrypted written there goes straight to
+whoever is listening. It was designed as the one *public* container - credential-free stable URLs -
+but both storage accounts set `allowBlobPublicAccess: false`, and that guardrail is worth more, since
+this account holds every song master and the Data Protection key rings for Production as well as Test.
+
 **Two storage accounts, not interchangeable.** Media is on a **Premium** account, which offers no
 Queue service at all — that is the only reason there are two. Queues and staging are on the Standard
 account. Consequence: staging → media is a **cross-account copy needing a source SAS**, not a
@@ -122,6 +132,52 @@ older "media is read-only" wording was standing in for. Two consequences worth k
   failure path (`FailAsync`, and the already-terminal guard in `CompleteAsync`). The assembly `catch`
   still leaves them alone deliberately — that path keeps the job retryable, and the redelivery
   rewrites the same paths anyway.
+
+
+## Encrypted HLS packaging
+
+`PackageAudio` is the second half of the pipeline, added when audio delivery moved off plaintext
+MP3s. It takes one **already-published** song and produces an AES-128 encrypted HLS package: 6-second
+MPEG-TS segments at AAC 192k, plus the manifest describing them.
+
+It runs for new uploads (enqueued by `MediaProcessingCompletionService` once the song is live) and
+for the one-time backfill over the existing catalogue (`HlsPackagingBackfillService`, on the admin
+page). Both paths are the same work, so both use the same queue.
+
+**Why a separate queue rather than a step inside `ProcessAudioUpload`.** `host.json` pins
+`batchSize: 1`, so one instance handles one message. Folding packaging into the transcode would put
+two full FFmpeg passes under a single 10-minute Consumption ceiling, and a long song would fail at
+the second having already succeeded at the first. It also lets the backfill reuse this worker for
+songs transcoded long ago, which have no upload job at all.
+
+### Things that are different from every other function here
+
+- **The output is a directory, not a file.** `HlsPackager` writes a temp directory that holds the
+  segments, the manifest *and the plaintext content key file*. Cleanup is therefore a recursive
+  directory delete rather than `TempFileHelper.TryDelete`, and leaving it behind would leave key
+  material on the worker's disk.
+- **It writes to a third container**, `musicstreaming{-env}`. Everything written there must already
+  be ciphertext: it is private, but its contents are handed to listeners under a container read SAS,
+  so an unencrypted blob there would be served to whoever is listening.
+- **Segments are uploaded before the manifest**, so a partially-uploaded package is invisible rather
+  than broken: the manifest is what makes a package discoverable.
+- **`-hls_key_info_file` has no FFMpegCore binding**, so this is the one FFmpeg call built as raw
+  process arguments rather than through `FFMpegArguments`.
+- **The key URI in the stored manifest is a placeholder** (`HlsPackagePaths.KeyUriPlaceholder`, in
+  Common because both sides depend on it). The web app substitutes a real, tokenised URL per request.
+  Writing a real one here would persist a credential and pin the manifest to one listener.
+- **The terminal callback carries a secret.** The content key travels in the body of
+  `api/media-processing/package-result`, because this app generates it (it runs FFmpeg) and has no
+  database. Never log that body. A lost callback is worse than a lost transcode: it leaves a package
+  in storage whose key nothing knows, recoverable only by repackaging.
+
+### Why `HandlePackagePoison` matters more than the transcode one
+
+Packaging returns its message to the queue whenever the *worker* could not run — the
+`Inconclusive` half of the three-way status. So a genuinely broken source is only distinguishable
+from a run of unlucky workers by the retries running out. Without the poison handler, a song the
+backfill can never package leaves its run waiting for a callback that never comes, and the run never
+completes — it would sit at "Awaiting callbacks" indefinitely with no indication of why.
 
 ## Traps specific to this project
 

@@ -25,8 +25,14 @@
 
     "//MediaProcessing:MatchQueueName": "Cover-art pairing queue. Referenced as %...% in the trigger, so the HOST resolves it - if it is missing the trigger cannot bind and the WHOLE Function App fails to start, not just this function.",
     "MediaProcessing:MatchQueueName": "cover-art-match-local",
+
+    "//MediaProcessing:PackageQueueName": "Encrypted-HLS packaging queue. Same %...% binding constraint as the others - a missing value stops the WHOLE Function App from starting. A separate queue from the transcode rather than a second step inside it, because host.json pins batchSize:1 so one instance handles one message: two full FFmpeg passes under a single 10-minute Consumption ceiling would fail long songs at the second one having already succeeded at the first.",
+    "MediaProcessing:PackageQueueName": "audio-package-local",
     "MediaProcessing:StagingContainerName": "musicuploads-local",
     "MediaProcessing:MediaContainerName": "musiccontainer-local",
+
+    "//MediaProcessing:StreamingContainerName": "Where encrypted HLS packages are written, on the PREMIUM account beside the media container. Private, like every other container - segment URLs carry a container read SAS the web app stamps on. It holds AES-128 ciphertext and a manifest whose key URI is a placeholder. NEVER write anything unencrypted here; its contents are handed to listeners.",
+    "MediaProcessing:StreamingContainerName": "musicstreaming-local",
 
     "//CallbackBaseUrl": "Where results are posted. Must match the environment the queues belong to.",
     "CallbackBaseUrl": "https://localhost:7217",

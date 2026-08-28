@@ -289,8 +289,10 @@ else
     </div>
 
     <!-- Hidden Audio Element -->
+    @* No src: the source is attached from JS, because "set the source" is no longer one
+       operation. Safari plays an .m3u8 natively; every other browser needs an hls.js instance
+       whose lifetime has to be managed. See wwwroot/js/hls-player.js. *@
     <audio @ref="_audioElement"
-           src="@_streamUrl"
            preload="auto"
            style="display:none;"></audio>
 

@@ -12,5 +12,24 @@ namespace MusicSalesApp.Services
         /// Defaults to "persona-images" if not configured.
         /// </summary>
         public string PersonaImageContainerName { get; set; } = "persona-images";
+
+        /// <summary>
+        /// The container holding encrypted HLS packages - the manifests and AES-128 segments the
+        /// player streams. Same storage account as <see cref="ContainerName"/>.
+        ///
+        /// <para>
+        /// <b>Private</b>, like every other container here. Its contents are ciphertext and
+        /// worthless without the per-song key the API gates; segment URLs carry a container read
+        /// SAS stamped on by the manifest builder. This is what lets segment bytes go straight from
+        /// storage to the listener instead of through the SmarterASP shared host.
+        /// </para>
+        ///
+        /// <para>
+        /// It was going to be public, for credential-free stable URLs. Both storage accounts set
+        /// <c>allowBlobPublicAccess: false</c>, and that guardrail is worth more - this account
+        /// holds every song master and the Data Protection key rings, Production included.
+        /// </para>
+        /// </summary>
+        public string StreamingContainerName { get; set; } = MusicSalesApp.Common.Helpers.MediaProcessingContainers.StreamingProduction;
     }
 }

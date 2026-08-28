@@ -35,6 +35,7 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
     private readonly IEmailService _email;
     private readonly IConfiguration _configuration;
     private readonly IBackgroundJobClient _jobs;
+    private readonly IHlsPackageIntegrityChecker _hlsPackages;
     private readonly ILogger<MediaIntegrityAuditService> _logger;
 
     public MediaIntegrityAuditService(
@@ -43,6 +44,7 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
         IEmailService email,
         IConfiguration configuration,
         IBackgroundJobClient jobs,
+        IHlsPackageIntegrityChecker hlsPackages,
         ILogger<MediaIntegrityAuditService> logger)
     {
         _contextFactory = contextFactory;
@@ -50,6 +52,7 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
         _email = email;
         _configuration = configuration;
         _jobs = jobs;
+        _hlsPackages = hlsPackages;
         _logger = logger;
     }
 
@@ -450,11 +453,60 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
         run.QuarantinedCount = await items.CountAsync(item => item.Quarantined);
         if (complete)
         {
+            // Swept once, as the run closes, rather than per probe callback. It is a HEAD request per
+            // song against a container the probes never touch, so there is nothing to interleave with
+            // and no reason to repeat it as each result trickles in.
+            //
+            // Failure here must not fail the audit: everything above is already established, and the
+            // package sweep is an additional question rather than the point of the run.
+            try
+            {
+                var packages = await _hlsPackages.CheckAsync();
+                run.HlsPackagesCheckedCount = packages.CheckedCount;
+                run.HlsPackagesMissingCount = packages.ProblemCount;
+                run.HlsPackageCheckInconclusive = packages.WasInconclusive;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "The HLS package check failed during audit run {RunId}.", runId);
+                run.HlsPackageCheckInconclusive = true;
+            }
+
             run.Status = MediaAuditRunStatus.Completed;
             run.ActiveLockKey = null;
             run.CompletedAt = DateTime.UtcNow;
         }
         await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// The encrypted-HLS line of the completion email, and only when there is something to say.
+    ///
+    /// <para>
+    /// Silent on a clean sweep on purpose. This mail is read at a glance, and a line that says
+    /// "0 missing" every night is a line nobody reads on the night it says something else.
+    /// </para>
+    /// </summary>
+    private static string HlsPackageParagraph(MediaIntegrityAuditRun run)
+    {
+        if (run.HlsPackageCheckInconclusive)
+        {
+            return "<p><strong>Encrypted HLS packages could not be checked</strong> - storage was "
+                + "unreachable during the sweep, so this run says nothing about whether the "
+                + "catalogue is playable.</p>";
+        }
+
+        if (run.HlsPackagesMissingCount == 0)
+        {
+            return string.Empty;
+        }
+
+        return $"<p><strong>{run.HlsPackagesMissingCount} of {run.HlsPackagesCheckedCount} songs have "
+            + "an encrypted-HLS package recorded that storage does not hold, or does not hold "
+            + "completely.</strong> Those songs will not play - the stream endpoint answers 503 for "
+            + "each of them. This is what a restore that missed the streaming container looks like. "
+            + "Fix it by running the HLS packaging backfill with scope <em>RepairMissing</em>, which "
+            + "selects on the package being absent and needs no database edit.</p>";
     }
 
     private async Task SendCompletionNotificationsAsync(int runId)
@@ -472,6 +524,7 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
             + $"missing originals {run.OriginalSourceMissingCount}; confirmed failures {run.ConfirmedUnplayableCount}; "
             + $"inconclusive {run.InconclusiveCount}; quarantined {run.QuarantinedCount}; "
             + $"notification failures {run.NotificationFailureCount}.</p>"
+            + HlsPackageParagraph(run)
             + $"<p><a href='{url}'>View audit results</a></p>";
         foreach (var recipient in recipients)
         {

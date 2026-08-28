@@ -217,6 +217,18 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
         if (song is not null)
         {
             _songTitle = SongTitleHelper.GetEffectiveTitle(song.SongTitle, song.Mp3BlobPath, song.BlobPath);
+
+            // The one place a SAS to the plaintext MP3 is still minted, and deliberately so.
+            //
+            // Every listener-facing surface moved to encrypted HLS, but this is not one: the page is
+            // [Authorize(Policy = ManageOwnSongs)] and the service re-checks the song's own CreatorId,
+            // so the only person who reaches it is the creator who uploaded the audio. A creator
+            // obtaining their own master is not the threat this feature exists to address.
+            //
+            // Two practical reasons as well. Timing is done immediately after upload, when packaging
+            // may still be queued - keying this on a package would make the editor unavailable for
+            // exactly the songs most likely to need it. And word-level alignment wants the master
+            // rather than a re-encode.
             _streamUrl = AzureStorageService.GetReadSasUri(song.Mp3BlobPath, TimeSpan.FromHours(2))?.ToString();
         }
 

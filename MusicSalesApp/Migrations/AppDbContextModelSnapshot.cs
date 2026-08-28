@@ -1078,6 +1078,114 @@ namespace MusicSalesApp.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.HlsPackagingBackfillFailure", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("RunId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SongMetadataId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId");
+
+                    b.ToTable("HlsPackagingBackfillFailures");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.HlsPackagingBackfillRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ActiveLockKey")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CancellationRequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DispatchedCount")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("DryRun")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("HangfireJobId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InitiatedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int?>("InitiatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LastCallbackAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SucceededCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TotalItemCount")
+                        .HasColumnType("int");
+
+                    b.Property<double>("TotalProcessingSeconds")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveLockKey")
+                        .IsUnique()
+                        .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("HlsPackagingBackfillRuns");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.ImageVariantBackfillItemFailure", b =>
                 {
                     b.Property<int>("Id")
@@ -1443,6 +1551,15 @@ namespace MusicSalesApp.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("HealthyCount")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("HlsPackageCheckInconclusive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("HlsPackagesCheckedCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("HlsPackagesMissingCount")
                         .HasColumnType("int");
 
                     b.Property<int>("InconclusiveCount")
@@ -1914,6 +2031,9 @@ namespace MusicSalesApp.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<int>("AudioContentVersion")
+                        .HasColumnType("int");
+
                     b.Property<string>("BlobPath")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -1944,6 +2064,26 @@ namespace MusicSalesApp.Migrations
                     b.Property<string>("Genre")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("HlsIv")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("HlsKeyProtected")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime?>("HlsPackagedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("HlsSegmentCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("HlsStreamId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<double?>("HlsTargetDurationSeconds")
+                        .HasColumnType("float");
 
                     b.Property<string>("ImageBlobPath")
                         .HasMaxLength(500)
@@ -2033,9 +2173,15 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("CreatorId");
 
+                    b.HasIndex("HlsStreamId")
+                        .IsUnique()
+                        .HasFilter("[HlsStreamId] IS NOT NULL");
+
                     b.HasIndex("MediaGuid")
                         .IsUnique()
                         .HasFilter("[MediaGuid] IS NOT NULL");
+
+                    b.HasIndex("Mp3BlobPath");
 
                     b.HasIndex("PersonaId");
 
@@ -2985,6 +3131,17 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Creator");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.HlsPackagingBackfillFailure", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.HlsPackagingBackfillRun", "Run")
+                        .WithMany("Failures")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.ImageVariantBackfillItemFailure", b =>
                 {
                     b.HasOne("MusicSalesApp.Models.ImageVariantBackfillRun", "Run")
@@ -3354,6 +3511,11 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Recipients");
 
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.HlsPackagingBackfillRun", b =>
+                {
+                    b.Navigation("Failures");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.ImageVariantBackfillRun", b =>

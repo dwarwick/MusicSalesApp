@@ -660,7 +660,14 @@ public class ImageVariantBackfillServiceTests
             {
                 nameof(IBlobContainerFactory.GetMediaContainer),
                 nameof(IBlobContainerFactory.GetPersonaImageContainer),
-                nameof(IBlobContainerFactory.GetUploadStagingContainer)
+                nameof(IBlobContainerFactory.GetUploadStagingContainer),
+
+                // Added with encrypted-HLS delivery, and the speed bump above worked: this is a
+                // decision, not a slide. The streaming container holds the AES-128 segments and
+                // manifests, on the same account as the media container, and is the only container
+                // in the product with public blob access - so it needs an accessor of its own
+                // rather than being reached by name.
+                nameof(IBlobContainerFactory.GetStreamingContainer)
             }));
         Assert.That(
             methods.All(m => m.GetParameters().Length == 0),

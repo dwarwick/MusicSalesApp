@@ -649,6 +649,16 @@ public class SongUploadJobServiceTests
             return Task.CompletedTask;
         }
 
+        public bool IsPackagingConfigured => true;
+
+        public List<AudioPackageRequest> PackageRequests { get; } = new();
+
+        public Task EnqueuePackageAsync(AudioPackageRequest request, CancellationToken cancellationToken = default)
+        {
+            PackageRequests.Add(request);
+            return Task.CompletedTask;
+        }
+
         public Task EnqueueTranscodeAsync(AudioTranscodeRequest request, CancellationToken cancellationToken = default)
         {
             Transcodes.Add(request);

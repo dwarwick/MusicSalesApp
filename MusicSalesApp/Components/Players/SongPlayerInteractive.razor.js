@@ -1,9 +1,12 @@
+import { attach as attachHls, detach as detachHls, effectiveDuration, logWarn } from '/js/hls-player.js';
+import { bindBarDrag, unbindBarDrag } from '/js/drag-bar.js';
+
 // Volume persistence via localStorage
 const VOLUME_STORAGE_KEY = 'streamtunes_volume';
 const DEFAULT_VOLUME = 0.4;
 
 function saveVolume(volume) {
-    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { console.warn('Failed to save volume:', e); }
+    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { logWarn('Failed to save volume:', e); }
 }
 
 export function getSavedVolume() {
@@ -30,11 +33,21 @@ let streamTracker = {
 
 let hasReachedLimit = false;
 
-export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30) {
+// The song's true length, supplied by the server. A free-preview listener's manifest is truncated,
+// so the media element only knows about the first 60 seconds and cannot be asked for this.
+let trackLengthSeconds = 0;
+
+export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30, manifestUrl = null, songLengthSeconds = 0) {
     if (!audioElement) return;
+
+    // Attaching first is safe even though the listeners are wired below: the events this triggers
+    // (loadedmetadata, durationchange) are asynchronous, so they cannot fire before this
+    // synchronous function has finished registering for them.
+    attachHls(audioElement, manifestUrl);
 
     // Update stream threshold from server-provided value
     STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
+    trackLengthSeconds = songLengthSeconds;
 
     // Reset state for new song
     hasReachedLimit = false;
@@ -96,17 +109,18 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
         dotNetRef.invokeMethodAsync('UpdateTime', audioElement.currentTime);
     });
 
-    audioElement.addEventListener('durationchange', () => {
-        if (!isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
-            dotNetRef.invokeMethodAsync('UpdateDuration', audioElement.duration);
+    // Reports the SONG length, not the media element's. On a free preview the manifest is truncated
+    // to 60s, so the element would report a one-minute song and the preview marker would sit at the
+    // far right of the bar - telling the listener the opposite of what it means.
+    const reportDuration = () => {
+        const duration = effectiveDuration(audioElement, trackLengthSeconds);
+        if (duration > 0) {
+            dotNetRef.invokeMethodAsync('UpdateDuration', duration);
         }
-    });
+    };
 
-    audioElement.addEventListener('loadedmetadata', () => {
-        if (!isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
-            dotNetRef.invokeMethodAsync('UpdateDuration', audioElement.duration);
-        }
-    });
+    audioElement.addEventListener('durationchange', reportDuration);
+    audioElement.addEventListener('loadedmetadata', reportDuration);
 
     audioElement.addEventListener('ended', () => {
         dotNetRef.invokeMethodAsync('AudioEnded');
@@ -115,18 +129,20 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
     // Set initial volume from saved preference
     audioElement.volume = getSavedVolume();
 
-    // Force load the metadata if not already loaded
-    if (audioElement.readyState >= 1 && !isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
-        dotNetRef.invokeMethodAsync('UpdateDuration', audioElement.duration);
-    } else {
-        // Trigger metadata load
-        audioElement.load();
-    }
+    // Report the duration if the element already has it.
+    //
+    // The else branch used to call load(), and on this player that was actively harmful: attach()
+    // runs at the top of this same function, so load() at the bottom reset the element and tore
+    // down the MediaSource hls.js had just attached. hls.js keeps fetching the manifest, key and
+    // segments regardless, so the network tab looks perfect while play() rejects with
+    // NotSupportedError. Duration arrives without it - hls.js raises loadedmetadata once it has
+    // parsed the manifest, and the native path calls load() inside attach().
+    reportDuration();
 }
 
 export function play(audioElement) {
     if (audioElement) {
-        audioElement.play().catch(err => console.warn('Play failed:', err));
+        audioElement.play().catch(err => logWarn('Play failed:', err));
     }
 }
 
@@ -145,7 +161,7 @@ export function seekTo(audioElement, time) {
 export function seekToPosition(audioElement, offsetX, progressBarWidth, isRestricted = false, maxDuration = 60) {
     if (audioElement && progressBarWidth > 0) {
         const percentage = offsetX / progressBarWidth;
-        let newTime = audioElement.duration * percentage;
+        let newTime = effectiveDuration(audioElement, trackLengthSeconds) * percentage;
         
         // Enforce max duration limit for restricted users
         if (isRestricted && newTime > maxDuration) {
@@ -166,17 +182,12 @@ export function getElementWidth(element) {
 }
 
 export function getDuration(audioElement) {
-    if (audioElement && !isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
-        return audioElement.duration;
-    }
-    return 0;
+    return effectiveDuration(audioElement, trackLengthSeconds);
 }
 
 // Setup progress bar drag functionality
 export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!progressBarContainer || !audioElement) return;
-
-    let isDragging = false;
 
     const updateSeekPosition = (clientX) => {
         const rect = progressBarContainer.getBoundingClientRect();
@@ -184,7 +195,7 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
         const width = rect.width;
         if (width > 0) {
             const percentage = Math.max(0, Math.min(1, offsetX / width));
-            let newTime = audioElement.duration * percentage;
+            let newTime = effectiveDuration(audioElement, trackLengthSeconds) * percentage;
             
             // Enforce max duration limit for restricted users
             if (isRestricted && newTime > maxDuration) {
@@ -197,40 +208,7 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
         }
     };
 
-    progressBarContainer.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        updateSeekPosition(e.clientX);
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            updateSeekPosition(e.clientX);
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-    });
-
-    // Touch support for mobile
-    progressBarContainer.addEventListener('touchstart', (e) => {
-        isDragging = true;
-        if (e.touches.length > 0) {
-            updateSeekPosition(e.touches[0].clientX);
-        }
-        e.preventDefault();
-    });
-
-    document.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length > 0) {
-            updateSeekPosition(e.touches[0].clientX);
-        }
-    });
-
-    document.addEventListener('touchend', () => {
-        isDragging = false;
-    });
+    bindBarDrag(progressBarContainer, updateSeekPosition);
 }
 
 // Volume control functions
@@ -265,8 +243,6 @@ export function isMuted(audioElement) {
 export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) {
     if (!volumeBarContainer || !audioElement) return;
 
-    let isDragging = false;
-
     const updateVolume = (clientX) => {
         const rect = volumeBarContainer.getBoundingClientRect();
         const offsetX = clientX - rect.left;
@@ -280,38 +256,28 @@ export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) 
         }
     };
 
-    volumeBarContainer.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        updateVolume(e.clientX);
-        e.preventDefault();
-    });
+    bindBarDrag(volumeBarContainer, updateVolume);
+}
 
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            updateVolume(e.clientX);
-        }
-    });
+/**
+ * Releases the hls.js instance attached to this element.
+ *
+ * Called from the component's DisposeAsync. Without it, navigating between songs leaves a live
+ * player per visited track - each holding a worker, buffered segments and a fetch loop.
+ */
+export function disposeAudioPlayer(audioElement) {
+    detachHls(audioElement);
+}
 
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-    });
-
-    // Touch support for mobile
-    volumeBarContainer.addEventListener('touchstart', (e) => {
-        isDragging = true;
-        if (e.touches.length > 0) {
-            updateVolume(e.touches[0].clientX);
-        }
-        e.preventDefault();
-    });
-
-    document.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length > 0) {
-            updateVolume(e.touches[0].clientX);
-        }
-    });
-
-    document.addEventListener('touchend', () => {
-        isDragging = false;
-    });
+/**
+ * Releases the progress and volume bar drag bindings.
+ *
+ * Four of each bar's six listeners live on `document`, so they outlive the bar element itself - and
+ * in a Blazor SPA, navigating away never unloads the page that would otherwise have taken them with
+ * it. Re-binding the same bar replaces its registration, but a bar belonging to a page the user has
+ * left is never bound again, so it has to be released here.
+ */
+export function disposeBarDrags(progressBarContainer, volumeBarContainer) {
+    unbindBarDrag(progressBarContainer);
+    unbindBarDrag(volumeBarContainer);
 }

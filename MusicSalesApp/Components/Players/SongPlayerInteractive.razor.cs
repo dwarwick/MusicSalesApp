@@ -156,7 +156,7 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 _streamQualifying.DefaultSeconds,
                 _streamQualifying.ReductionEnabled);
 
-            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), qualifyingSeconds);
+            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), qualifyingSeconds, _streamUrl, GetTrackLengthSeconds() ?? 0);
             await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
 
@@ -236,6 +236,13 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         {
             if (_jsModule != null)
             {
+                // Releases the hls.js instance first: disposing the module alone would leave the
+                // player running with a worker and a fetch loop nothing owns any more.
+                await _jsModule.InvokeVoidAsync("disposeAudioPlayer", _audioElement);
+
+                // And the bar drags. Four of each bar's six listeners are on `document`, so they
+                // outlive the bars - and in a Blazor SPA nothing unloads the page to collect them.
+                await _jsModule.InvokeVoidAsync("disposeBarDrags", _progressBarContainer, _volumeBarContainer);
                 await _jsModule.DisposeAsync();
             }
         }
@@ -314,8 +321,6 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 Tags = new Dictionary<string, string>()
             };
 
-            await LoadStreamUrl();
-
             // Take the cover art from this song's own row rather than hunting for an image whose
             // filename matches the audio: the two no longer share a base name under the GUID
             // scheme, and name matching could pick up a different song's art.
@@ -355,6 +360,12 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 Logger.LogInformation("SongPlayer: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}, _isCreatorOfSong={IsCreatorOfSong}", 
                     _isAuthenticated, _isAdmin, _currentUserId, _isCreatorOfSong);
             }
+
+            // Built last, deliberately. The manifest URL carries a token with this listener's
+            // entitlement baked into it, so it has to be minted after _hasActiveSubscription,
+            // _isAdmin and _isCreatorOfSong are known - building it earlier would stamp "preview
+            // only" onto every request, including a subscriber's.
+            await LoadStreamUrl();
         }
         catch (Exception ex)
         {
@@ -380,26 +391,40 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Resolves the encrypted-HLS manifest URL for the current song.
+    ///
+    /// <para>
+    /// This used to fetch <c>api/music/url/{path}</c> over HTTP to obtain a SAS URL, with
+    /// <c>api/music/{path}</c> as a fallback. Both are gone: the first was the server asking itself
+    /// a question it could answer directly, and the second was an unauthenticated proxy that served
+    /// the plaintext MP3 to anyone. The manifest URL is built in-process instead, and there is no
+    /// fallback because there is nothing left to fall back to — a song without a package simply
+    /// cannot be played until the backfill reaches it.
+    /// </para>
+    /// </summary>
     private async Task LoadStreamUrl()
     {
-        if (_songInfo == null) return;
-        
-        try
+        _streamUrl = null;
+
+        if (_songMetadata == null)
         {
-            var response = await Http.GetFromJsonAsync<SasUrlResponse>($"api/music/url/{SafeEncodePath(_songInfo.Name)}");
-            if (response != null && !string.IsNullOrEmpty(response.Url))
-            {
-                _streamUrl = response.Url;
-            }
-            else
-            {
-                _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
-            }
+            return;
         }
-        catch (Exception ex)
+
+        var user = await UserManager.GetUserAsync((await AuthenticationStateProvider
+            .GetAuthenticationStateAsync()).User);
+
+        _streamUrl = HlsStreamUrls.BuildManifestUrl(
+            _songMetadata,
+            user?.Id,
+            _hasActiveSubscription || _isAdmin || _isCreatorOfSong);
+
+        if (_streamUrl == null)
         {
-            Logger.LogWarning(ex, "Failed to retrieve SAS URL for {SongFile}", _songInfo?.Name);
-            _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
+            Logger.LogWarning(
+                "Song {SongMetadataId} has no encrypted HLS package, so it cannot be played yet.",
+                _songMetadata.Id);
         }
     }
 
@@ -438,11 +463,6 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     protected double GetDisplayDuration()
     {
         return _duration;
-    }
-
-    private class SasUrlResponse
-    {
-        public string Url { get; set; } = string.Empty;
     }
 
     private bool IsImageFile(string fileName)

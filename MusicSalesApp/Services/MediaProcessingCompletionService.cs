@@ -46,6 +46,7 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
     private readonly ISongUploadJobService _jobService;
     private readonly IUploadProgressNotifier _progressNotifier;
     private readonly IStagingToMediaCopier _copier;
+    private readonly IMediaProcessingQueueClient _queueClient;
     private readonly IOptions<MediaProcessingOptions> _options;
     private readonly ILogger<MediaProcessingCompletionService> _logger;
 
@@ -57,6 +58,7 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         ISongUploadJobService jobService,
         IUploadProgressNotifier progressNotifier,
         IStagingToMediaCopier copier,
+        IMediaProcessingQueueClient queueClient,
         IOptions<MediaProcessingOptions> options,
         ILogger<MediaProcessingCompletionService> logger)
     {
@@ -67,6 +69,7 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         _jobService = jobService;
         _progressNotifier = progressNotifier;
         _copier = copier;
+        _queueClient = queueClient;
         _options = options;
         _logger = logger;
     }
@@ -309,6 +312,16 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                         result.CoverArtDiagnosticCode);
                 }
             }
+
+
+            // Queue the encrypted-HLS package. Deliberately after the song is live and deliberately
+            // best-effort: the song is already published and playable, so a packaging failure must
+            // not fail an assembly the Function is holding an HTTP request open for.
+            //
+            // A song with no package is not broken - it is simply served the way every song was
+            // before this feature existed - and the backfill's Missing scope sweeps up anything that
+            // never got queued, which is exactly why that scope selects on HlsStreamId being null.
+            await TryEnqueuePackagingAsync(savedMetadata, originalPath, mp3Path);
 
             await MarkCompletedAsync(job, savedMetadata.Id, result, assemblyToken);
             await _jobService.DeleteStagedBlobsAsync(job, assemblyToken);
@@ -599,4 +612,53 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         => string.IsNullOrEmpty(value) || value.Length <= maxLength
             ? value
             : value[..maxLength];
+
+    /// <summary>
+    /// Asks the Function to package a freshly-published song as encrypted HLS.
+    ///
+    /// <para>
+    /// Never throws. The song is already live and playable by the time this runs, so the worst case
+    /// is a song that streams the way every song did before encryption existed until the backfill
+    /// picks it up.
+    /// </para>
+    ///
+    /// <para>
+    /// Packaged from the creator's retained original when that is a genuinely different blob from
+    /// the playback MP3, because packaging re-encodes to AAC and going via the MP3 would cost a
+    /// second generation of loss. For an MP3 upload the two paths are the same blob by design, so
+    /// the check collapses to the same thing either way.
+    /// </para>
+    /// </summary>
+    private async Task TryEnqueuePackagingAsync(SongMetadata song, string originalPath, string playbackPath)
+    {
+        if (!_queueClient.IsPackagingConfigured)
+        {
+            return;
+        }
+
+        try
+        {
+            var source = !string.IsNullOrWhiteSpace(originalPath)
+                && !string.Equals(originalPath, playbackPath, StringComparison.Ordinal)
+                    ? originalPath
+                    : playbackPath;
+
+            await _queueClient.EnqueuePackageAsync(new AudioPackageRequest
+            {
+                SongMetadataId = song.Id,
+                SourceBlobPath = source,
+
+                // Minted here rather than in the Function so a redelivered message writes to the
+                // same folder twice instead of orphaning one per attempt.
+                HlsStreamId = Guid.NewGuid()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not queue encrypted-HLS packaging for song {SongMetadataId}; the backfill will pick it up.",
+                song.Id);
+        }
+    }
 }

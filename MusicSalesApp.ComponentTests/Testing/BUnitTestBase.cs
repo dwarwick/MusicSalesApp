@@ -82,6 +82,10 @@ public abstract class BUnitTestBase
     protected Mock<IImageVariantCoordinator> MockImageVariantCoordinator { get; private set; } = default!;
     protected Mock<ICoverArtUrlBuilder> MockCoverArtUrlBuilder { get; private set; } = default!;
     protected Mock<IImageVariantBackfillService> MockImageVariantBackfillService { get; private set; } = default!;
+
+    protected Mock<IHlsPackagingBackfillService> MockHlsPackagingBackfillService { get; private set; } = default!;
+
+    protected Mock<IHlsStreamUrlFactory> MockHlsStreamUrlFactory { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
     protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
 
@@ -172,6 +176,18 @@ public abstract class BUnitTestBase
             .ReturnsAsync((MusicSalesApp.Models.ImageVariantBackfillRun)null);
         MockImageVariantBackfillService.Setup(service => service.GetTargetContainerNames())
             .Returns(new[] { "musiccontainer", "persona-images" });
+
+        MockHlsPackagingBackfillService = new Mock<IHlsPackagingBackfillService>();
+        MockHlsPackagingBackfillService.Setup(service => service.GetRunsAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.HlsPackagingBackfillRun>());
+        MockHlsPackagingBackfillService.Setup(service => service.GetActiveRunAsync())
+            .ReturnsAsync((MusicSalesApp.Models.HlsPackagingBackfillRun)null);
+        MockHlsPackagingBackfillService.Setup(service => service.GetTargetContainerNames())
+            .Returns(new[] { "musicstreaming" });
+
+        // Returns null by default, which is the honest default: it means "this song has no
+        // encrypted package", the state every song is in until the backfill reaches it.
+        MockHlsStreamUrlFactory = new Mock<IHlsStreamUrlFactory>();
 
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
@@ -310,6 +326,16 @@ public abstract class BUnitTestBase
             .ReturnsAsync(0);
         MockStreamCountService.Setup(x => x.IncrementStreamCountAsync(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
             .ReturnsAsync(1);
+
+        // The only member here returning a reference type, and therefore the only one that has to be
+        // stubbed rather than left to Moq. Unstubbed, it hands back a completed task whose result is
+        // a null HashSet; MusicLibrary assigns that straight over its own initialised
+        // _streamedSongIds, and the next card to ask whether the listener has streamed the song
+        // throws NullReferenceException while rendering. The real implementation cannot return null -
+        // SongStreamQueries returns an empty set for an empty input and a materialised set otherwise
+        // - so this is a gap in the double rather than something the page should defend against.
+        MockStreamCountService.Setup(x => x.GetUserStreamedSongIdsAsync(It.IsAny<int>(), It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new HashSet<int>());
 
         // Setup default returns for IStreamCountHubClient methods
         MockStreamCountHubClient.Setup(x => x.StartAsync())
@@ -560,6 +586,8 @@ public abstract class BUnitTestBase
         // tests assert the URL format the browser will actually receive rather than a stub's echo.
         TestContext.Services.AddSingleton<IPersonaImageUrlBuilder>(new PersonaImageUrlBuilder());
         TestContext.Services.AddSingleton<IImageVariantBackfillService>(MockImageVariantBackfillService.Object);
+        TestContext.Services.AddSingleton<IHlsPackagingBackfillService>(MockHlsPackagingBackfillService.Object);
+        TestContext.Services.AddSingleton<IHlsStreamUrlFactory>(MockHlsStreamUrlFactory.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<IOptions<MobileAppInstallOptions>>(Options.Create(new MobileAppInstallOptions()));
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);

@@ -37,6 +37,29 @@ public interface IMediaProcessingQueueClient
     /// </para>
     /// </summary>
     Task EnqueueCoverArtMatchAsync(CoverArtMatchRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// True when the encrypted-HLS packaging queue is available.
+    ///
+    /// <para>
+    /// Separate from <see cref="IsConfigured"/> for the same reason cover-art matching is: an
+    /// environment that cannot package must still accept uploads and publish songs. During the
+    /// rollout most of the catalogue has no package anyway, and a song without one is served the
+    /// way it was before this feature existed.
+    /// </para>
+    /// </summary>
+    bool IsPackagingConfigured { get; }
+
+    /// <summary>
+    /// Asks the Function to package one published song as encrypted HLS.
+    ///
+    /// <para>
+    /// Used by both the post-upload path and the one-time backfill. The <c>HlsStreamId</c> in the
+    /// request is minted by the caller rather than the Function, so a redelivered message writes to
+    /// the same folder twice instead of orphaning one per attempt.
+    /// </para>
+    /// </summary>
+    Task EnqueuePackageAsync(AudioPackageRequest request, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -54,6 +77,7 @@ public sealed class MediaProcessingQueueClient : IMediaProcessingQueueClient
     private readonly QueueClient? _transcodeQueue;
     private readonly QueueClient? _probeQueue;
     private readonly QueueClient? _matchQueue;
+    private readonly QueueClient? _packageQueue;
     private readonly ILogger<MediaProcessingQueueClient> _logger;
 
     public MediaProcessingQueueClient(
@@ -76,6 +100,7 @@ public sealed class MediaProcessingQueueClient : IMediaProcessingQueueClient
         _transcodeQueue = new QueueClient(opts.StorageConnectionString, opts.TranscodeQueueName, queueOptions);
         _probeQueue = new QueueClient(opts.StorageConnectionString, opts.ProbeQueueName, queueOptions);
         _matchQueue = new QueueClient(opts.StorageConnectionString, opts.MatchQueueName, queueOptions);
+        _packageQueue = new QueueClient(opts.StorageConnectionString, opts.PackageQueueName, queueOptions);
     }
 
     /// <inheritdoc />
@@ -87,6 +112,9 @@ public sealed class MediaProcessingQueueClient : IMediaProcessingQueueClient
     /// the whole pipeline as unconfigured and stop songs being published.
     /// </summary>
     public bool IsCoverArtMatchConfigured => _matchQueue is not null;
+
+    /// <inheritdoc />
+    public bool IsPackagingConfigured => _packageQueue is not null;
 
     /// <inheritdoc />
     public async Task EnqueueTranscodeAsync(
@@ -171,5 +199,30 @@ public sealed class MediaProcessingQueueClient : IMediaProcessingQueueClient
             request.BatchId,
             request.AudioFileNames?.Count ?? 0,
             request.Images?.Count ?? 0);
+    }
+
+    /// <inheritdoc />
+    public async Task EnqueuePackageAsync(
+        AudioPackageRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_packageQueue is null)
+        {
+            throw new InvalidOperationException(
+                "Audio processing is not configured; AzureLowSpeed:StorageAccountConnectionString is missing.");
+        }
+
+        await _packageQueue.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        await _packageQueue.SendMessageAsync(
+            JsonSerializer.Serialize(request, SerializerOptions),
+            cancellationToken);
+
+        _logger.LogInformation(
+            "Enqueued HLS packaging for song {SongMetadataId} from {SourceBlobPath} into {HlsStreamId}",
+            request.SongMetadataId,
+            request.SourceBlobPath,
+            request.HlsStreamId);
     }
 }

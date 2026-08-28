@@ -41,7 +41,7 @@ public class MusicControllerTests
         _mockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         _mockReportedSongService = new Mock<IReportedSongService>();
         _mockAppSettingsService = new Mock<IAppSettingsService>();
-        _songMapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object);
+        _songMapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object, Mock.Of<IHlsStreamUrlFactory>());
         _mockLogger = new Mock<ILogger<MusicController>>();
         _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSecondsAsync()).ReturnsAsync(45);
         _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSettingsAsync())
@@ -209,19 +209,19 @@ public class MusicControllerTests
     #endregion
 
     [Test]
-    public async Task Stream_WithValidFile_ReturnsFileResult()
+    public async Task Stream_WithCoverArt_ReturnsFileResult()
     {
         // Arrange
-        var fileName = "test.mp3";
-        var fileInfo = new StorageFileInfo
+        const string fileName = "folder/cover.jpg";
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(fileName)).ReturnsAsync(new SongMetadata
         {
-            Name = fileName,
-            Length = 1000,
-            ContentType = "audio/mpeg"
-        };
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes("test content"));
+            Mp3BlobPath = "folder/song.mp3",
+            ImageBlobPath = fileName,
+            IsActive = true,
+            IsEnabled = true
+        });
 
-        _mockStorageService.Setup(s => s.GetFileInfoAsync(fileName)).ReturnsAsync(fileInfo);
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes("test content"));
         _mockStorageService.Setup(s => s.OpenReadAsync(fileName)).ReturnsAsync(stream);
 
         // Act
@@ -229,6 +229,52 @@ public class MusicControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<FileStreamResult>());
+    }
+
+    /// <summary>
+    /// The public media proxy must never serve audio again.
+    ///
+    /// <para>
+    /// It used to admit <c>Mp3BlobPath</c>, which made <c>GET api/music/{guid}/{guid}-music.mp3</c>
+    /// an unauthenticated download of any published song - no account, no subscription, no preview
+    /// limit. Encrypting the audio would have been decorative while that stood, so this is the test
+    /// that keeps the hole closed. Audio is served only by <c>StreamController</c>, as encrypted
+    /// HLS behind a per-listener manifest and a gated key.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task Stream_WithThePlaybackMp3_ReturnsNotFound()
+    {
+        const string path = "folder/song.mp3";
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(path)).ReturnsAsync(new SongMetadata
+        {
+            Mp3BlobPath = path,
+            IsActive = true,
+            IsEnabled = true
+        });
+
+        var result = await _controller.Stream(path);
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        _mockStorageService.Verify(s => s.OpenReadAsync(path), Times.Never);
+    }
+
+    /// <summary>The SAS-minting endpoint must refuse audio for the same reason.</summary>
+    [Test]
+    public async Task GetStreamUrl_WithThePlaybackMp3_ReturnsNotFound()
+    {
+        const string path = "folder/song.mp3";
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(path)).ReturnsAsync(new SongMetadata
+        {
+            Mp3BlobPath = path,
+            IsActive = true,
+            IsEnabled = true
+        });
+
+        var result = await _controller.GetStreamUrl(path);
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        _mockStorageService.Verify(s => s.GetReadSasUri(path, It.IsAny<TimeSpan>()), Times.Never);
     }
 
     [Test]
@@ -259,12 +305,20 @@ public class MusicControllerTests
     }
 
     [Test]
-    public async Task GetStreamUrl_WithValidFile_ReturnsOkWithSasUrl()
+    public async Task GetStreamUrl_WithCoverArt_ReturnsOkWithSasUrl()
     {
         // Arrange
-        var fileName = "test.mp3";
-        var sasUri = new Uri("https://storage.blob.core.windows.net/container/test.mp3?sv=2021-06-08&st=2024-01-01T00%3A00%3A00Z&se=2024-01-02T00%3A00%3A00Z&sr=b&sp=r&sig=signature");
-        
+        const string fileName = "folder/cover.jpg";
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/cover.jpg?sv=2021-06-08&sig=signature");
+
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(fileName)).ReturnsAsync(new SongMetadata
+        {
+            Mp3BlobPath = "folder/song.mp3",
+            ImageBlobPath = fileName,
+            IsActive = true,
+            IsEnabled = true
+        });
+
         _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
             .ReturnsAsync((ApplicationUser)null);
         _mockStorageService.Setup(s => s.GetReadSasUri(fileName, It.IsAny<TimeSpan>()))
@@ -326,52 +380,42 @@ public class MusicControllerTests
         _mockStorageService.Verify(s => s.GetReadSasUri(path, It.IsAny<TimeSpan>()), Times.Never);
     }
 
+    /// <summary>
+    /// Subscription no longer affects this endpoint, because it no longer serves audio.
+    ///
+    /// <para>
+    /// The two tests this replaces asserted a 24-hour SAS for subscribers and a 2-hour one for
+    /// everybody else - which read as an entitlement check but was not one: an anonymous caller
+    /// still received a working link to the complete MP3, just a shorter-lived one. Images are not
+    /// subscription-gated and never were, so a single uniform lifetime is the honest shape.
+    /// </para>
+    /// </summary>
     [Test]
-    public async Task GetStreamUrl_ForSubscriber_UsesLongerLifetime()
+    public async Task GetStreamUrl_ForCoverArt_UsesTheSameLifetimeRegardlessOfSubscription()
     {
-        // Arrange
-        var fileName = "test.mp3";
-        var userId = 123;
-        var user = new ApplicationUser { Id = userId, UserName = "testuser" };
-        var sasUri = new Uri("https://storage.blob.core.windows.net/container/test.mp3?sv=2021-06-08&st=2024-01-01T00%3A00%3A00Z&se=2024-01-02T00%3A00%3A00Z&sr=b&sp=r&sig=signature");
-        
+        const string fileName = "folder/cover.jpg";
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/cover.jpg?sig=signature");
+        var user = new ApplicationUser { Id = 123, UserName = "testuser" };
+
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(fileName)).ReturnsAsync(new SongMetadata
+        {
+            Mp3BlobPath = "folder/song.mp3",
+            ImageBlobPath = fileName,
+            IsActive = true,
+            IsEnabled = true
+        });
         _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
             .ReturnsAsync(user);
-        _mockSubscriptionService.Setup(s => s.HasActiveSubscriptionAsync(userId))
-            .ReturnsAsync(true);
-        _mockStorageService.Setup(s => s.GetReadSasUri(fileName, TimeSpan.FromHours(24)))
-            .Returns(sasUri);
+        _mockSubscriptionService.Setup(s => s.HasActiveSubscriptionAsync(123)).ReturnsAsync(true);
+        _mockStorageService.Setup(s => s.GetReadSasUri(fileName, It.IsAny<TimeSpan>())).Returns(sasUri);
 
-        // Act
         var result = await _controller.GetStreamUrl(fileName);
 
-        // Assert
-        Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        _mockStorageService.Verify(s => s.GetReadSasUri(fileName, TimeSpan.FromHours(24)), Times.Once);
-    }
-
-    [Test]
-    public async Task GetStreamUrl_ForNonSubscriber_UsesShorterLifetime()
-    {
-        // Arrange
-        var fileName = "test.mp3";
-        var userId = 123;
-        var user = new ApplicationUser { Id = userId, UserName = "testuser" };
-        var sasUri = new Uri("https://storage.blob.core.windows.net/container/test.mp3?sv=2021-06-08&st=2024-01-01T00%3A00%3A00Z&se=2024-01-02T00%3A00%3A00Z&sr=b&sp=r&sig=signature");
-        
-        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
-            .ReturnsAsync(user);
-        _mockSubscriptionService.Setup(s => s.HasActiveSubscriptionAsync(userId))
-            .ReturnsAsync(false);
-        _mockStorageService.Setup(s => s.GetReadSasUri(fileName, TimeSpan.FromHours(2)))
-            .Returns(sasUri);
-
-        // Act
-        var result = await _controller.GetStreamUrl(fileName);
-
-        // Assert
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockStorageService.Verify(s => s.GetReadSasUri(fileName, TimeSpan.FromHours(2)), Times.Once);
+
+        // The subscription is never consulted now - there is nothing left for it to decide here.
+        _mockSubscriptionService.Verify(s => s.HasActiveSubscriptionAsync(It.IsAny<int>()), Times.Never);
     }
 
     [Test]

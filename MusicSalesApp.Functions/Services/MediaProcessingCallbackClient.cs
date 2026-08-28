@@ -30,6 +30,19 @@ public interface IMediaProcessingCallbackClient
     Task PostProbeResultAsync(AudioProbeResult result, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Posts the terminal result of an encrypted-HLS packaging run. <b>Throws on failure</b>, like
+    /// the other terminal callbacks.
+    ///
+    /// <para>
+    /// This is the only callback carrying a secret: the content key travels in the body, because the
+    /// Function generates it (it is the process running FFmpeg) and has no database to write it to.
+    /// A redelivery is therefore not merely safe but necessary — a lost callback means a package
+    /// exists in storage whose key nothing knows, which is unrecoverable except by repackaging.
+    /// </para>
+    /// </summary>
+    Task PostPackageResultAsync(AudioPackageResult result, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Posts a progress update.
     ///
     /// <para>
@@ -105,6 +118,31 @@ public sealed class MediaProcessingCallbackClient : IMediaProcessingCallbackClie
         }
     }
 
+
+    /// <inheritdoc />
+    public async Task PostPackageResultAsync(
+        AudioPackageResult result,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            MediaProcessingRoutes.PackageResult,
+            result,
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // Deliberately does not include the body of what we sent, which holds the content key.
+            var body = await SafeReadAsync(response, cancellationToken);
+            throw new HttpRequestException(
+                $"Package callback for song {result.SongMetadataId} failed: {(int)response.StatusCode} {body}");
+        }
+
+        _logger.LogInformation(
+            "Reported {Outcome} packaging {SegmentCount} segments for song {SongMetadataId}",
+            result.Outcome,
+            result.SegmentCount,
+            result.SongMetadataId);
+    }
     /// <inheritdoc />
     public async Task PostProgressAsync(
         AudioProcessingProgress progress,

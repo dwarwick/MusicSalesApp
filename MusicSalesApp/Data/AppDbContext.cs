@@ -33,6 +33,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StorageBackupContainerProgress> StorageBackupContainerProgresses { get; set; }
     public DbSet<StorageBackupItemFailure> StorageBackupItemFailures { get; set; }
     public DbSet<ImageVariantBackfillRun> ImageVariantBackfillRuns { get; set; }
+    public DbSet<HlsPackagingBackfillRun> HlsPackagingBackfillRuns { get; set; }
+    public DbSet<HlsPackagingBackfillFailure> HlsPackagingBackfillFailures { get; set; }
     public DbSet<ImageVariantBackfillItemFailure> ImageVariantBackfillItemFailures { get; set; }
     public DbSet<SongStream> SongStreams { get; set; }
     public DbSet<Genre> Genres { get; set; }
@@ -438,6 +440,23 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             mediaGuidIndex.HasFilter("[MediaGuid] IS NOT NULL");
         }
 
+        // Mp3BlobPath is looked up by value on the public media route, which until now meant a scan
+        // per request (SongMetadataService.GetByBlobPathAsync ORs across three path columns).
+        builder.Entity<SongMetadata>()
+            .HasIndex(song => song.Mp3BlobPath);
+
+        // The HLS package folder, for the same reason: the streaming endpoints resolve a request
+        // back to its song by this value on every manifest and key request. Unique and filtered for
+        // the same reason MediaGuid is - most rows are NULL until the backfill reaches them, and
+        // SQL Server would otherwise permit only one of them.
+        var hlsStreamIndex = builder.Entity<SongMetadata>()
+            .HasIndex(song => song.HlsStreamId)
+            .IsUnique();
+        if (Database.IsSqlServer())
+        {
+            hlsStreamIndex.HasFilter("[HlsStreamId] IS NOT NULL");
+        }
+
         builder.Entity<MediaIntegrityAuditRun>()
             .HasMany(run => run.Items)
             .WithOne(item => item.AuditRun)
@@ -622,6 +641,28 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
 
         builder.Entity<ImageVariantBackfillRun>()
             .HasIndex(run => run.CreatedAt);
+
+
+        builder.Entity<HlsPackagingBackfillRun>()
+            .HasMany(run => run.Failures)
+            .WithOne(failure => failure.Run)
+            .HasForeignKey(failure => failure.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The same singleton-lock pattern as the other two long-running jobs. Overlapping packaging
+        // runs would not merely waste Function executions - two runs could mint different
+        // HlsStreamIds for the same song, and whichever callback landed second would sweep the
+        // folder the first had just recorded.
+        builder.Entity<HlsPackagingBackfillRun>()
+            .HasIndex(run => run.ActiveLockKey)
+            .IsUnique()
+            .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+        builder.Entity<HlsPackagingBackfillRun>()
+            .HasIndex(run => run.CreatedAt);
+
+        builder.Entity<HlsPackagingBackfillFailure>()
+            .HasIndex(failure => failure.RunId);
 
         builder.Entity<ImageVariantBackfillItemFailure>()
             .HasIndex(failure => failure.RunId);

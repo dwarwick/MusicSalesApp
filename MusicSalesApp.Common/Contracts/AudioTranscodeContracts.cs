@@ -110,6 +110,96 @@ public sealed class AudioTranscodeResult
     public string CoverArtDiagnosticCode { get; set; }
 }
 
+/// <summary>
+/// The queue message that asks the Function to package one already-published song as encrypted HLS.
+///
+/// <para>
+/// Keyed on <see cref="SongMetadataId"/> rather than a media GUID, because this runs against songs
+/// that already exist — including pre-July-2026 ones that have no media GUID at all. The row id is
+/// the only identifier every song is guaranteed to have.
+/// </para>
+/// </summary>
+public sealed class AudioPackageRequest
+{
+    public int SongMetadataId { get; set; }
+
+    /// <summary>
+    /// Path within the <em>media</em> container of the audio to package. The web app picks this:
+    /// the retained original when one exists and differs from the playback MP3, so packaging costs
+    /// one generation of loss rather than two, and the playback MP3 otherwise.
+    /// </summary>
+    public string SourceBlobPath { get; set; }
+
+    /// <summary>
+    /// The folder the Function writes into, inside the streaming container. Minted by the web app so
+    /// a redelivered message writes to the same place twice instead of orphaning a folder per
+    /// attempt, and re-minted per <em>run</em> so a repackage never overwrites a live package in
+    /// place. See <c>SongMediaPaths.HlsManifest</c>.
+    /// </summary>
+    public Guid HlsStreamId { get; set; }
+
+    /// <summary>
+    /// Which backfill or repair run asked for this, echoed back so a run can tell when it is done.
+    /// Null for the ordinary post-upload path, where nobody is counting.
+    /// </summary>
+    public int? BackfillRunId { get; set; }
+}
+
+/// <summary>
+/// The terminal callback the Function POSTs once packaging has finished, successfully or not.
+///
+/// <para>
+/// <b>This payload contains the content encryption key in the clear.</b> It is safe only because it
+/// travels over HTTPS to a route gated by <c>X-Media-Processing-Key</c>. Do not log it, do not add
+/// it to a diagnostic dump, and do not persist <see cref="KeyHex"/> unprotected.
+/// </para>
+/// </summary>
+public sealed class AudioPackageResult
+{
+    public int SongMetadataId { get; set; }
+
+    /// <summary>Echoed from the request, so a late redelivery cannot adopt a newer run's folder.</summary>
+    public Guid HlsStreamId { get; set; }
+
+    public int? BackfillRunId { get; set; }
+
+    /// <summary>The 16-byte AES-128 content key, lowercase hex. Null on failure.</summary>
+    public string KeyHex { get; set; }
+
+    /// <summary>The 16-byte initialisation vector, lowercase hex. Null on failure.</summary>
+    public string IvHex { get; set; }
+
+    /// <summary>How many <c>.ts</c> segments the manifest lists. Zero is a failure, not a success.</summary>
+    public int SegmentCount { get; set; }
+
+    /// <summary>
+    /// The manifest's <c>#EXT-X-TARGETDURATION</c>, in seconds. The API needs it to decide how many
+    /// segments make up a free preview without re-parsing every <c>#EXTINF</c>.
+    /// </summary>
+    public double TargetDurationSeconds { get; set; }
+
+    /// <summary>
+    /// How long the Function spent on this song: download, FFmpeg, and the segment uploads.
+    ///
+    /// <para>
+    /// The honest unit for estimating a large backfill. A run's wall-clock time is not, because
+    /// songs are packaged concurrently - a ten-song run where all ten were dispatched at once takes
+    /// about as long as one song, and extrapolating from that would badly underestimate five
+    /// hundred.
+    /// </para>
+    /// </summary>
+    public double ProcessingSeconds { get; set; }
+
+    /// <summary>Total playable duration of the package, for cross-checking against TrackLength.</summary>
+    public double? DurationSeconds { get; set; }
+
+    public AudioProcessingOutcome Outcome { get; set; }
+
+    public string FailureCode { get; set; }
+
+    public string Diagnostic { get; set; }
+}
+
 /// <summary>Which maintenance job a probe belongs to, so its result can be routed back.</summary>
 public enum AudioProbeKind
 {

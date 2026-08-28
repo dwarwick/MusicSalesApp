@@ -45,6 +45,9 @@ public class MediaProcessingOptions
     /// <summary>Queue carrying cover-art pairing requests for the pre-upload matching phase.</summary>
     public string MatchQueueName { get; set; } = MediaProcessingQueues.CoverArtMatch;
 
+    /// <summary>Queue carrying encrypted-HLS packaging requests, for new uploads and the backfill alike.</summary>
+    public string PackageQueueName { get; set; } = MediaProcessingQueues.Package;
+
     // The callback secret is deliberately NOT mirrored here. It was, and nothing read it: the only
     // consumer is RequireMediaProcessingApiKeyAttribute, which reads
     // AppSettingKeys.MediaProcessingApiKey from configuration. A second copy that agrees with the

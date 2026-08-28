@@ -89,6 +89,30 @@ public class MobilePlaylistSongDto
     /// <summary>Cache-buster for the timings, whose blob path never changes between publishes.</summary>
     public int LyricsVersion { get; set; }
     public string StreamUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The encrypted-HLS manifest URL, or null when this song has not been packaged yet.
+    ///
+    /// <para>
+    /// Sits alongside <c>StreamUrl</c> rather than replacing it, because the mobile app still plays
+    /// the MP3 and a released app cannot be updated in step with the server. A client that
+    /// understands this field should prefer it; one that does not keeps working unchanged.
+    /// </para>
+    /// </summary>
+    public string? HlsUrl { get; set; }
+
+    /// <summary>
+    /// Bumped whenever the playback audio at the same blob path is rewritten, so a client caching by
+    /// path can tell that the bytes changed.
+    ///
+    /// <para>
+    /// <b>Zero means "never rewritten", and must keep hashing identically to this field not being
+    /// sent at all.</b> The MAUI client folds the version into its audio cache key only when it is
+    /// greater than zero; starting this at 1 would change every cache key at once and silently
+    /// re-download every user's offline library.
+    /// </para>
+    /// </summary>
+    public int AudioVersion { get; set; }
     public int StreamCount { get; set; }
     public int StreamQualifyingSeconds { get; set; }
     public double? TrackLengthSeconds { get; set; }
