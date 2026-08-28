@@ -239,6 +239,10 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 // Releases the hls.js instance first: disposing the module alone would leave the
                 // player running with a worker and a fetch loop nothing owns any more.
                 await _jsModule.InvokeVoidAsync("disposeAudioPlayer", _audioElement);
+
+                // And the bar drags. Four of each bar's six listeners are on `document`, so they
+                // outlive the bars - and in a Blazor SPA nothing unloads the page to collect them.
+                await _jsModule.InvokeVoidAsync("disposeBarDrags", _progressBarContainer, _volumeBarContainer);
                 await _jsModule.DisposeAsync();
             }
         }

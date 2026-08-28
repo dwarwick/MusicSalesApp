@@ -1,4 +1,6 @@
 import { attach as attachHls, detach as detachHls, effectiveDuration, logWarn } from '/js/hls-player.js';
+// The local setupBarDrag lived here until all three players were found to have their own copy.
+import { bindBarDrag as setupBarDrag, unbindBarDrag } from '/js/drag-bar.js';
 
 // MusicLibrary card audio player module
 // Volume persistence via localStorage
@@ -196,48 +198,6 @@ function calculatePercentage(clientX, element) {
         return Math.max(0, Math.min(1, offsetX / width));
     }
     return null;
-}
-
-// Shared helper function to setup drag functionality on a bar element
-function setupBarDrag(barContainer, onDrag) {
-    if (!barContainer) return;
-
-    let isDragging = false;
-
-    barContainer.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        onDrag(e.clientX);
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            onDrag(e.clientX);
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-    });
-
-    // Touch support for mobile
-    barContainer.addEventListener('touchstart', (e) => {
-        isDragging = true;
-        if (e.touches.length > 0) {
-            onDrag(e.touches[0].clientX);
-        }
-        e.preventDefault();
-    });
-
-    document.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length > 0) {
-            onDrag(e.touches[0].clientX);
-        }
-    });
-
-    document.addEventListener('touchend', () => {
-        isDragging = false;
-    });
 }
 
 // Setup progress bar drag functionality for card player
@@ -479,4 +439,17 @@ export function disposeAudioPlayer(audioElement) {
 export function reportNoSource(reason) {
     console.error('[hls] ' + reason + ' Nothing was attached, so playback was not attempted. '
         + 'Check the server log for "has no encrypted HLS package" or "No metadata id for".');
+}
+
+/**
+ * Releases the progress and volume bar drag bindings.
+ *
+ * Four of each bar's six listeners live on `document`, so they outlive the bar element itself - and
+ * in a Blazor SPA, navigating away never unloads the page that would otherwise have taken them with
+ * it. Re-binding the same bar replaces its registration, but a bar belonging to a page the user has
+ * left is never bound again, so it has to be released here.
+ */
+export function disposeBarDrags(progressBarContainer, volumeBarContainer) {
+    unbindBarDrag(progressBarContainer);
+    unbindBarDrag(volumeBarContainer);
 }

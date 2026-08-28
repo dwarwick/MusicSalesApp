@@ -1,4 +1,5 @@
 import { attach as attachHls, detach as detachHls, effectiveDuration, logWarn } from '/js/hls-player.js';
+import { bindBarDrag, unbindBarDrag } from '/js/drag-bar.js';
 
 // Volume persistence via localStorage
 const VOLUME_STORAGE_KEY = 'streamtunes_volume';
@@ -278,8 +279,6 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
     audioElement = resolveAudioElement(audioElement);
     if (!progressBarContainer || !audioElement) return;
 
-    let isDragging = false;
-
     const updateSeekPosition = (clientX) => {
         const rect = progressBarContainer.getBoundingClientRect();
         const offsetX = clientX - rect.left;
@@ -299,40 +298,7 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
         }
     };
 
-    progressBarContainer.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        updateSeekPosition(e.clientX);
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            updateSeekPosition(e.clientX);
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-    });
-
-    // Touch support for mobile
-    progressBarContainer.addEventListener('touchstart', (e) => {
-        isDragging = true;
-        if (e.touches.length > 0) {
-            updateSeekPosition(e.touches[0].clientX);
-        }
-        e.preventDefault();
-    });
-
-    document.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length > 0) {
-            updateSeekPosition(e.touches[0].clientX);
-        }
-    });
-
-    document.addEventListener('touchend', () => {
-        isDragging = false;
-    });
+    bindBarDrag(progressBarContainer, updateSeekPosition);
 }
 
 // Volume control functions
@@ -372,8 +338,6 @@ export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) 
     audioElement = resolveAudioElement(audioElement);
     if (!volumeBarContainer || !audioElement) return;
 
-    let isDragging = false;
-
     const updateVolume = (clientX) => {
         const rect = volumeBarContainer.getBoundingClientRect();
         const offsetX = clientX - rect.left;
@@ -387,40 +351,7 @@ export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) 
         }
     };
 
-    volumeBarContainer.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        updateVolume(e.clientX);
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            updateVolume(e.clientX);
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-    });
-
-    // Touch support for mobile
-    volumeBarContainer.addEventListener('touchstart', (e) => {
-        isDragging = true;
-        if (e.touches.length > 0) {
-            updateVolume(e.touches[0].clientX);
-        }
-        e.preventDefault();
-    });
-
-    document.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length > 0) {
-            updateVolume(e.touches[0].clientX);
-        }
-    });
-
-    document.addEventListener('touchend', () => {
-        isDragging = false;
-    });
+    bindBarDrag(volumeBarContainer, updateVolume);
 }
 /**
  * Releases the hls.js instance attached to this element.
@@ -431,4 +362,17 @@ export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) 
  */
 export function disposeAudioPlayer(audioElement) {
     detachHls(resolveAudioElement(audioElement));
+}
+
+/**
+ * Releases the progress and volume bar drag bindings.
+ *
+ * Four of each bar's six listeners live on `document`, so they outlive the bar element itself - and
+ * in a Blazor SPA, navigating away never unloads the page that would otherwise have taken them with
+ * it. Re-binding the same bar replaces its registration, but a bar belonging to a page the user has
+ * left is never bound again, so it has to be released here.
+ */
+export function disposeBarDrags(progressBarContainer, volumeBarContainer) {
+    unbindBarDrag(progressBarContainer);
+    unbindBarDrag(volumeBarContainer);
 }

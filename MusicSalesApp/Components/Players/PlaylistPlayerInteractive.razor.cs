@@ -521,6 +521,10 @@ namespace MusicSalesApp.Components.Players
                     // Releases the hls.js instance for the track that was playing. A playlist
                     // attaches a new one per track, so the last one outlives the page without this.
                     await _jsModule.InvokeVoidAsync("disposeAudioPlayer", _audioElement);
+
+                    // And the bar drags. Four of each bar's six listeners are on `document`, so they
+                    // outlive the bars - and in a Blazor SPA nothing unloads the page to collect them.
+                    await _jsModule.InvokeVoidAsync("disposeBarDrags", _progressBarContainer, _volumeBarContainer);
                     await _jsModule.DisposeAsync();
                 }
             }

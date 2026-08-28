@@ -383,6 +383,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 // fetch loop that would outlive the page.
                 await _jsModule.InvokeVoidAsync("disposeAudioPlayer", _activeAudioElement);
 
+                // And the bar drags. Four of each bar's six listeners are on `document`, so they
+                // outlive the bars - and in a Blazor SPA nothing unloads the page to collect them.
+                await _jsModule.InvokeVoidAsync("disposeBarDrags", _activeProgressBarElement, _activeVolumeBarElement);
+
                 await _jsModule.DisposeAsync();
                 _jsModule = null;
             }
