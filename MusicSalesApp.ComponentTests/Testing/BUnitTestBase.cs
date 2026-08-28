@@ -327,6 +327,16 @@ public abstract class BUnitTestBase
         MockStreamCountService.Setup(x => x.IncrementStreamCountAsync(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
             .ReturnsAsync(1);
 
+        // The only member here returning a reference type, and therefore the only one that has to be
+        // stubbed rather than left to Moq. Unstubbed, it hands back a completed task whose result is
+        // a null HashSet; MusicLibrary assigns that straight over its own initialised
+        // _streamedSongIds, and the next card to ask whether the listener has streamed the song
+        // throws NullReferenceException while rendering. The real implementation cannot return null -
+        // SongStreamQueries returns an empty set for an empty input and a materialised set otherwise
+        // - so this is a gap in the double rather than something the page should defend against.
+        MockStreamCountService.Setup(x => x.GetUserStreamedSongIdsAsync(It.IsAny<int>(), It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new HashSet<int>());
+
         // Setup default returns for IStreamCountHubClient methods
         MockStreamCountHubClient.Setup(x => x.StartAsync())
             .Returns(Task.CompletedTask);
