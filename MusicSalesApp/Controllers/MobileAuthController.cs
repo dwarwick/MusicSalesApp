@@ -37,6 +37,8 @@ public class MobileAuthController : ControllerBase
     private readonly AppDbContext _context;
     private readonly ILogger<MobileAuthController> _logger;
     private readonly IPayPalSubscriptionManagementService _payPalSubscriptionManagementService;
+    private readonly IAppleIdentityTokenValidator _appleIdentityTokenValidator;
+    private readonly IAppleTokenRevocationService _appleTokenRevocationService;
 
     private const int CodeExpirationMinutes = 10;
     private const int CodeLength = 6;
@@ -55,6 +57,8 @@ public class MobileAuthController : ControllerBase
         IAdminNotificationService adminNotificationService,
         AppDbContext context,
         ILogger<MobileAuthController> logger,
+        IAppleIdentityTokenValidator appleIdentityTokenValidator,
+        IAppleTokenRevocationService appleTokenRevocationService,
         IPayPalSubscriptionManagementService payPalSubscriptionManagementService = null)
     {
         _configuration = configuration;
@@ -69,6 +73,8 @@ public class MobileAuthController : ControllerBase
         _adminNotificationService = adminNotificationService;
         _context = context;
         _logger = logger;
+        _appleIdentityTokenValidator = appleIdentityTokenValidator;
+        _appleTokenRevocationService = appleTokenRevocationService;
         _payPalSubscriptionManagementService = payPalSubscriptionManagementService;
     }
 
@@ -278,20 +284,38 @@ public class MobileAuthController : ControllerBase
     }
 
     [HttpPost("google/register")]
-    public async Task<IActionResult> RegisterWithGoogle([FromBody] MobileGoogleRegisterRequest request)
+    public Task<IActionResult> RegisterWithGoogle([FromBody] MobileGoogleRegisterRequest request)
+        => CompleteExternalRegistrationAsync(
+            request.PendingRegistrationToken,
+            request.AcceptTermsOfUse,
+            request.AcceptPrivacyPolicy,
+            request.AcceptRefundPolicy,
+            ExternalLoginProviders.Google);
+
+    /// <summary>
+    /// Turns a pending-registration token plus the three policy acceptances into a real account.
+    /// Shared by Google and Apple - the only thing that differs is which provider the token is
+    /// required to have been minted for.
+    /// </summary>
+    private async Task<IActionResult> CompleteExternalRegistrationAsync(
+        string pendingRegistrationToken,
+        bool acceptTermsOfUse,
+        bool acceptPrivacyPolicy,
+        bool acceptRefundPolicy,
+        string expectedProvider)
     {
-        if (string.IsNullOrWhiteSpace(request.PendingRegistrationToken))
+        if (string.IsNullOrWhiteSpace(pendingRegistrationToken))
             return BadRequest(new { message = "Pending registration token is required." });
 
-        if (!request.AcceptTermsOfUse || !request.AcceptPrivacyPolicy || !request.AcceptRefundPolicy)
+        if (!acceptTermsOfUse || !acceptPrivacyPolicy || !acceptRefundPolicy)
         {
             return BadRequest(new { message = "You must accept the Terms of Use, Privacy Policy, and Refund Policy to register." });
         }
 
-        if (!_mobileExternalAuthTokenService.TryUnprotectPendingRegistration(request.PendingRegistrationToken, out var payload))
-            return BadRequest(new { message = "Google registration token is invalid or expired." });
+        if (!_mobileExternalAuthTokenService.TryUnprotectPendingRegistration(pendingRegistrationToken, out var payload))
+            return BadRequest(new { message = $"{expectedProvider} registration token is invalid or expired." });
 
-        if (!string.Equals(payload.LoginProvider, ExternalLoginProviders.Google, StringComparison.Ordinal))
+        if (!string.Equals(payload.LoginProvider, expectedProvider, StringComparison.Ordinal))
             return BadRequest(new { message = "Invalid external login provider." });
 
         var existingLoginUser = await _userManager.FindByLoginAsync(payload.LoginProvider, payload.ProviderKey);
@@ -336,14 +360,125 @@ public class MobileAuthController : ControllerBase
         if (!promoteSuccess)
             return StatusCode(500, new { message = promoteError });
 
+        if (!string.IsNullOrWhiteSpace(payload.ExternalRefreshToken)
+            && payload.ExternalRefreshToken != user.AppleRefreshToken)
+        {
+            user.AppleRefreshToken = payload.ExternalRefreshToken;
+            await _userManager.UpdateAsync(user);
+        }
+
         if (isNewUser)
         {
-            await NotifyGoogleRegistrationAsync(user);
+            await NotifyExternalRegistrationAsync(user, expectedProvider);
         }
 
         var loginResponse = await BuildLoginResponseAsync(user);
         return Ok(loginResponse);
     }
+
+    /// <summary>
+    /// Completes a native (iOS) Sign in with Apple. The device has already driven the Apple
+    /// sheet, so unlike the Google flow there is no start/callback/exchange round trip - the app
+    /// posts the finished identity token and we verify it.
+    /// </summary>
+    [HttpPost("apple/token")]
+    public async Task<IActionResult> AppleToken([FromBody] MobileAppleTokenRequest request)
+    {
+        if (!_appleIdentityTokenValidator.IsConfigured)
+        {
+            return StatusCode(503, new { message = "Sign in with Apple is not configured." });
+        }
+
+        var (valid, applePayload, validationError) = await _appleIdentityTokenValidator
+            .ValidateAsync(request.IdentityToken, HttpContext.RequestAborted);
+        if (!valid)
+        {
+            return BadRequest(new { message = validationError });
+        }
+
+        // Apple supplies the email and name on the FIRST authorization only; every later sign-in
+        // carries just the subject. So the subject is the durable identity and must be tried
+        // first - resolving by email would strand every returning user.
+        var user = await _userManager.FindByLoginAsync(ExternalLoginProviders.Apple, applePayload.Subject);
+        if (user != null)
+        {
+            if (user.IsSuspended)
+            {
+                return Unauthorized(new { message = "Your account has been suspended." });
+            }
+
+            await CaptureAppleRefreshTokenAsync(user, request.AuthorizationCode);
+            return Ok(new MobileAppleTokenResponse
+            {
+                Email = user.Email ?? string.Empty,
+                Login = await BuildLoginResponseAsync(user)
+            });
+        }
+
+        var email = !string.IsNullOrWhiteSpace(applePayload.Email)
+            ? applePayload.Email
+            : request.Email ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return BadRequest(new { message = "Apple sign-in did not provide an email address." });
+        }
+
+        // A "Hide My Email" relay address simply will not match anything here, which is correct -
+        // it is a brand new identity, not a failed lookup.
+        user = await _userManager.FindByEmailAsync(email);
+        if (user != null)
+        {
+            if (user.IsSuspended)
+            {
+                return Unauthorized(new { message = "Your account has been suspended." });
+            }
+
+            var (linked, linkError) = await EnsureExternalLoginAsync(
+                user, ExternalLoginProviders.Apple, applePayload.Subject);
+            if (!linked)
+            {
+                return BadRequest(new { message = linkError });
+            }
+
+            var (promoted, promoteError) = await _authService.MarkEmailVerifiedAndPromoteRoleAsync(user);
+            if (!promoted)
+            {
+                return StatusCode(500, new { message = promoteError });
+            }
+
+            await CaptureAppleRefreshTokenAsync(user, request.AuthorizationCode);
+            return Ok(new MobileAppleTokenResponse
+            {
+                Email = user.Email ?? string.Empty,
+                Login = await BuildLoginResponseAsync(user)
+            });
+        }
+
+        var pendingToken = _mobileExternalAuthTokenService.ProtectPendingRegistration(
+            new MobilePendingExternalRegistrationTokenPayload(
+                ExternalLoginProviders.Apple,
+                applePayload.Subject,
+                email,
+                request.FullName ?? string.Empty,
+                await ExchangeAppleRefreshTokenAsync(request.AuthorizationCode)));
+
+        return Ok(new MobileAppleTokenResponse
+        {
+            RequiresRegistration = true,
+            PendingRegistrationToken = pendingToken,
+            Email = email
+        });
+    }
+
+    [HttpPost("apple/register")]
+    public Task<IActionResult> RegisterWithApple([FromBody] MobileAppleRegisterRequest request)
+        => CompleteExternalRegistrationAsync(
+            request.PendingRegistrationToken,
+            request.AcceptTermsOfUse,
+            request.AcceptPrivacyPolicy,
+            request.AcceptRefundPolicy,
+            ExternalLoginProviders.Apple);
 
     [HttpPost("verify-code")]
     public async Task<IActionResult> VerifyCode([FromBody] MobileVerifyCodeRequest request)
@@ -584,7 +719,7 @@ public class MobileAuthController : ControllerBase
         }
     }
 
-    private async Task NotifyGoogleRegistrationAsync(ApplicationUser user)
+    private async Task NotifyExternalRegistrationAsync(ApplicationUser user, string provider)
     {
         try
         {
@@ -592,7 +727,7 @@ public class MobileAuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to send admin registration notification for Google user {Email}", user.Email);
+            _logger.LogWarning(ex, "Failed to send admin registration notification for {Provider} user {Email}", provider, user.Email);
         }
 
         await SendPostVerificationNotificationsAsync(user);
@@ -708,6 +843,52 @@ public class MobileAuthController : ControllerBase
 
         var emailVerified = principal.FindFirstValue(GoogleClaimTypes.EmailVerified);
         return !string.Equals(emailVerified, bool.FalseString, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Trades the sheet's one-shot authorization code for a refresh token and stores it, so the
+    /// account-deletion path can later revoke the user's Apple grant as Apple requires.
+    /// </summary>
+    /// <remarks>
+    /// Best-effort on purpose: a user must still be able to sign in when Apple's token endpoint is
+    /// unreachable or no Sign in with Apple key is configured yet.
+    /// </remarks>
+    private async Task CaptureAppleRefreshTokenAsync(ApplicationUser user, string authorizationCode)
+    {
+        var refreshToken = await ExchangeAppleRefreshTokenAsync(authorizationCode);
+        if (string.IsNullOrWhiteSpace(refreshToken) || refreshToken == user.AppleRefreshToken)
+        {
+            return;
+        }
+
+        try
+        {
+            user.AppleRefreshToken = refreshToken;
+            await _userManager.UpdateAsync(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not store the Apple refresh token for user {UserId}", user.Id);
+        }
+    }
+
+    private async Task<string> ExchangeAppleRefreshTokenAsync(string authorizationCode)
+    {
+        if (!_appleTokenRevocationService.IsConfigured || string.IsNullOrWhiteSpace(authorizationCode))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _appleTokenRevocationService
+                .ExchangeAuthorizationCodeAsync(authorizationCode, HttpContext.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not exchange the Apple authorization code");
+            return null;
+        }
     }
 
     private async Task<(bool Success, string Error)> EnsureExternalLoginAsync(
@@ -902,6 +1083,40 @@ public class MobileGoogleExchangeRequest
 }
 
 public class MobileGoogleRegisterRequest
+{
+    public string PendingRegistrationToken { get; set; } = string.Empty;
+    public bool AcceptTermsOfUse { get; set; }
+    public bool AcceptPrivacyPolicy { get; set; }
+    public bool AcceptRefundPolicy { get; set; }
+}
+
+public class MobileAppleTokenRequest
+{
+    public string IdentityToken { get; set; } = string.Empty;
+
+    // Kept for a future token-revocation-on-account-deletion implementation; unused today.
+    public string AuthorizationCode { get; set; } = string.Empty;
+
+    // Apple sends these on the FIRST authorization only, so they cannot be relied on.
+    public string Email { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+}
+
+public class MobileAppleTokenResponse
+{
+    /// <summary>
+    /// True when this Apple id has no account yet and the app must collect policy acceptance
+    /// before <c>apple/register</c> can create one.
+    /// </summary>
+    public bool RequiresRegistration { get; set; }
+    public string PendingRegistrationToken { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+
+    /// <summary>Populated only when <see cref="RequiresRegistration"/> is false.</summary>
+    public MobileLoginResponse Login { get; set; }
+}
+
+public class MobileAppleRegisterRequest
 {
     public string PendingRegistrationToken { get; set; } = string.Empty;
     public bool AcceptTermsOfUse { get; set; }

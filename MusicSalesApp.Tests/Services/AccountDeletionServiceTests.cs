@@ -18,6 +18,7 @@ public class AccountDeletionServiceTests
     private Mock<ICreatorPersonaService> _mockCreatorPersonaService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<AccountDeletionService>> _mockLogger;
+    private Mock<IAppleTokenRevocationService> _mockAppleTokenRevocationService;
     private AccountDeletionService _service;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -59,12 +60,19 @@ public class AccountDeletionServiceTests
         _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(It.IsAny<int>()))
             .ReturnsAsync((Creator)null!);
 
+        _mockAppleTokenRevocationService = new Mock<IAppleTokenRevocationService>();
+        _mockAppleTokenRevocationService.SetupGet(x => x.IsConfigured).Returns(true);
+        _mockAppleTokenRevocationService
+            .Setup(x => x.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
         _service = new AccountDeletionService(
             _mockContextFactory.Object,
             _mockCreatorService.Object,
             _mockCreatorPersonaService.Object,
             _mockUserManager.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockAppleTokenRevocationService.Object);
     }
 
     [TearDown]
@@ -829,4 +837,59 @@ public class AccountDeletionServiceTests
     }
 
     #endregion
+    [Test]
+    public async Task DeleteAccountAsync_AppleUser_RevokesTheGrantBeforeDeleting()
+    {
+        // Apple requires the grant be revoked on account deletion, and the token is unrecoverable
+        // once the row is gone - so this must happen before UserManager.DeleteAsync.
+        var user = CreateTestUser();
+        user.AppleRefreshToken = "apple-refresh-token";
+
+        await _service.DeleteAccountAsync(user);
+
+        _mockAppleTokenRevocationService.Verify(
+            x => x.RevokeRefreshTokenAsync("apple-refresh-token", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteAccountAsync_NonAppleUser_DoesNotCallApple()
+    {
+        var user = CreateTestUser();
+        user.AppleRefreshToken = null;
+
+        await _service.DeleteAccountAsync(user);
+
+        _mockAppleTokenRevocationService.Verify(
+            x => x.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteAccountAsync_WhenRevocationFails_StillDeletesTheAccount()
+    {
+        // A failure at Apple must not strand the user with an account they asked us to delete.
+        var user = CreateTestUser();
+        user.AppleRefreshToken = "apple-refresh-token";
+        _mockAppleTokenRevocationService
+            .Setup(x => x.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("appleid.apple.com unreachable"));
+
+        var result = await _service.DeleteAccountAsync(user);
+
+        Assert.That(result.Succeeded, Is.True);
+        _mockUserManager.Verify(x => x.DeleteAsync(user), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteAccountAsync_WhenRevocationNotConfigured_StillDeletesTheAccount()
+    {
+        _mockAppleTokenRevocationService.SetupGet(x => x.IsConfigured).Returns(false);
+        var user = CreateTestUser();
+        user.AppleRefreshToken = "apple-refresh-token";
+
+        var result = await _service.DeleteAccountAsync(user);
+
+        Assert.That(result.Succeeded, Is.True);
+        _mockAppleTokenRevocationService.Verify(
+            x => x.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

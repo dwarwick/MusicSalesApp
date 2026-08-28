@@ -324,6 +324,11 @@ try
     builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
     builder.Services.AddSingleton<IMobileExternalAuthTokenService, MobileExternalAuthTokenService>();
     builder.Services.AddSingleton<IWebGoogleAuthTokenService, WebGoogleAuthTokenService>();
+    // Singleton so the Apple JWKS ConfigurationManager keeps its cached signing keys across requests.
+    builder.Services.AddSingleton<IAppleIdentityTokenValidator, AppleIdentityTokenValidator>();
+    // Only needed to revoke the user's Apple grant on account deletion, which Apple requires.
+    // Inert until a Sign in with Apple key is configured; sign-in itself does not use it.
+    builder.Services.AddSingleton<IAppleTokenRevocationService, AppleTokenRevocationService>();
     builder.Services.AddScoped<IMusicService, MusicService>();
     builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
     builder.Services.AddScoped<IEmailService, EmailService>();

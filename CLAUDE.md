@@ -47,7 +47,7 @@ There's no separate Data/Identity/Infrastructure project — everything lives in
 
 - **.NET 10**, **Blazor Server** (Interactive Server render mode — not WASM, not Auto) alongside classic Razor Pages.
 - **EF Core / SQL Server** — single `AppDbContext`; both a scoped `DbContext` and `IDbContextFactory<AppDbContext>` are registered (the factory exists specifically to avoid Blazor Server's concurrent-DbContext-per-circuit problems). Migrations auto-apply at startup.
-- **Auth**: ASP.NET Core Identity (`ApplicationUser : IdentityUser<int>`) with **cookie auth for the web UI and JWT Bearer for the mobile app simultaneously** (combined default policy). Claims-based `Permissions` policies built dynamically via reflection. Google external login (web + mobile "exchange token" flow). WebAuthn/FIDO2 passkeys via Fido2NetLib.
+- **Auth**: ASP.NET Core Identity (`ApplicationUser : IdentityUser<int>`) with **cookie auth for the web UI and JWT Bearer for the mobile app simultaneously** (combined default policy). Claims-based `Permissions` policies built dynamically via reflection. Google external login (web + mobile "exchange token" flow) and **Sign in with Apple** (mobile only, native — see `MobileAuthController` below). WebAuthn/FIDO2 passkeys via Fido2NetLib.
 - **Background jobs**: Hangfire (SQL Server storage, `/hangfire` dashboard gated by `HangfireAuthorizationFilter`).
 - **Real-time**: SignalR — `StreamCountHub`, `LikeCountHub`, `WebhookStatusHub`, `MaintenanceHub`, `AdminMessageHub`, `UploadProgressHub` (per-creator groups, carries live upload progress).
 - **UI**: Syncfusion Blazor components exclusively (see `AGENTS.md` for CTA/theme conventions).
@@ -179,7 +179,13 @@ cache key at once and silently re-download every user's offline library.
 
 Controllers under `Controllers/` gated by `[RequireMobileApiKey]` (header `X-Api-Key` matched against config) plus JWT Bearer `[Authorize]`:
 
-- `MobileAuthController` (`api/mobile-auth`) — register/login/verify (6-digit codes)/reset password/change email/delete account, Google OAuth (`google/start`, `exchange`, `register`) via `streamtunes://auth` deep link.
+- `MobileAuthController` (`api/mobile-auth`) — register/login/verify (6-digit codes)/reset password/change email/delete account, Google OAuth (`google/start`, `exchange`, `register`) via `streamtunes://auth` deep link, and Sign in with Apple (`apple/token`, `apple/register`).
+
+  The Apple pair is shaped differently from Google on purpose, and the difference is the whole point: Google is **server-brokered** (we run the OAuth dance and redirect into the app), whereas Apple is **native on the device** — the app drives the sheet and posts us a finished identity token, so there is no `start`/`callback`/`exchange`, no `AddApple` handler, and no `[SkipMobileApiKey]`. `AppleIdentityTokenValidator` just verifies the JWT against Apple's JWKS. Both providers converge on `CompleteExternalRegistrationAsync` and `BuildLoginResponseAsync`.
+
+  > **Apple sends the email and name on the FIRST authorization only.** Every later sign-in carries just the stable `sub`, so the lookup keys on `sub` (the `AspNetUserLogins` provider key) and the email is persisted at first contact. `TryGetGoogleEmail` can re-read the email every time; there is deliberately no Apple equivalent.
+
+  `ApplicationUser.AppleRefreshToken` exists solely so `AccountDeletionService` can revoke the user's Apple grant on deletion, which Apple requires. It is obtained by exchanging the sheet's authorization code — immediately, because that code is single-use and expires in five minutes, which is why a new user's token is parked in `MobilePendingExternalRegistrationTokenPayload.ExternalRefreshToken` until there is a row to attach it to. All of this is inert until `Authentication:Apple:TeamId`/`KeyId`/`PrivateKey*` are set (a **Sign in with Apple** key, a different key from the App Store Connect one beside it in `App_Data/Secrets`); sign-in works without them, only revocation is skipped.
 - `MobilePlaylistController` (`api/mobile/playlists`) — home playlists, custom playlist CRUD, subscription-gated song access.
 - `MobileAdminMessageController`, `MobileContactController`, `MobileSettingsController`, `MobileTipController` — supporting mobile features.
 - `GooglePlaySubscriptionController` (`api/subscription/google-play`) + `GooglePlayWebhookController` — Google Play purchase verification + real-time developer notifications.
