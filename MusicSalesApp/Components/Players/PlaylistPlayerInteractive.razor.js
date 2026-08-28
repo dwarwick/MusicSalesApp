@@ -1,11 +1,11 @@
-import { attach as attachHls, detach as detachHls, effectiveDuration } from '/js/hls-player.js';
+import { attach as attachHls, detach as detachHls, effectiveDuration, logWarn } from '/js/hls-player.js';
 
 // Volume persistence via localStorage
 const VOLUME_STORAGE_KEY = 'streamtunes_volume';
 const DEFAULT_VOLUME = 0.4;
 
 function saveVolume(volume) {
-    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { console.warn('Failed to save volume:', e); }
+    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { logWarn('Failed to save volume:', e); }
 }
 
 export function getSavedVolume() {
@@ -156,7 +156,7 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
 export function play(audioElement) {
     audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
-        audioElement.play().catch(err => console.warn('Play failed:', err));
+        audioElement.play().catch(err => logWarn('Play failed:', err));
     }
 }
 
@@ -260,7 +260,7 @@ export function changeTrack(audioElement, newSrc, isRestricted = null, songMetad
 
         const playWhenReady = () => {
             audioElement.play().catch(err => {
-                console.warn('Play after track change failed:', err);
+                logWarn('Play after track change failed:', err);
             });
         };
 

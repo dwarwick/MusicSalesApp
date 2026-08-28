@@ -13,6 +13,35 @@
 const instances = new WeakMap();
 
 /**
+ * Whether to narrate playback to the console.
+ *
+ * Set by App.razor from the server's hosting environment: on everywhere except Production. Read
+ * through a function rather than captured once, because this module is imported before the players
+ * run and reading it lazily keeps it honest if the flag is ever set later.
+ */
+function isVerbose() {
+    return typeof window !== 'undefined' && window.__stVerbosePlayback === true;
+}
+
+/**
+ * Console helpers for everything that is diagnostic rather than a fault.
+ *
+ * Exported so the three player modules share one switch. Only info and warn are gated: an error
+ * means playback is broken, and a listener's console is the only place that report can come from.
+ */
+export function logInfo(...args) {
+    if (isVerbose()) {
+        console.info(...args);
+    }
+}
+
+export function logWarn(...args) {
+    if (isVerbose()) {
+        console.warn(...args);
+    }
+}
+
+/**
  * True when the browser can play HLS without help. Safari and iOS WebViews can; nothing else can.
  */
 function canPlayNatively(audioElement) {
@@ -80,7 +109,7 @@ export function attach(audioElement, manifestUrl) {
     }
 
     if (canPlayNatively(audioElement)) {
-        console.info('[hls] Using native HLS playback (no MSE available).');
+        logInfo('[hls] Using native HLS playback (no MSE available).');
         audioElement.src = manifestUrl;
 
         // Correct on this branch only, and why callers must not call load() themselves: on the
@@ -159,7 +188,7 @@ function attachViaHlsJs(audioElement, manifestUrl) {
         const resumeAt = audioElement.currentTime;
         const wasPlaying = !audioElement.paused;
 
-        console.warn(
+        logWarn(
             '[hls] Credentials expired (' + reason + '); refetching the manifest and resuming at '
             + resumeAt.toFixed(1) + 's.');
 
@@ -176,7 +205,7 @@ function attachViaHlsJs(audioElement, manifestUrl) {
                         return;
                     }
 
-                    console.warn('[hls] Resume after refresh failed:', err);
+                    logWarn('[hls] Resume after refresh failed:', err);
                 });
             }
 
@@ -226,11 +255,11 @@ function attachViaHlsJs(audioElement, manifestUrl) {
 
         switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-                console.warn('[hls] Network error, retrying:', where, data);
+                logWarn('[hls] Network error, retrying:', where, data);
                 hls.startLoad();
                 break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-                console.warn('[hls] Media error, attempting recovery:', where, data);
+                logWarn('[hls] Media error, attempting recovery:', where, data);
                 hls.recoverMediaError();
                 break;
             default:
@@ -251,7 +280,7 @@ function attachViaHlsJs(audioElement, manifestUrl) {
     // Confirms which path was taken and that a source really was attached. Without it, "no
     // supported source was found" from play() is indistinguishable from attach never having run.
     hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-        console.info('[hls] Manifest parsed:', data.levels?.length ?? 0, 'level(s); source attached.');
+        logInfo('[hls] Manifest parsed:', data.levels?.length ?? 0, 'level(s); source attached.');
     });
 
     hls.loadSource(manifestUrl);

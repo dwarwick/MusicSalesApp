@@ -1,5 +1,6 @@
 ﻿@using Microsoft.Extensions.Configuration
 @inject IConfiguration Configuration
+@inject IWebHostEnvironment HostEnvironment
 
 <!DOCTYPE html>
 <html lang="en">
@@ -48,7 +49,24 @@
     
     <Routes />
     <ReconnectModal />   
-    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <!-- autostart="false" so the circuit can be started with an explicit SignalR log level.
+         If this script tag ever loses its companion Blazor.start() call below, the app does not
+         boot at all - there is no partial failure mode here. -->
+    <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+    <script>
+        // SignalR's browser client logs its negotiation and socket lifecycle at Information -
+        // "Normalizing '_blazor' to ...", "WebSocket connected to wss://...". Useful while
+        // developing, and on a listener's machine it is noise that arrives on every page load.
+        //
+        // Warning in Production only. Anything that actually goes wrong with the circuit is logged
+        // above that level and still appears, so this quietens the narration without hiding faults.
+        Blazor.start({
+            circuit: {
+                configureSignalR: builder => builder.configureLogging(
+                    "@(HostEnvironment.IsProduction() ? "warning" : "information")")
+            }
+        });
+    </script>
     <script src="_content/Syncfusion.Blazor/scripts/syncfusion-blazor.min.js" type="text/javascript"></script>
     <script src="https://kit.fontawesome.com/40e6b04585.js" crossorigin="anonymous"></script>
     <!-- hls.js, self-hosted from wwwroot/lib/hls. Loaded on every page because the players are
@@ -57,6 +75,19 @@
          Required rather than an enhancement: audio is served only as encrypted HLS now, and
          Safari is the only browser that plays an .m3u8 natively. Without this, Chrome, Firefox
          and Edge play nothing at all. See wwwroot/js/hls-player.js for the attach logic. -->
+    <script>
+        // Whether the player modules narrate themselves to the console.
+        //
+        // On by default, off in Production: the playback logging is written for whoever is debugging
+        // a stall, and on a listener's machine it is just noise that pushes a real error off the top
+        // of the console. Errors are NOT gated by this - an unrecoverable failure has to be visible
+        // wherever it happens, because that is the one report a listener can actually send back.
+        //
+        // Note this hides nothing of consequence: DevTools shows every segment request and its SAS in
+        // the Network tab no matter what the console does. Segments are ciphertext and the key sits
+        // behind a token that lives about a minute, which is what the design actually relies on.
+        window.__stVerbosePlayback = @((!HostEnvironment.IsProduction()).ToString().ToLowerInvariant());
+    </script>
     <script src="@Assets["lib/hls/hls.min.js"]"></script>
     <script src="@Assets["js/passkey-helper.js"]"></script>    
     <script src="@Assets["js/dashboard-helper.js"]"></script>
