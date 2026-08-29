@@ -1,6 +1,7 @@
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Pages.Admin;
 
@@ -363,7 +364,7 @@ public partial class StorageBackupModel : BlazorBase, IAsyncDisposable
 
         // The container can change between the counting pass and the copy pass, so clamp.
         var percent = container.ProcessedCount * 100d / container.TotalBlobCount;
-        return Math.Clamp(percent, 0, 100);
+        return ProgressBarValue.ForDisplay(percent);
     }
 
     protected static string FormatBytes(long bytes)
