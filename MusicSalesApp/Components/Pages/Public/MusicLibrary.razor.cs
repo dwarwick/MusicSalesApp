@@ -109,7 +109,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     // AI filter state
     protected string _selectedAiFilter = AiFilterAll;
-    protected bool _aiFilterDropdownOpen;
+
+    // Title filter state. A free-text, case-insensitive substring match, so unlike genre and
+    // artist there is no option list and no selection set - what is typed is the filter.
+    protected string _titleFilter = string.Empty;
+
+    /// <summary>
+    /// Which pill's panel is open, if any. One field rather than a flag per pill: the panel now
+    /// renders below the pill row instead of anchored to its pill, so only one fits at a time.
+    /// </summary>
+    protected enum FilterPanel { None, Ai, Genre, Artist, Title }
+
+    protected FilterPanel _openPanel = FilterPanel.None;
 
     // Track AI content disclosure status by file name
     private Dictionary<string, bool> _aiGeneratedMap = new Dictionary<string, bool>();
@@ -707,13 +718,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     /// <summary>
     /// Gets genre items with counts for the FilterPill component.
-    /// Counts are cross-filtered by the currently selected artists.
+    /// Counts are cross-filtered by the AI, title and currently selected artist filters.
     /// </summary>
     protected Dictionary<string, int> GetGenreItems()
     {
         var fileNames = _genreMap.Keys.AsEnumerable();
 
-        fileNames = fileNames.Where(MatchesAiFilter);
+        fileNames = fileNames.Where(MatchesAiFilter).Where(MatchesTitleFilter);
 
         // Cross-filter: when artists are selected, only count genres from those artists' songs
         if (_selectedArtists.Count > 0)
@@ -755,21 +766,21 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _selectedAiFilter = filter;
     }
 
-    protected void ToggleAiFilterDropdown()
+    protected void TogglePanel(FilterPanel panel)
     {
-        _aiFilterDropdownOpen = !_aiFilterDropdownOpen;
+        _openPanel = _openPanel == panel ? FilterPanel.None : panel;
     }
 
     protected void SelectAiFilterOption(string filter)
     {
         SetAiFilter(filter);
-        _aiFilterDropdownOpen = false;
+        _openPanel = FilterPanel.None;
     }
 
     protected void HandleAiFilterClear()
     {
         SetAiFilter(AiFilterAll);
-        _aiFilterDropdownOpen = false;
+        _openPanel = FilterPanel.None;
     }
 
     protected bool HasActiveAiFilter()
@@ -777,17 +788,63 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _selectedAiFilter != AiFilterAll;
     }
 
+    protected bool HasActiveTitleFilter()
+    {
+        return !string.IsNullOrWhiteSpace(_titleFilter);
+    }
+
+    /// <summary>
+    /// Case-insensitive substring match on the song's display title, so typing "be" finds
+    /// "The Best Song". A blank filter matches everything.
+    /// </summary>
+    protected bool MatchesTitleFilter(string fileName)
+    {
+        var query = _titleFilter?.Trim();
+        if (string.IsNullOrEmpty(query))
+        {
+            return true;
+        }
+
+        return GetDisplayTitle(fileName).Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    protected void HandleTitleChanged(string value)
+    {
+        _titleFilter = value ?? string.Empty;
+    }
+
+    protected void HandleTitleCleared()
+    {
+        _titleFilter = string.Empty;
+        _openPanel = FilterPanel.None;
+    }
+
+    /// <summary>One music-type choice: the stored value, its menu label, and an optional icon.</summary>
+    protected sealed record AiFilterOption(string Value, string Label, string Icon);
+
+    /// <summary>
+    /// The music-type menu, in display order. Data rather than six near-identical buttons, which is
+    /// also what stops the menu labels and the pill label drifting apart.
+    /// </summary>
+    protected static readonly IReadOnlyList<AiFilterOption> AiFilterOptions = new[]
+    {
+        new AiFilterOption(AiFilterAll, "All Music", null),
+        new AiFilterOption(AiFilterAny, "Any AI", null),
+        new AiFilterOption(AiFilterAiMusic, "AI Music", "/images/music_icon_24.png"),
+        new AiFilterOption(AiFilterAiVocals, "AI Vocals", "/images/vocals_icon_24.png"),
+        new AiFilterOption(AiFilterAiLyrics, "AI Lyrics", "/images/lyrics_icon_24.png"),
+        new AiFilterOption(AiFilterNonAi, "Non-AI Music", null),
+    };
+
     protected string GetAiFilterPillLabel()
     {
-        return _selectedAiFilter switch
+        // "All Music" is the menu wording for the inactive state; the pill says what it filters.
+        if (_selectedAiFilter == AiFilterAll)
         {
-            AiFilterAny => "Any AI",
-            AiFilterAiMusic => "AI Music",
-            AiFilterAiVocals => "AI Vocals",
-            AiFilterAiLyrics => "AI Lyrics",
-            AiFilterNonAi => "Non-AI Music",
-            _ => "Music Type"
-        };
+            return "Music Type";
+        }
+
+        return AiFilterOptions.FirstOrDefault(o => o.Value == _selectedAiFilter)?.Label ?? "Music Type";
     }
 
     protected string GetAiFilterOptionClass(string filter)
@@ -797,13 +854,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     /// <summary>
     /// Gets artist items with counts for the FilterPill component.
-    /// Counts are cross-filtered by the currently selected genres.
+    /// Counts are cross-filtered by the AI, title and currently selected genre filters.
     /// </summary>
     protected Dictionary<string, int> GetArtistItems()
     {
         var fileNames = _artistInfoMap.Keys.AsEnumerable();
 
-        fileNames = fileNames.Where(MatchesAiFilter);
+        fileNames = fileNames.Where(MatchesAiFilter).Where(MatchesTitleFilter);
 
         // Cross-filter: when genres are selected, only count artists from those genres' songs
         if (_selectedGenres.Count > 0)
@@ -836,20 +893,22 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// True when any of the three filters is narrowing the list. Used to tell an empty catalogue
+    /// True when any of the four filters is narrowing the list. Used to tell an empty catalogue
     /// apart from a catalogue the filters have emptied - the second is recoverable and needs to
     /// say so, the first does not.
     /// </summary>
     protected bool HasAnyActiveFilter()
-        => _selectedGenres.Count > 0 || _selectedArtists.Count > 0 || HasActiveAiFilter();
+        => _selectedGenres.Count > 0 || _selectedArtists.Count > 0 || HasActiveAiFilter()
+           || HasActiveTitleFilter();
 
-    /// <summary>Clears all three filters at once, for the empty-results state.</summary>
+    /// <summary>Clears all four filters at once, for the empty-results state.</summary>
     protected void ClearAllFilters()
     {
         _selectedGenres.Clear();
         _selectedArtists.Clear();
         SetAiFilter(AiFilterAll);
-        _aiFilterDropdownOpen = false;
+        _titleFilter = string.Empty;
+        _openPanel = FilterPanel.None;
     }
 
     /// <summary>
@@ -923,6 +982,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                        _selectedArtists.Contains(artistInfo.DisplayName);
             });
         }
+
+        // Apply title filter
+        files = files.Where(f => MatchesTitleFilter(f.Name));
 
         // New songs with a null DisplayOrder float to the top. Ranked songs follow
         // in ascending DisplayOrder, and null ties prefer newer uploads via higher Ids.

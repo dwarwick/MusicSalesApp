@@ -625,6 +625,7 @@
    "show ~N cards" rules above (and in lg/md/sm/xs) already own them. */
 
 .music-library-sticky-header { gap: 16px; padding: 12px 0; }
+.filter-pill-scroller { gap: 16px; }
 .music-library-sticky-header h3 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -.02em; }
 .filter-pill { gap: 6px; height: 32px; padding: 0 14px; font-size: 14px; font-weight: 500; }
 .filter-pill-count { width: 20px; height: 20px; font-size: 11px; font-weight: 700; }

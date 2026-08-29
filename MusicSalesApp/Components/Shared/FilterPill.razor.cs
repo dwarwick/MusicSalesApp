@@ -24,41 +24,21 @@ public partial class FilterPillModel : BlazorBase
     public EventCallback OnCleared { get; set; }
 
     protected bool _dropdownOpen;
-    protected string _searchText = string.Empty;
+    protected FilterPillListBody _body;
 
     protected void ToggleDropdown()
     {
         _dropdownOpen = !_dropdownOpen;
     }
 
-    protected List<string> GetFilteredItems()
+    protected async Task HandleToggle((string item, bool isChecked) args)
     {
-        var items = Items.Keys.AsEnumerable();
-
-        if (!string.IsNullOrWhiteSpace(_searchText))
-        {
-            items = items.Where(i => i.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
-        }
-
-        return items
-            .OrderByDescending(i => SelectedItems.Contains(i))
-            .ThenBy(i => i, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    protected int GetItemCount(string item)
-    {
-        return Items.TryGetValue(item, out var count) ? count : 0;
-    }
-
-    protected async Task HandleToggle(string item, bool isChecked)
-    {
-        await OnItemToggled.InvokeAsync((item, isChecked));
+        await OnItemToggled.InvokeAsync(args);
     }
 
     protected async Task HandleClear()
     {
-        _searchText = string.Empty;
+        _body?.ResetSearch();
         _dropdownOpen = false;
         await OnCleared.InvokeAsync();
     }

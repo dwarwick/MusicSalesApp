@@ -1,0 +1,10 @@
+@inherits FilterPillTextBodyModel
+
+@* A filter pill body that is a single free-text box. Unlike FilterPillListBody, whose search only
+   narrows an option list, what is typed here IS the filter - it matches song titles by
+   case-insensitive substring, per keystroke. *@
+
+<div class="filter-pill-search-container">
+    <input type="text" class="filter-pill-search-input" placeholder="@SearchPlaceholder"
+           value="@Value" @oninput="HandleInput" />
+</div>
