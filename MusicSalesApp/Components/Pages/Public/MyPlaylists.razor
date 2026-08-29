@@ -50,6 +50,18 @@
                     </SfCard>
                 }
             }
+            @* The five global "most streamed" playlists. Rendered from the shared descriptor table
+               rather than as five literal cards, so the Day -> Week -> Month -> Year -> All Time
+               order is defined in exactly one place. *@
+            @foreach (var topStreamed in VisibleTopStreamedPlaylists)
+            {
+                <PlaylistCard PlaylistName="@topStreamed.Name"
+                              SongCount="@TopStreamedSongCount(topStreamed)"
+                              Description="@topStreamed.Description"
+                              ShowActions="false"
+                              CssClass="top-streamed-playlist-card"
+                              OnPlay="@(() => PlayTopStreamedPlaylist(topStreamed))" />
+            }
         </div>
     </div>
 

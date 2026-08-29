@@ -153,6 +153,14 @@ public class SitemapService : ISitemapService
             WriteUrlEntry(xmlWriter, genreUrl, DateTime.UtcNow, "weekly", "0.7");
         }
 
+        // Add the "most streamed" playlist URLs. Anonymous, stable and regenerated nightly, so they
+        // are crawlable and change more often than an artist or genre page - hence "daily".
+        foreach (var topStreamed in TopStreamedPlaylists.All.OrderBy(descriptor => descriptor.DisplayOrder))
+        {
+            var topStreamedUrl = $"{baseUrl}/top-streamed/{Uri.EscapeDataString(topStreamed.Window)}";
+            WriteUrlEntry(xmlWriter, topStreamedUrl, DateTime.UtcNow, "daily", "0.7");
+        }
+
         xmlWriter.WriteEndElement(); // urlset
         xmlWriter.WriteEndDocument();
         xmlWriter.Flush();

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -121,6 +121,9 @@ public abstract class BlazorBase : ComponentBase
 
     [Inject]
     protected IRecommendationService RecommendationService { get; set; } = default!;
+
+    [Inject]
+    protected ITopStreamedPlaylistService TopStreamedPlaylistService { get; set; } = default!;
 
     [Inject]
     protected IAppSettingsService AppSettingsService { get; set; } = default!;

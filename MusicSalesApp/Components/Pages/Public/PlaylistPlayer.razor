@@ -3,6 +3,7 @@
 @page "/artist/{ArtistName}"
 @page "/creator/{CreatorId:int}"
 @page "/genre/{GenreName}"
+@page "/top-streamed/{Window}"
 @inherits PlaylistPlayerModel
 
 <PageTitle>@_displayTitle - StreamTunes</PageTitle>
@@ -35,5 +36,6 @@
                            ArtistName="@ArtistName"
                            CreatorId="@CreatorId"
                            GenreName="@GenreName"
+                           Window="@Window"
                            TipStatus="@TipStatus"
                            TipPayPalToken="@TipPayPalToken" />

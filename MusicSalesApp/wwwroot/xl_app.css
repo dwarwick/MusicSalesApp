@@ -242,12 +242,14 @@
     }
 
     /* User Playlists Section - XL Breakpoint */
-    .user-playlists-section {
+    .user-playlists-section,
+    .top-streamed-section {
         gap: 1.5rem;
         padding: 2rem 0;
     }
 
-    .user-playlists-section .section-title {
+    .user-playlists-section .section-title,
+    .top-streamed-section .section-title {
         font-size: 2rem;
     }
 

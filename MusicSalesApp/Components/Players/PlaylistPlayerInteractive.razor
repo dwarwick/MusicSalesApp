@@ -1,4 +1,4 @@
-﻿@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inherits PlaylistPlayerInteractiveModel
 @using MusicSalesApp.Services
 @using MusicSalesApp.Components.Shared
@@ -180,7 +180,17 @@ else
                                 <th class="track-artist">Artist</th>
                             }
                             <th class="track-genre">Genre</th>
-                            <th class="track-streams">Streams</th>
+                            @if (ShowPeriodStreamCount())
+                            {
+                                @* The column this list is RANKED on. It sits before the lifetime
+                                   total so the descending order is read first. *@
+                                <th class="track-streams track-period-streams">@GetPeriodStreamLabel()</th>
+                                <th class="track-streams">All Time</th>
+                            }
+                            else
+                            {
+                                <th class="track-streams">Streams</th>
+                            }
                             <th class="track-duration">Time</th>
                         </tr>
                     </thead>
@@ -260,6 +270,10 @@ else
                                 <td class="track-genre">
                                     <a href="@GetGenreUrl(trackGenre)" class="track-genre-link" @onclick:stopPropagation="true" title="View all @trackGenre songs">@trackGenre</a>
                                 </td>
+                                @if (ShowPeriodStreamCount())
+                                {
+                                    <td class="track-streams track-period-streams">@GetTrackPeriodStreamCount(index).ToString("N0")</td>
+                                }
                                 <td class="track-streams">@GetTrackStreamCount(index).ToString("N0")</td>
                                 <td class="track-duration">@GetTrackDuration(index)</td>
                             </tr>

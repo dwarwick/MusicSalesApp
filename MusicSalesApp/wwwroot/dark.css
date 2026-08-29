@@ -1,4 +1,4 @@
-﻿/* Dark theme customizations */
+/* Dark theme customizations */
 
 :root {
     --color-sf-appbar-bg-color-alt1: #181c1f;
@@ -1040,6 +1040,11 @@ body {
 
 .recommended-playlist-card { border-left: 4px solid var(--st-accent); }
 .liked-songs-playlist-card { border-left: 4px solid #d81b60; }
+/* A third stripe for the most-streamed playlists, on the themed warn token rather than a literal
+   so it tracks light/dark like the accent one does. A stripe is decoration, so WCAG sets no
+   contrast floor for it - which is why a token measured for TEXT is safe here and would not be as
+   a fill. */
+.top-streamed-playlist-card { border-left: 4px solid var(--st-warn); }
 
 /* ---- CTAs ---------------------------------------------------------------
    The last large block of #1db954 on a public page. From AGENTS.md:

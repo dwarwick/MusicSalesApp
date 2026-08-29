@@ -20,6 +20,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<Passkey> Passkeys { get; set; }
     public DbSet<SongLike> SongLikes { get; set; }
     public DbSet<RecommendedPlaylist> RecommendedPlaylists { get; set; }
+    public DbSet<TopStreamedPlaylistEntry> TopStreamedPlaylistEntries { get; set; }
     public DbSet<AppSettings> AppSettings { get; set; }
     public DbSet<Creator> Creators { get; set; }
     public DbSet<StreamPayout> StreamPayouts { get; set; }
@@ -346,6 +347,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Composite index for efficient querying by user and date
         builder.Entity<RecommendedPlaylist>()
             .HasIndex(rp => new { rp.UserId, rp.GeneratedAt });
+
+        // Configure TopStreamedPlaylistEntry entity
+        builder.Entity<TopStreamedPlaylistEntry>()
+            .HasOne(entry => entry.SongMetadata)
+            .WithMany()
+            .HasForeignKey(entry => entry.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Every read is "give me one chart in rank order", so the covering shape is (Window, DisplayOrder).
+        builder.Entity<TopStreamedPlaylistEntry>()
+            .HasIndex(entry => new { entry.Window, entry.DisplayOrder });
 
         // Configure AppSettings entity
         builder.Entity<AppSettings>()
@@ -704,6 +716,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on CreatedDate for efficient querying of recent streams
         builder.Entity<SongStream>()
             .HasIndex(ss => ss.CreatedDate);
+
+        // Composite for the top-streamed charts, which filter on a date range and then group by song.
+        // The single-column CreatedDate index above finds the rows but still requires a lookup per row
+        // to read SongMetadataId; with the song id in the key the whole group-by is served from the
+        // index. Matters most for the 365-day chart, which scans the widest range.
+        builder.Entity<SongStream>()
+            .HasIndex(ss => new { ss.CreatedDate, ss.SongMetadataId });
 
         // Configure Genre entity
         builder.Entity<Genre>()

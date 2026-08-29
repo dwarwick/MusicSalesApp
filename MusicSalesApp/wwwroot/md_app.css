@@ -221,12 +221,14 @@
     }
 
     /* User Playlists Section - MD Breakpoint */
-    .user-playlists-section {
+    .user-playlists-section,
+    .top-streamed-section {
         gap: 1rem;
         padding: 1.5rem 0;
     }
 
-    .user-playlists-section .section-title {
+    .user-playlists-section .section-title,
+    .top-streamed-section .section-title {
         font-size: 1.75rem;
     }
 

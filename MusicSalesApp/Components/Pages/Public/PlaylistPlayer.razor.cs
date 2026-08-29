@@ -43,6 +43,12 @@ namespace MusicSalesApp.Components.Pages.Public
         [Parameter]
         public string GenreName { get; set; }
 
+        /// <summary>
+        /// The <c>TopStreamedWindows</c> key from <c>/top-streamed/{Window}</c>.
+        /// </summary>
+        [Parameter]
+        public string Window { get; set; }
+
         [SupplyParameterFromQuery(Name = "tip_status")]
         public string TipStatus { get; set; }
 
@@ -54,6 +60,9 @@ namespace MusicSalesApp.Components.Pages.Public
 
         [Inject]
         private ICreatorService CreatorService { get; set; }
+
+        [Inject]
+        private ITopStreamedPlaylistService TopStreamedPlaylistService { get; set; }
 
         protected string _displayTitle = "";
         protected string _seoDescription;
@@ -94,6 +103,22 @@ namespace MusicSalesApp.Components.Pages.Public
                     else
                     {
                         _displayTitle = "Creator";
+                    }
+                }
+                else if (!string.IsNullOrEmpty(Window))
+                {
+                    // Unlike the other four, these pages are the same for every visitor and are
+                    // reachable signed-out, so their track list is worth rendering for crawlers.
+                    var descriptor = TopStreamedPlaylists.Find(Window);
+                    _displayTitle = descriptor?.Name ?? "Most Streamed";
+                    _seoDescription = descriptor is null
+                        ? "The most streamed songs on StreamTunes."
+                        : $"{descriptor.Description} on StreamTunes - unlimited music streaming.";
+
+                    if (descriptor is not null)
+                    {
+                        var entries = await TopStreamedPlaylistService.GetAsync(descriptor.Window);
+                        PopulateSeoTracks(entries.Select(entry => entry.SongMetadata));
                     }
                 }
                 else if (RecommendedUserId.HasValue)

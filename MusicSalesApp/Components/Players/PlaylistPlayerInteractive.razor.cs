@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
@@ -32,6 +32,12 @@ namespace MusicSalesApp.Components.Players
         [Parameter]
         public string GenreName { get; set; }
 
+        /// <summary>
+        /// The <c>TopStreamedWindows</c> key when this is a <c>/top-streamed/{Window}</c> page.
+        /// </summary>
+        [Parameter]
+        public string Window { get; set; }
+
         protected bool _loading = true;
         protected string _error;
         protected PlaylistInfo _playlistInfo;
@@ -40,6 +46,7 @@ namespace MusicSalesApp.Components.Players
         protected bool _isArtistMode;
         protected bool _isCreatorMode;
         protected bool _isGenreMode;
+        protected bool _isTopStreamedMode;
         protected string _streamUrl;
         protected bool _isPlaying;
         protected double _currentTime;
@@ -58,6 +65,26 @@ namespace MusicSalesApp.Components.Players
         protected int _currentTrackIndex;
         protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
         protected Dictionary<int, int> _trackStreamCounts = new Dictionary<int, int>();
+
+        /// <summary>
+        /// Streams inside this list's period, keyed by song id. Populated only on a top-streamed page.
+        ///
+        /// <para>
+        /// Kept separate from <see cref="_trackStreamCounts"/>, which holds the LIFETIME count and is
+        /// overwritten by the stream-count hub as songs play. These two are different numbers: the
+        /// list is ranked on this one, so on "Top 10 Today" showing only the lifetime figure would
+        /// render a correctly ordered list that looks mis-sorted. The player shows both columns.
+        /// </para>
+        ///
+        /// <para>
+        /// A snapshot from the nightly job, so - unlike the lifetime count - it deliberately does not
+        /// move while the page is open.
+        /// </para>
+        /// </summary>
+        protected Dictionary<int, int> _trackPeriodStreamCounts = new Dictionary<int, int>();
+
+        /// <summary>Heading for the period column, or null when the list has no period of its own.</summary>
+        protected string _periodStreamLabel;
         private List<string> _trackStreamUrls = new List<string>();
         private Dictionary<int, CoverArtSource> _trackArtSources = new Dictionary<int, CoverArtSource>();
         private Dictionary<string, Models.SongMetadata> _metadataLookup = new Dictionary<string, Models.SongMetadata>();
@@ -82,6 +109,7 @@ namespace MusicSalesApp.Components.Players
         private string _lastLoadedArtistName;
         private int? _lastLoadedCreatorId;
         private string _lastLoadedGenreName;
+        private string _lastLoadedWindow;
         protected bool _hasActiveSubscription;
         protected bool _isAdmin;
         private int? _currentUserId;
@@ -237,6 +265,7 @@ namespace MusicSalesApp.Components.Players
             _isArtistMode = !string.IsNullOrEmpty(ArtistName);
             _isCreatorMode = CreatorId.HasValue;
             _isGenreMode = !string.IsNullOrEmpty(GenreName);
+            _isTopStreamedMode = !string.IsNullOrEmpty(Window);
         }
 
         protected override void OnParametersSet()
@@ -257,6 +286,10 @@ namespace MusicSalesApp.Components.Players
             else if (_isCreatorMode)
             {
                 parametersChanged = CreatorId != _lastLoadedCreatorId;
+            }
+            else if (_isTopStreamedMode)
+            {
+                parametersChanged = Window != _lastLoadedWindow;
             }
             else if (_isRecommendedMode)
             {
@@ -300,6 +333,11 @@ namespace MusicSalesApp.Components.Players
                     {
                         _lastLoadedCreatorId = CreatorId;
                         await LoadCreatorPlaylistInfo();
+                    }
+                    else if (_isTopStreamedMode)
+                    {
+                        _lastLoadedWindow = Window;
+                        await LoadTopStreamedPlaylistInfo();
                     }
                     else if (_isRecommendedMode)
                     {
@@ -453,6 +491,7 @@ namespace MusicSalesApp.Components.Players
             if (_isGenreMode) return "Genre";
             if (_isArtistMode || _isCreatorMode) return "Artist";
             if (_isRecommendedMode) return "For you";
+            if (_isTopStreamedMode) return "Most streamed";
             return "Playlist";
         }
 
@@ -1133,17 +1172,12 @@ namespace MusicSalesApp.Components.Players
 
             try
             {
-                // Check authentication status
-                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
-
-                if (_isAuthenticated)
-                {
-                    await LoadUserContext(authState.User);
-                }
+                await LoadAuthenticatedUserContextAsync();
 
                 // URL decode the genre name
                 var decodedGenreName = Uri.UnescapeDataString(GenreName);
+                // Set before the early returns below, not only inside the builder: the page title
+                // reads this, so a genre with no songs would otherwise render as "Unknown Playlist".
                 _playlistName = decodedGenreName;
 
                 // Get all songs with this genre
@@ -1155,82 +1189,12 @@ namespace MusicSalesApp.Components.Players
                     return;
                 }
 
-                // Build list of tracks from genre songs
-                var tracks = new List<StorageFileInfo>();
-                var allMetadata = new List<Models.SongMetadata>();
-                
-                foreach (var songMetadata in genreSongs.Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath)))
-                {
-                    tracks.Add(new StorageFileInfo
-                    {
-                        Name = songMetadata.Mp3BlobPath,
-                        Length = 0,
-                        ContentType = "audio/mpeg",
-                        LastModified = songMetadata.UpdatedAt,
-                        Tags = new Dictionary<string, string>()
-                    });
-                    allMetadata.Add(songMetadata);
-                }
-
-                if (!tracks.Any())
+                if (!await BuildPlaylistFromMetadataAsync(genreSongs, decodedGenreName))
                 {
                     _error = $"No playable tracks found for genre '{decodedGenreName}'.";
                     _loading = false;
                     return;
                 }
-
-                // Build metadata lookup for track info (handle potential duplicates by using first occurrence)
-                _metadataLookup = allMetadata
-                    .GroupBy(m => m.Mp3BlobPath)
-                    .ToDictionary(g => g.Key, g => g.First());
-
-                // Initialize stream counts from metadata
-                _trackStreamCounts.Clear();
-                foreach (var meta in allMetadata)
-                {
-                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
-                }
-
-                var firstTrackMeta = allMetadata.First();
-                var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
-                var coverImageUrl = !string.IsNullOrEmpty(coverImagePath) 
-                    ? $"api/music/{SafeEncodePath(coverImagePath)}" 
-                    : "";
-
-                _playlistInfo = new PlaylistInfo
-                {
-                    PlaylistName = _playlistName,
-                    CoverArtUrl = coverImageUrl,
-                    CoverArtFileName = coverImagePath,
-                    Tracks = tracks,
-                    MetadataId = firstTrackMeta.Id
-                };
-
-                // Check subscription status before generating SAS URLs (affects URL lifetime)
-                if (_isAuthenticated && _currentUserId.HasValue)
-                {
-                    _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId.Value);
-                }
-
-                // Pre-fetch all track SAS URLs in a single batch request
-                _trackStreamUrls = GetTrackStreamUrlsBatch(tracks);
-
-                // Store track images from metadata
-                for (int i = 0; i < tracks.Count; i++)
-                {
-                    var track = tracks[i];
-                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
-                    {
-                        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
-                        {
-                            _trackArtSources[i] = BuildTrackArtSource(metadata);
-                        }
-                    }
-                }
-
-                // Set up the first track
-                _currentTrackIndex = 0;
-                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
             }
             catch (Exception ex)
             {
@@ -1241,6 +1205,193 @@ namespace MusicSalesApp.Components.Players
             {
                 _loading = false;
             }
+        }
+
+        /// <summary>
+        /// Loads one of the five global "most streamed" playlists.
+        /// </summary>
+        /// <remarks>
+        /// The song order is the rank the nightly job stored - most streamed first - and is
+        /// deliberately never re-sorted here.
+        /// </remarks>
+        private async Task LoadTopStreamedPlaylistInfo()
+        {
+            _loading = true;
+            _error = null;
+
+            var descriptor = TopStreamedPlaylists.Find(Window);
+            if (descriptor is null)
+            {
+                _error = "Unknown playlist.";
+                _loading = false;
+                return;
+            }
+
+            try
+            {
+                await LoadAuthenticatedUserContextAsync();
+
+                // Set before the early returns below for the same reason as the genre loader: the
+                // page title reads it even when the list turns out to be empty.
+                _playlistName = descriptor.Name;
+                _periodStreamLabel = descriptor.PeriodLabel;
+
+                var entries = await TopStreamedPlaylistService.GetAsync(descriptor.Window);
+                if (entries.Count == 0)
+                {
+                    _error = "This playlist has no songs yet.";
+                    _loading = false;
+                    return;
+                }
+
+                // Captured before the shared builder runs, because that clears the per-track state.
+                // Left empty for the all-time list, whose ranking number IS the lifetime counter, so a
+                // second column would only repeat the first.
+                var periodCounts = descriptor.PeriodLabel is null
+                    ? new Dictionary<int, int>()
+                    : entries
+                        .Where(entry => entry.SongMetadata != null)
+                        .GroupBy(entry => entry.SongMetadataId)
+                        .ToDictionary(group => group.Key, group => group.First().StreamCount);
+
+                var songs = entries
+                    .Where(entry => entry.SongMetadata != null)
+                    .Select(entry => entry.SongMetadata)
+                    .ToList();
+
+                if (!await BuildPlaylistFromMetadataAsync(songs, descriptor.Name))
+                {
+                    _error = "No playable tracks found in this playlist.";
+                    _loading = false;
+                    return;
+                }
+
+                _trackPeriodStreamCounts = periodCounts;
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+                Logger.LogError(ex, "Error loading top-streamed playlist {Window}", Window);
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+
+        /// <summary>
+        /// Reads the signed-in user, if there is one. A no-op for an anonymous visitor, which both the
+        /// genre and top-streamed routes allow.
+        /// </summary>
+        private async Task LoadAuthenticatedUserContextAsync()
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+            if (_isAuthenticated)
+            {
+                await LoadUserContext(authState.User);
+            }
+        }
+
+        /// <summary>
+        /// Turns a list of songs into the loaded playlist: track list, metadata lookup, stream counts,
+        /// cover art, SAS URLs and the opening track.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Extracted from the per-mode loaders, which each carried a verbatim copy of it. Callers keep
+        /// their own "nothing found" wording, so this reports only whether anything playable survived.
+        /// </para>
+        /// <para>
+        /// <b>The incoming order is preserved.</b> Nothing here sorts, which is what lets the
+        /// top-streamed playlists keep their stored rank.
+        /// </para>
+        /// </remarks>
+        /// <returns><c>false</c> when no song in <paramref name="songs"/> has playable audio.</returns>
+        private async Task<bool> BuildPlaylistFromMetadataAsync(
+            IEnumerable<Models.SongMetadata> songs,
+            string playlistName)
+        {
+            var tracks = new List<StorageFileInfo>();
+            var allMetadata = new List<Models.SongMetadata>();
+
+            foreach (var songMetadata in songs.Where(s => s != null && !string.IsNullOrEmpty(s.Mp3BlobPath)))
+            {
+                tracks.Add(new StorageFileInfo
+                {
+                    Name = songMetadata.Mp3BlobPath,
+                    Length = 0,
+                    ContentType = "audio/mpeg",
+                    LastModified = songMetadata.UpdatedAt,
+                    Tags = new Dictionary<string, string>()
+                });
+                allMetadata.Add(songMetadata);
+            }
+
+            if (tracks.Count == 0)
+            {
+                return false;
+            }
+
+            _playlistName = playlistName;
+
+            // Build metadata lookup for track info (handle potential duplicates by using first occurrence)
+            _metadataLookup = allMetadata
+                .GroupBy(m => m.Mp3BlobPath)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            // Initialize stream counts from metadata. These are LIFETIME counts, kept current by the
+            // stream-count hub; a period count, where one applies, is held separately.
+            _trackStreamCounts.Clear();
+            _trackPeriodStreamCounts.Clear();
+            foreach (var meta in allMetadata)
+            {
+                _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
+            }
+
+            var firstTrackMeta = allMetadata.First();
+            var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
+            var coverImageUrl = !string.IsNullOrEmpty(coverImagePath)
+                ? $"api/music/{SafeEncodePath(coverImagePath)}"
+                : "";
+
+            _playlistInfo = new PlaylistInfo
+            {
+                PlaylistName = _playlistName,
+                CoverArtUrl = coverImageUrl,
+                CoverArtFileName = coverImagePath,
+                Tracks = tracks,
+                MetadataId = firstTrackMeta.Id
+            };
+
+            // Check subscription status before generating SAS URLs (affects URL lifetime)
+            if (_isAuthenticated && _currentUserId.HasValue)
+            {
+                _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId.Value);
+            }
+
+            // Pre-fetch all track SAS URLs in a single batch request
+            _trackStreamUrls = GetTrackStreamUrlsBatch(tracks);
+
+            // Store track images from metadata
+            for (int i = 0; i < tracks.Count; i++)
+            {
+                var track = tracks[i];
+                if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                {
+                    if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
+                    {
+                        _trackArtSources[i] = BuildTrackArtSource(metadata);
+                    }
+                }
+            }
+
+            // Set up the first track
+            _currentTrackIndex = 0;
+            _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
+
+            return true;
         }
 
                 /// <summary>
@@ -1594,6 +1745,39 @@ namespace MusicSalesApp.Components.Players
                 return metadata.NumberOfStreams;
             }
             
+            return 0;
+        }
+
+        /// <summary>
+        /// Whether the track list should carry a second stream-count column.
+        /// </summary>
+        /// <remarks>
+        /// True only on the four rolling top-streamed pages. The list is ranked on the period count
+        /// while <see cref="GetTrackStreamCount"/> returns the lifetime one, so without this column a
+        /// correctly ordered "Top 10 Today" reads as mis-sorted. The all-time page leaves it off
+        /// because there the two numbers are the same.
+        /// </remarks>
+        protected bool ShowPeriodStreamCount() =>
+            _isTopStreamedMode && !string.IsNullOrEmpty(_periodStreamLabel);
+
+        /// <summary>The heading for that column - "Today", "This Week" and so on.</summary>
+        protected string GetPeriodStreamLabel() => _periodStreamLabel ?? string.Empty;
+
+        /// <summary>
+        /// Streams for this track inside the list's period. A snapshot from the nightly job, so it
+        /// deliberately does not move as songs play - unlike the lifetime count beside it.
+        /// </summary>
+        protected int GetTrackPeriodStreamCount(int index)
+        {
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return 0;
+
+            var track = _playlistInfo.Tracks[index];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata)
+                && _trackPeriodStreamCounts.TryGetValue(metadata.Id, out var count))
+            {
+                return count;
+            }
+
             return 0;
         }
 
