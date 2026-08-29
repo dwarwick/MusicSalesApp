@@ -526,6 +526,7 @@
 
     .filter-pill { height: 34px; padding: 0 13px; font-size: 13px; }
     .music-library-sticky-header { gap: 8px; padding: 10px 0; }
+    .filter-pill-scroller { gap: 8px; }
     .music-library-sticky-header h3 { font-size: 19px; }
 }
 

@@ -9,84 +9,87 @@
     <PageTitle>Music Library</PageTitle>
     <div class="music-library-sticky-header">
         <h3>Music Library</h3>
-        <div class="filter-pill-container">
-            <button class="filter-pill @(HasActiveAiFilter() ? "active" : string.Empty)" @onclick="ToggleAiFilterDropdown" aria-label="AI music filter">
-                @if (HasActiveAiFilter())
-                {
-                    <span class="filter-pill-clear" @onclick="HandleAiFilterClear" @onclick:stopPropagation="true" title="Clear AI music filter">✕</span>
-                }
-                <span>@GetAiFilterPillLabel()</span>
-                <span class="filter-pill-arrow">@(_aiFilterDropdownOpen ? "▲" : "▼")</span>
-            </button>
-            @if (_aiFilterDropdownOpen)
-            {
-                <div class="filter-pill-dropdown filter-pill-dropdown-compact">
-                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAll)" @onclick="() => SelectAiFilterOption(AiFilterAll)">
-                        <span>All Music</span>
-                        @if (_selectedAiFilter == AiFilterAll)
-                        {
-                            <span class="filter-pill-option-indicator">✓</span>
-                        }
-                    </button>
-                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAny)" @onclick="() => SelectAiFilterOption(AiFilterAny)">
-                        <span>Any AI</span>
-                        @if (_selectedAiFilter == AiFilterAny)
-                        {
-                            <span class="filter-pill-option-indicator">✓</span>
-                        }
-                    </button>
-                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAiMusic)" @onclick="() => SelectAiFilterOption(AiFilterAiMusic)">
-                        <span class="filter-pill-option-label">
-                            <img src="/images/music_icon_24.png" alt="" class="filter-pill-option-icon" />
-                            <span>AI Music</span>
-                        </span>
-                        @if (_selectedAiFilter == AiFilterAiMusic)
-                        {
-                            <span class="filter-pill-option-indicator">✓</span>
-                        }
-                    </button>
-                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAiVocals)" @onclick="() => SelectAiFilterOption(AiFilterAiVocals)">
-                        <span class="filter-pill-option-label">
-                            <img src="/images/vocals_icon_24.png" alt="" class="filter-pill-option-icon" />
-                            <span>AI Vocals</span>
-                        </span>
-                        @if (_selectedAiFilter == AiFilterAiVocals)
-                        {
-                            <span class="filter-pill-option-indicator">✓</span>
-                        }
-                    </button>
-                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAiLyrics)" @onclick="() => SelectAiFilterOption(AiFilterAiLyrics)">
-                        <span class="filter-pill-option-label">
-                            <img src="/images/lyrics_icon_24.png" alt="" class="filter-pill-option-icon" />
-                            <span>AI Lyrics</span>
-                        </span>
-                        @if (_selectedAiFilter == AiFilterAiLyrics)
-                        {
-                            <span class="filter-pill-option-indicator">✓</span>
-                        }
-                    </button>
-                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterNonAi)" @onclick="() => SelectAiFilterOption(AiFilterNonAi)">
-                        <span>Non-AI Music</span>
-                        @if (_selectedAiFilter == AiFilterNonAi)
-                        {
-                            <span class="filter-pill-option-indicator">✓</span>
-                        }
-                    </button>
-                </div>
-            }
+        @* The pills scroll sideways rather than wrapping, so a phone keeps them on one line. That
+           forces the open body OUT of the pill: an overflow container clips absolutely positioned
+           descendants, so an anchored dropdown would be cut off inside a 34px row. It renders as a
+           panel below the row instead - the same shape the MAUI app's filter panels use. *@
+        <div class="filter-pill-scroller">
+            <FilterPillButton Label="@GetAiFilterPillLabel()"
+                              AriaLabel="AI music filter"
+                              ClearTitle="Clear AI music filter"
+                              IsActive="HasActiveAiFilter()"
+                              IsOpen="_openPanel == FilterPanel.Ai"
+                              OnClick="() => TogglePanel(FilterPanel.Ai)"
+                              OnClear="HandleAiFilterClear" />
+            <FilterPillButton Label="Genre"
+                              IsActive="_selectedGenres.Count > 0"
+                              Count="_selectedGenres.Count"
+                              IsOpen="_openPanel == FilterPanel.Genre"
+                              OnClick="() => TogglePanel(FilterPanel.Genre)"
+                              OnClear="HandleGenreCleared" />
+            <FilterPillButton Label="Artist"
+                              IsActive="_selectedArtists.Count > 0"
+                              Count="_selectedArtists.Count"
+                              IsOpen="_openPanel == FilterPanel.Artist"
+                              OnClick="() => TogglePanel(FilterPanel.Artist)"
+                              OnClear="HandleArtistCleared" />
+            <FilterPillButton Label="Title"
+                              IsActive="HasActiveTitleFilter()"
+                              IsOpen="_openPanel == FilterPanel.Title"
+                              OnClick="() => TogglePanel(FilterPanel.Title)"
+                              OnClear="HandleTitleCleared" />
         </div>
-        <FilterPill Label="Genres"
-                    SearchPlaceholder="Find a genre"
-                    Items="GetGenreItems()"
-                    SelectedItems="_selectedGenres"
-                    OnItemToggled="HandleGenreToggled"
-                    OnCleared="HandleGenreCleared" />
-        <FilterPill Label="Artists"
-                    SearchPlaceholder="Find an artist"
-                    Items="GetArtistItems()"
-                    SelectedItems="_selectedArtists"
-                    OnItemToggled="HandleArtistToggled"
-                    OnCleared="HandleArtistCleared" />
+        @if (_openPanel != FilterPanel.None)
+        {
+            <div class="filter-pill-dropdown filter-pill-panel">
+                @if (_openPanel == FilterPanel.Ai)
+                {
+                    <div class="filter-pill-dropdown-compact">
+                        @foreach (var option in AiFilterOptions)
+                        {
+                            <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(option.Value)"
+                                    @onclick="() => SelectAiFilterOption(option.Value)">
+                                @if (option.Icon is null)
+                                {
+                                    <span>@option.Label</span>
+                                }
+                                else
+                                {
+                                    <span class="filter-pill-option-label">
+                                        <img src="@option.Icon" alt="" class="filter-pill-option-icon" />
+                                        <span>@option.Label</span>
+                                    </span>
+                                }
+                                @if (_selectedAiFilter == option.Value)
+                                {
+                                    <span class="filter-pill-option-indicator">✓</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                }
+                else if (_openPanel == FilterPanel.Genre)
+                {
+                    <FilterPillListBody SearchPlaceholder="Find a genre"
+                                        Items="GetGenreItems()"
+                                        SelectedItems="_selectedGenres"
+                                        OnItemToggled="HandleGenreToggled" />
+                }
+                else if (_openPanel == FilterPanel.Artist)
+                {
+                    <FilterPillListBody SearchPlaceholder="Find an artist"
+                                        Items="GetArtistItems()"
+                                        SelectedItems="_selectedArtists"
+                                        OnItemToggled="HandleArtistToggled" />
+                }
+                else
+                {
+                    <FilterPillTextBody SearchPlaceholder="Find a song"
+                                        Value="@_titleFilter"
+                                        ValueChanged="HandleTitleChanged" />
+                }
+            </div>
+        }
     </div>
 }
 else if (!string.IsNullOrWhiteSpace(EmbeddedPageTitle))

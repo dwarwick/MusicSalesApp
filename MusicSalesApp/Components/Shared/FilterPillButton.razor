@@ -1,0 +1,18 @@
+@inherits FilterPillButtonModel
+
+@* The pill button on its own, split out of FilterPill so the music library can render its pills
+   inside a horizontally scrolling row while their bodies live in a panel below it. An overflow
+   container clips absolutely positioned descendants, so the two cannot be siblings there. *@
+
+<button class="filter-pill @(IsActive ? "active" : "")" @onclick="OnClick" aria-label="@AriaLabel">
+    @if (IsActive && OnClear.HasDelegate)
+    {
+        <span class="filter-pill-clear" @onclick="OnClear" @onclick:stopPropagation="true" title="@ResolvedClearTitle">✕</span>
+    }
+    <span>@Label</span>
+    @if (Count > 0)
+    {
+        <span class="filter-pill-count">@Count</span>
+    }
+    <span class="filter-pill-arrow">@(IsOpen ? "▲" : "▼")</span>
+</button>

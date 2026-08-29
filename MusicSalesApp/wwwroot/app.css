@@ -512,6 +512,21 @@ h1:focus {
     margin: 0;
 }
 
+/* The music library's pill row. Scrolls sideways instead of wrapping so the pills stay on one
+   line on a phone. Nothing absolutely positioned may live inside it: a scroll container clips its
+   descendants on BOTH axes, which is why the open filter body renders in .filter-pill-panel
+   below the row rather than anchored to its pill the way .filter-pill-dropdown is. */
+.filter-pill-scroller {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 /* Filter Pill */
 .filter-pill-container {
     position: relative;
@@ -567,6 +582,18 @@ h1:focus {
     margin-top: 4px;
     z-index: 20;
     padding: 8px 0;
+}
+
+/* The open filter body, on its own line under the pill row. Takes its surface, border and radius
+   from .filter-pill-dropdown, which it is always rendered alongside - only the positioning
+   differs, so there is no second set of colours to keep in sync. Must stay AFTER that rule:
+   both are single-class selectors, so the later position wins. */
+.filter-pill-panel {
+    position: static;
+    flex-basis: 100%;
+    width: 100%;
+    max-width: 420px;
+    margin-top: 0;
 }
 
 .filter-pill-search-container {

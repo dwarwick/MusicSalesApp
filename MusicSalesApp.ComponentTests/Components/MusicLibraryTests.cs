@@ -480,9 +480,9 @@ public class MusicLibraryTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have filter pill with Genres label
+        // Assert - should have filter pill with Genre label
         Assert.That(cut.Markup, Does.Contain("filter-pill"));
-        Assert.That(cut.Markup, Does.Contain("Genres"));
+        Assert.That(cut.Markup, Does.Contain("Genre"));
     }
 
     [Test]
@@ -495,8 +495,8 @@ public class MusicLibraryTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have filter pill with Artists label
-        Assert.That(cut.Markup, Does.Contain("Artists"));
+        // Assert - should have filter pill with Artist label
+        Assert.That(cut.Markup, Does.Contain("Artist"));
         var pills = cut.FindAll(".filter-pill");
         Assert.That(pills.Count, Is.GreaterThanOrEqualTo(2));
     }
@@ -798,7 +798,7 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("filter-pill-dropdown"));
 
         // Act - click the genre pill to open dropdown
-        FindFilterPill(cut, "Genres").Click();
+        FindFilterPill(cut, "Genre").Click();
 
         // Assert - dropdown should now be visible with genres and count
         Assert.That(cut.Markup, Does.Contain("filter-pill-dropdown"));
@@ -836,7 +836,7 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("JazzSong"));
 
         // Act - open genre dropdown and check Rock
-        FindFilterPill(cut, "Genres").Click();
+        FindFilterPill(cut, "Genre").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         // Find the Rock checkbox
         var rockCheckbox = checkboxes.FirstOrDefault(cb =>
@@ -875,7 +875,7 @@ public class MusicLibraryTests : BUnitTestBase
         var cut = TestContext.Render<MusicLibrary>();
 
         // Act - open genre dropdown and select a genre
-        FindFilterPill(cut, "Genres").Click();
+        FindFilterPill(cut, "Genre").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var rockCheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Rock"));
@@ -913,7 +913,7 @@ public class MusicLibraryTests : BUnitTestBase
         var cut = TestContext.Render<MusicLibrary>();
 
         // Act - select a genre to filter
-        FindFilterPill(cut, "Genres").Click();
+        FindFilterPill(cut, "Genre").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var rockCheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Rock"));
@@ -978,7 +978,7 @@ public class MusicLibraryTests : BUnitTestBase
         var cut = TestContext.Render<MusicLibrary>();
 
         // Act - open genre dropdown
-        FindFilterPill(cut, "Genres").Click();
+        FindFilterPill(cut, "Genre").Click();
 
         // Assert - search input should be present and all genres visible
         Assert.That(cut.Markup, Does.Contain("filter-pill-search-input"));
@@ -1028,7 +1028,7 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Song2"));
 
         // Act - open artist dropdown and select Artist A
-        FindFilterPill(cut, "Artists").Click();
+        FindFilterPill(cut, "Artist").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var artistACheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Artist A"));
@@ -1050,8 +1050,9 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
 
-        // Assert - artist filter should not be shown
-        Assert.That(cut.Markup, Does.Not.Contain("Artists"));
+        // Assert - artist filter should not be shown. Checked via the pill class, not the label:
+        // "Artist" now appears in artist names on the cards, so a label check would pass vacuously.
+        Assert.That(cut.Markup, Does.Not.Contain("filter-pill"));
     }
 
     [Test]
@@ -1090,14 +1091,14 @@ public class MusicLibraryTests : BUnitTestBase
         var cut = TestContext.Render<MusicLibrary>();
 
         // Act - open artist dropdown and select Artist A
-        FindFilterPill(cut, "Artists").Click();
+        FindFilterPill(cut, "Artist").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var artistACheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Artist A"));
         artistACheckbox?.Change(true);
 
         // Now open genre dropdown to see updated items
-        FindFilterPill(cut, "Genres").Click();
+        FindFilterPill(cut, "Genre").Click();
 
         // Assert - genre dropdown should only show Rock and Country (Artist A's genres), not Jazz
         var genreItems = cut.FindAll(".filter-pill-dropdown-item");
@@ -1160,7 +1161,7 @@ public class MusicLibraryTests : BUnitTestBase
             "the mini player should start on the card that was clicked");
 
         // Narrow to Jazz, which drops AlphaSong (before the playing card) and CharlieSong (after).
-        FindFilterPill(cut, "Genres").Click();
+        FindFilterPill(cut, "Genre").Click();
         cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']")
             .First(cb => cb.ParentElement!.TextContent.Contains("Jazz", StringComparison.Ordinal))
             .Change(true);
@@ -1355,6 +1356,193 @@ public class MusicLibraryTests : BUnitTestBase
     private static IElement CardContainingMiniPlayer(IRenderedComponent<MusicLibrary> cut)
     {
         return cut.FindAll(".music-card").Single(card => card.QuerySelector(".card-mini-player") != null);
+    }
+
+    // --- Title filter ---
+
+    private static List<MusicSalesApp.Models.SongMetadata> TitleFilterMetadata() => new()
+    {
+        new MusicSalesApp.Models.SongMetadata
+        {
+            Id = 1, Mp3BlobPath = "TheBestSong.mp3", SongTitle = "The Best Song",
+            Genre = "Rock", UpdatedAt = DateTime.Now
+        },
+        new MusicSalesApp.Models.SongMetadata
+        {
+            Id = 2, Mp3BlobPath = "QuietMorning.mp3", SongTitle = "Quiet Morning",
+            Genre = "Jazz", UpdatedAt = DateTime.Now
+        },
+        new MusicSalesApp.Models.SongMetadata
+        {
+            Id = 3, Mp3BlobPath = "BeachDay.mp3", SongTitle = "Beach Day",
+            Genre = "Pop", UpdatedAt = DateTime.Now
+        }
+    };
+
+    [Test]
+    public void MusicLibrary_ShowsTitleFilterPill()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.That(cut.Markup, Does.Contain("Title"));
+        Assert.That(cut.FindAll(".filter-pill"), Has.Count.EqualTo(4));
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_MatchesSubstringCaseInsensitively()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Title").Click();
+
+        // Lower case against a capitalised title, matching mid-word rather than on a prefix.
+        cut.Find(".filter-pill-search-input").Input("be");
+
+        Assert.That(cut.Markup, Does.Contain("The Best Song"));
+        Assert.That(cut.Markup, Does.Contain("Beach Day"));
+        Assert.That(cut.Markup, Does.Not.Contain("Quiet Morning"));
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_MatchesRegardlessOfTypedCase()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Title").Click();
+        cut.Find(".filter-pill-search-input").Input("BEACH");
+
+        Assert.That(cut.Markup, Does.Contain("Beach Day"));
+        Assert.That(cut.Markup, Does.Not.Contain("The Best Song"));
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_InputShowsTheQueryAndItsPlaceholder()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Title").Click();
+
+        // Regression: Value is a string parameter, so Razor treats an unprefixed attribute as
+        // literal text. Passing Value="_titleFilter" rather than Value="@_titleFilter" put the
+        // field's NAME in the box, hid the placeholder, and reset what was typed on every render.
+        var input = cut.Find(".filter-pill-search-input");
+        Assert.That(input.GetAttribute("placeholder"), Is.EqualTo("Find a song"));
+        Assert.That(input.GetAttribute("value"), Is.Empty);
+
+        input.Input("beach");
+
+        Assert.That(cut.Find(".filter-pill-search-input").GetAttribute("value"), Is.EqualTo("beach"));
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_CombinesWithGenreFilter()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Title").Click();
+        cut.Find(".filter-pill-search-input").Input("be");
+
+        // "be" alone matches two songs; adding Rock has to narrow it to one.
+        FindFilterPill(cut, "Genre").Click();
+        var rockCheckbox = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']")
+            .FirstOrDefault(cb => cb.ParentElement.TextContent.Contains("Rock"));
+        rockCheckbox?.Change(true);
+
+        Assert.That(cut.Markup, Does.Contain("The Best Song"));
+        Assert.That(cut.Markup, Does.Not.Contain("Beach Day"));
+        Assert.That(cut.Markup, Does.Not.Contain("Quiet Morning"));
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_NarrowsGenreOptionCounts()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Title").Click();
+        cut.Find(".filter-pill-search-input").Input("quiet");
+
+        // The genre list cross-filters by title the same way it already does by artist.
+        FindFilterPill(cut, "Genre").Click();
+        var items = cut.FindAll(".filter-pill-dropdown-item");
+        Assert.That(items, Has.Count.EqualTo(1));
+        Assert.That(items[0].TextContent, Does.Contain("Jazz"));
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_ClearResetsFilter()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Title").Click();
+        cut.Find(".filter-pill-search-input").Input("beach");
+        Assert.That(cut.Markup, Does.Not.Contain("Quiet Morning"));
+
+        cut.Find(".filter-pill-clear").Click();
+
+        Assert.That(cut.Markup, Does.Contain("Quiet Morning"));
+        Assert.That(cut.Markup, Does.Contain("The Best Song"));
+        Assert.That(cut.Markup, Does.Contain("Beach Day"));
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_ExplainsItselfWhenNothingMatches()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Title").Click();
+        cut.Find(".filter-pill-search-input").Input("no song is called this");
+
+        Assert.That(cut.Markup, Does.Contain("No songs match these filters"));
+    }
+
+    [Test]
+    public void MusicLibrary_OpeningOnePillClosesTheOther()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(TitleFilterMetadata());
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // One panel renders below the scrolling pill row, so only one can be open at a time.
+        FindFilterPill(cut, "Genre").Click();
+        Assert.That(cut.FindAll(".filter-pill-panel"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".filter-pill-dropdown-item"), Is.Not.Empty);
+
+        FindFilterPill(cut, "Title").Click();
+        Assert.That(cut.FindAll(".filter-pill-panel"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".filter-pill-dropdown-item"), Is.Empty);
+
+        // Clicking the open pill again closes the panel entirely.
+        FindFilterPill(cut, "Title").Click();
+        Assert.That(cut.FindAll(".filter-pill-panel"), Is.Empty);
+    }
+
+    [Test]
+    public void MusicLibrary_TitleFilter_HiddenWhenShowHomePageFeatured()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
+
+        Assert.That(cut.Markup, Does.Not.Contain("filter-pill"));
     }
 
     private static IElement FindFilterPill(IRenderedComponent<MusicLibrary> cut, string label)

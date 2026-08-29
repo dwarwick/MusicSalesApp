@@ -1,33 +1,24 @@
 @inherits FilterPillModel
 
+@* A self-contained pill: button plus an anchored dropdown. Now composed from FilterPillButton and
+   FilterPillListBody, which the music library uses separately because its pill row scrolls. The
+   rendered markup is unchanged - the Creator Dashboard still gets exactly this. *@
+
 <div class="filter-pill-container">
-    <button class="filter-pill @(SelectedItems.Count > 0 ? "active" : "")" @onclick="ToggleDropdown">
-        @if (SelectedItems.Count > 0)
-        {
-            <span class="filter-pill-clear" @onclick="HandleClear" @onclick:stopPropagation="true" title="Clear @Label filters">✕</span>
-        }
-        <span>@Label</span>
-        @if (SelectedItems.Count > 0)
-        {
-            <span class="filter-pill-count">@SelectedItems.Count</span>
-        }
-        <span class="filter-pill-arrow">@(_dropdownOpen ? "▲" : "▼")</span>
-    </button>
+    <FilterPillButton Label="@Label"
+                      IsActive="SelectedItems.Count > 0"
+                      Count="SelectedItems.Count"
+                      IsOpen="_dropdownOpen"
+                      OnClick="ToggleDropdown"
+                      OnClear="HandleClear" />
     @if (_dropdownOpen)
     {
         <div class="filter-pill-dropdown">
-            <div class="filter-pill-search-container">
-                <input type="text" class="filter-pill-search-input" placeholder="@SearchPlaceholder"
-                       @bind="_searchText" @bind:event="oninput" />
-            </div>
-            @foreach (var item in GetFilteredItems())
-            {
-                <label class="filter-pill-dropdown-item" @key="item">
-                    <input type="checkbox" checked="@SelectedItems.Contains(item)"
-                           @onchange="(e) => HandleToggle(item, (bool)(e.Value ?? false))" />
-                    <span>@item (@GetItemCount(item))</span>
-                </label>
-            }
+            <FilterPillListBody @ref="_body"
+                                SearchPlaceholder="@SearchPlaceholder"
+                                Items="Items"
+                                SelectedItems="SelectedItems"
+                                OnItemToggled="HandleToggle" />
         </div>
     }
 </div>
