@@ -1,6 +1,7 @@
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Pages.Admin;
 
@@ -274,7 +275,7 @@ public partial class ImageVariantBackfillModel : BlazorBase, IAsyncDisposable
             return 0;
         }
 
-        return Math.Clamp(run.ProcessedCount * 100d / run.TotalItemCount, 0, 100);
+        return ProgressBarValue.ForDisplay(run.ProcessedCount * 100d / run.TotalItemCount);
     }
 
     protected static string RunCounts(ImageVariantBackfillRun run)

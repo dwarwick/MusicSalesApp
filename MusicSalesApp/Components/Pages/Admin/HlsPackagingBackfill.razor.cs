@@ -1,5 +1,6 @@
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Pages.Admin;
 
@@ -275,7 +276,7 @@ public partial class HlsPackagingBackfillModel : BlazorBase, IAsyncDisposable
         }
 
         var settled = run.SucceededCount + run.FailedCount;
-        return Math.Clamp(settled * 100d / run.TotalItemCount, 0, 100);
+        return ProgressBarValue.ForDisplay(settled * 100d / run.TotalItemCount);
     }
 
     /// <summary>
