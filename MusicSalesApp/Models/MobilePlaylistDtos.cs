@@ -1,15 +1,26 @@
-﻿namespace MusicSalesApp.Models;
+namespace MusicSalesApp.Models;
 
 #nullable enable
 
 /// <summary>
 /// Kind of playlist for display in the MAUI app.
+///
+/// <para>
+/// Mirrored by <c>MusicSalesApp.Maui.ViewModels.PlaylistKinds</c>; the two must stay in step. The
+/// playlist WINDOW keys, which are the newer and more load-bearing contract - they are simultaneously a
+/// database value, a URL segment and a mobile route parameter - live in
+/// <c>MusicSalesApp.Common.Helpers.TopStreamedWindows</c> instead, where both repos read the one
+/// copy.
+/// </para>
 /// </summary>
 public static class MobilePlaylistKinds
 {
     public const string Custom = "Custom";
     public const string LikedSongs = "LikedSongs";
     public const string Recommended = "Recommended";
+
+    /// <summary>One of the five global "most streamed" playlists. Carries a <c>Key</c>; its <c>Id</c> is 0.</summary>
+    public const string TopStreamed = "TopStreamed";
 }
 
 /// <summary>
@@ -22,16 +33,42 @@ public class MobilePlaylistDto
     public int SongCount { get; set; }
     public bool IsSystemGenerated { get; set; }
     public string Kind { get; set; } = MobilePlaylistKinds.Custom;
+
+    /// <summary>
+    /// For a <see cref="MobilePlaylistKinds.TopStreamed"/> playlist, its
+    /// <c>TopStreamedWindows</c> key; null for every other kind.
+    ///
+    /// <para>
+    /// These five have no row of their own, so <see cref="Id"/> is 0 for all of them - the same
+    /// value Recommended already uses. The client must therefore open them by <b>Key</b>, never by
+    /// id, or all six land on the same broken page.
+    /// </para>
+    /// </summary>
+    public string? Key { get; set; }
+
+    /// <summary>Server-dictated position when several playlists are listed together. Lower first.</summary>
+    public int DisplayOrder { get; set; }
 }
 
 /// <summary>
 /// Home page dynamic playlists returned to the MAUI app.
-/// Either value may be null when the user has no corresponding content.
+/// Either single value may be null when the user has no corresponding content.
 /// </summary>
 public class MobileHomePlaylistsDto
 {
     public MobilePlaylistDto? Recommended { get; set; }
     public MobilePlaylistDto? LikedSongs { get; set; }
+
+    /// <summary>
+    /// The five global "most streamed" playlists, already in display order, with empty ones omitted.
+    ///
+    /// <para>
+    /// A list rather than five more nullable properties so the server owns the order and the client
+    /// renders whatever it is handed. Unlike the two above these are not personal, so they are
+    /// populated for signed-out callers too.
+    /// </para>
+    /// </summary>
+    public List<MobilePlaylistDto> TopStreamed { get; set; } = new();
 }
 
 /// <summary>
@@ -113,7 +150,25 @@ public class MobilePlaylistSongDto
     /// </para>
     /// </summary>
     public int AudioVersion { get; set; }
+
+    /// <summary>Lifetime streams. Kept live by the stream-count hub.</summary>
     public int StreamCount { get; set; }
+
+    /// <summary>
+    /// Streams inside this list's period, or null when the list has no period.
+    ///
+    /// <para>
+    /// This is the number the top-streamed playlists are RANKED on, whereas
+    /// <see cref="StreamCount"/> is the lifetime total the player displays and keeps live. On "Top 10
+    /// Today" the two differ, so a client showing only the lifetime figure would render a correctly
+    /// ordered list that looks mis-sorted. Show both.
+    /// </para>
+    ///
+    /// <para>
+    /// A snapshot taken when the playlist was last generated, so it does not move during the day.
+    /// </para>
+    /// </summary>
+    public int? PeriodStreamCount { get; set; }
     public int StreamQualifyingSeconds { get; set; }
     public double? TrackLengthSeconds { get; set; }
     public bool DisplayOnHomePage { get; set; }
@@ -131,6 +186,18 @@ public class MobilePlaylistSongsDto
     public string PlaylistName { get; set; } = string.Empty;
     public bool IsSystemGenerated { get; set; }
     public List<MobilePlaylistSongDto> Songs { get; set; } = new();
+
+    /// <summary>
+    /// Heading for each song's <see cref="MobilePlaylistSongDto.PeriodStreamCount"/> - "Today",
+    /// "This Week" and so on - or null when the list has no period of its own.
+    ///
+    /// <para>
+    /// Null for every playlist except the four rolling top-streamed ones. The all-time playlist
+    /// leaves it null on purpose: its ranking number and the lifetime counter are the same figure, so
+    /// a second column would just repeat the first.
+    /// </para>
+    /// </summary>
+    public string? PeriodLabel { get; set; }
 }
 
 public class CreateMobilePlaylistRequest

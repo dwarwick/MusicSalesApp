@@ -59,8 +59,18 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
     }
 
+    /// <summary>
+    /// A subscriber gets no hero at all - Browse Music included.
+    /// </summary>
+    /// <remarks>
+    /// This test used to assert the opposite: the hero's Browse Music button was the one thing the
+    /// block still did for a subscriber, since every other CTA in it is already hidden from them. The
+    /// hero is now dropped for subscribers outright, so the page opens on Featured Music and their
+    /// playlists. They keep a route into the library through "View All Music" in the Featured Music
+    /// header directly above, which is why losing this button costs them nothing.
+    /// </remarks>
     [Test]
-    public void Home_ShowsBrowseMusicButton_ForAuthenticatedSubscribers()
+    public void Home_HidesBrowseMusicButton_ForAuthenticatedSubscribers()
     {
         // Arrange
         const int userId = 1;
@@ -91,12 +101,19 @@ public class HomeTests : BUnitTestBase
         var cut = TestContext.Render<Home>();
 
         // Assert
-        var browseButton = cut.Find("a.hero-browse-music-button");
-        Assert.That(browseButton.TextContent, Does.Contain("Browse Music"));
-        Assert.That(browseButton.GetAttribute("href"), Is.EqualTo("/music-library"));
-        // Same reason as the assertion in Home_ShowsHeroSection_WithCallToAction: Browse Music is
-        // a listener action, so it takes the outline tier rather than the creator violet.
-        Assert.That(browseButton.ClassList.Contains("cta-outline"), Is.True);
+        cut.WaitForAssertion(() =>
+            MockSubscriptionService.Verify(x => x.HasActiveSubscriptionAsync(userId), Times.Once));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(cut.FindAll("a.hero-browse-music-button"), Is.Empty);
+                Assert.That(cut.FindAll(".hero-section"), Is.Empty);
+                // The library is still one tap away, from the section above.
+                Assert.That(cut.Markup, Does.Contain("View All Music"));
+            });
+        });
     }
 
     [Test]
@@ -275,6 +292,74 @@ public class HomeTests : BUnitTestBase
             Assert.That(cut.Markup, Does.Contain("Cancel anytime"));
             Assert.That(cut.Markup, Does.Not.Contain("Free Trial"));
             Assert.That(cut.Markup, Does.Not.Contain("days free"));
+        });
+    }
+
+    // ---- The marketing hero ------------------------------------------------------
+
+    [Test]
+    public void Home_HidesTheHero_FromASignedInSubscriber()
+    {
+        // They have already subscribed, so the page opens on Featured Music and their playlists
+        // rather than on a pitch.
+        const int userId = 77;
+        SetupAuthenticatedNonSubscriber(userId);
+        MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(true);
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForAssertion(() =>
+            MockSubscriptionService.Verify(x => x.HasActiveSubscriptionAsync(userId), Times.Once));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(cut.FindAll(".hero-section"), Is.Empty);
+                Assert.That(cut.Markup, Does.Not.Contain("next favorite artist"));
+                Assert.That(cut.FindAll("a.hero-browse-music-button"), Is.Empty);
+            });
+        });
+    }
+
+    [Test]
+    public void Home_KeepsFeaturedMusic_ForASignedInSubscriber()
+    {
+        // Hiding the hero must not take the rest of the page with it.
+        const int userId = 78;
+        SetupAuthenticatedNonSubscriber(userId);
+        MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(true);
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForAssertion(() =>
+            MockSubscriptionService.Verify(x => x.HasActiveSubscriptionAsync(userId), Times.Once));
+
+        Assert.That(cut.Markup, Does.Contain("featured-music-section"));
+    }
+
+    [Test]
+    public void Home_KeepsTheHero_ForASignedInNonSubscriber()
+    {
+        const int userId = 79;
+        SetupAuthenticatedNonSubscriber(userId);
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForAssertion(() =>
+            MockSubscriptionService.Verify(x => x.HasActiveSubscriptionAsync(userId), Times.Once));
+
+        Assert.That(cut.Markup, Does.Contain("hero-section"));
+    }
+
+    [Test]
+    public void Home_KeepsTheHero_ForAnAnonymousVisitor()
+    {
+        // Also the prerender case: the hero has to be in the server-rendered markup or crawlers get
+        // a home page with no h1 at all.
+        var cut = TestContext.Render<Home>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("hero-section"));
+            Assert.That(cut.Markup, Does.Contain("next favorite artist"));
         });
     }
 

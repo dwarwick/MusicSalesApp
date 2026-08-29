@@ -12,14 +12,17 @@ namespace MusicSalesApp.Services;
 public class RecommendationService : IRecommendationService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly ITopStreamedPlaylistService _topStreamedPlaylistService;
     private readonly ILogger<RecommendationService> _logger;
     private const int MaxRecommendations = 20;
 
     public RecommendationService(
         IDbContextFactory<AppDbContext> contextFactory,
+        ITopStreamedPlaylistService topStreamedPlaylistService,
         ILogger<RecommendationService> logger)
     {
         _contextFactory = contextFactory;
+        _topStreamedPlaylistService = topStreamedPlaylistService;
         _logger = logger;
     }
 
@@ -66,6 +69,19 @@ public class RecommendationService : IRecommendationService
     /// <inheritdoc/>
     public async Task GenerateAllRecommendationsAsync()
     {
+        // The five global playlists first, and in their own try/catch. They are a handful of queries
+        // whereas the per-user loop below is one pass per user with likes, so running them first
+        // means the playlists are not held hostage by a slow loop - and a failure in either half must
+        // not cost the other.
+        try
+        {
+            await _topStreamedPlaylistService.GenerateAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating top-streamed playlists");
+        }
+
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();

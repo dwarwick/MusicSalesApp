@@ -1,4 +1,4 @@
-﻿html, body {
+html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
@@ -1551,7 +1551,8 @@ h1:focus {
 }
 
 /* User Playlists Section */
-.user-playlists-section {
+.user-playlists-section,
+.top-streamed-section {
     display: flex;
     flex-direction: column;
 }

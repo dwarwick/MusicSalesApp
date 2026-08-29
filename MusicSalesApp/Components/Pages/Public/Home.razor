@@ -31,4 +31,8 @@
     @* An island of its own: this section loads in OnAfterRenderAsync, which the statically
        rendered Home never calls. See HomeUserPlaylists.razor for the full note. *@
     <HomeUserPlaylists />
+
+    @* Same island reasoning, but NOT gated on sign-in: these five are identical for every visitor,
+       so a signed-out one sees them too. *@
+    <HomeTopStreamedPlaylists />
 </div>

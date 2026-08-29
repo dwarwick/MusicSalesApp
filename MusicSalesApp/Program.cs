@@ -377,6 +377,7 @@ try
     builder.Services.AddScoped<IUploadProgressHubClient, UploadProgressHubClient>();
     builder.Services.AddScoped<IAdminMessageHubClient, AdminMessageHubClient>();
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+    builder.Services.AddScoped<ITopStreamedPlaylistService, TopStreamedPlaylistService>();
     builder.Services.AddScoped<IFileMatchingService, FileMatchingService>();
     builder.Services.AddScoped<ISitemapService, SitemapService>();
     builder.Services.AddScoped<ICreatorService, CreatorService>();

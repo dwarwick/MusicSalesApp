@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MusicSalesApp.Data;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -362,7 +363,7 @@ public class PlaylistService : IPlaylistService
 
             // Check if the Liked Songs playlist already exists for this user
             var likedSongsPlaylist = await context.Playlists
-                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsSystemGenerated && p.PlaylistName == "Liked Songs");
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsSystemGenerated && p.PlaylistName == PlaylistNames.LikedSongs);
 
             if (likedSongsPlaylist == null)
             {
@@ -370,7 +371,7 @@ public class PlaylistService : IPlaylistService
                 likedSongsPlaylist = new Playlist
                 {
                     UserId = userId,
-                    PlaylistName = "Liked Songs",
+                    PlaylistName = PlaylistNames.LikedSongs,
                     IsSystemGenerated = true,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow

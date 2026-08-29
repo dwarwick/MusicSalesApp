@@ -1,4 +1,4 @@
-﻿using Bunit;
+using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Antiforgery;
@@ -59,6 +59,7 @@ public abstract class BUnitTestBase
     protected Mock<ISongUploadJobService> MockSongUploadJobService { get; private set; } = default!;
     protected Mock<ISongLyricsService> MockLyricsService { get; private set; } = default!;
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
+    protected Mock<ITopStreamedPlaylistService> MockTopStreamedPlaylistService { get; private set; } = default!;
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
     protected Mock<IAccountDeletionService> MockAccountDeletionService { get; private set; } = default!;
@@ -126,6 +127,7 @@ public abstract class BUnitTestBase
         // which bUnit cannot provide - the same reason MockCoverArtMatchService defaults off.
         MockLyricsService.SetupGet(x => x.IsAvailable).Returns(false);
         MockRecommendationService = new Mock<IRecommendationService>();
+        MockTopStreamedPlaylistService = new Mock<ITopStreamedPlaylistService>();
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
         MockAccountDeletionService = new Mock<IAccountDeletionService>();
@@ -360,6 +362,13 @@ public abstract class BUnitTestBase
             .ReturnsAsync(new List<RecommendedPlaylist>());
         MockRecommendationService.Setup(x => x.GenerateRecommendationsAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<RecommendedPlaylist>());
+
+        // Default to "no top-streamed playlists", so the home island renders nothing unless a test
+        // opts in. Without a default every existing bUnit test would NullReference on the Task.
+        MockTopStreamedPlaylistService.Setup(x => x.GetCountsAsync())
+            .ReturnsAsync(new Dictionary<string, int>());
+        MockTopStreamedPlaylistService.Setup(x => x.GetAsync(It.IsAny<string>()))
+            .ReturnsAsync(new List<TopStreamedPlaylistEntry>());
         MockRecommendationService.Setup(x => x.GenerateAllRecommendationsAsync())
             .Returns(Task.CompletedTask);
 
@@ -560,6 +569,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISongUploadJobService>(MockSongUploadJobService.Object);
         TestContext.Services.AddSingleton<ISongLyricsService>(MockLyricsService.Object);
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
+        TestContext.Services.AddSingleton<ITopStreamedPlaylistService>(MockTopStreamedPlaylistService.Object);
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
         TestContext.Services.AddSingleton<IAccountDeletionService>(MockAccountDeletionService.Object);

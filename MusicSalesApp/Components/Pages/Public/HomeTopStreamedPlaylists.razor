@@ -1,0 +1,39 @@
+@rendermode InteractiveServer
+@inherits HomeTopStreamedPlaylistsModel
+
+@*
+    The five global "most streamed" playlists.
+
+    Its own island rather than a section of HomeUserPlaylists, because that one is gated on
+    authentication and these are the same for everybody - a signed-out visitor sees them too. There is
+    deliberately no auth check in this component or its code-behind.
+
+    Nothing renders until the counts have loaded, and a playlist with no songs renders no tile, so a
+    quiet 24 hours simply drops "Top 10 Today" rather than showing an empty card.
+*@
+
+@if (HasPlaylists)
+{
+    <section class="top-streamed-section">
+        <div class="section-head">
+            <div>
+                <div class="section-eyebrow">Updated daily</div>
+                <h2 class="section-title">Most Streamed</h2>
+            </div>
+        </div>
+        <div class="playlists-page-grid">
+            @foreach (var playlist in VisiblePlaylists)
+            {
+                <a href="@PlaylistUrl(playlist)" class="e-card playlists-page-card music-card top-streamed-playlist-card playlist-card-link">
+                    <div class="e-card-header">
+                        <div class="e-card-header-title">@playlist.Name</div>
+                    </div>
+                    <div class="e-card-content">
+                        <p>@SongCount(playlist) song(s)</p>
+                        <p class="playlist-description">@playlist.Description</p>
+                    </div>
+                </a>
+            }
+        </div>
+    </section>
+}

@@ -16,6 +16,34 @@ public partial class HomeSubscriptionOfferModel : BlazorBase
     protected bool _isEmailVerified;
     protected bool ShouldShowSubscriptionOffer { get; private set; }
 
+    /// <summary>
+    /// True only once an active subscription has been positively confirmed.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not derived from <see cref="ShouldShowSubscriptionOffer"/>. That flag is also
+    /// false on the "authenticated but the id claim would not parse" path below, and treating that
+    /// as "subscriber" would hide the hero from someone who is not one.
+    /// </remarks>
+    protected bool IsActiveSubscriber { get; private set; }
+
+    /// <summary>
+    /// Whether to render the marketing hero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A signed-in subscriber has already been sold to, so the hero is dropped for them and the page
+    /// opens on Featured Music followed by their playlists.
+    /// </para>
+    /// <para>
+    /// <b>It defaults to true, and that matters.</b> This island prerenders, and prerendering runs
+    /// before <c>OnAfterRenderAsync</c> has resolved the subscription - so a false default would
+    /// leave crawlers and every anonymous visitor with no h1 and no hero at all. The cost is that a
+    /// subscriber sees it briefly before it goes; that trade only runs one way, because the
+    /// subscription check is a database call and <c>Home.razor</c> is static SSR.
+    /// </para>
+    /// </remarks>
+    protected bool ShowHero => !IsActiveSubscriber;
+
     protected bool HasFreeTrialOffer => _offerQuote?.HasFreeTrial == true;
     protected string TrialDurationDisplay => _offerQuote?.TrialDays is int trialDays
         ? $"{trialDays} {(trialDays == 1 ? "day" : "days")}"
@@ -70,7 +98,8 @@ public partial class HomeSubscriptionOfferModel : BlazorBase
                 await PayPalSubscriptionManagementService.RefreshIfNeededAsync(
                     userId.Value,
                     NavigationManager.BaseUri);
-                ShouldShowSubscriptionOffer = !await SubscriptionService.HasActiveSubscriptionAsync(userId.Value);
+                IsActiveSubscriber = await SubscriptionService.HasActiveSubscriptionAsync(userId.Value);
+                ShouldShowSubscriptionOffer = !IsActiveSubscriber;
             }
             else
             {

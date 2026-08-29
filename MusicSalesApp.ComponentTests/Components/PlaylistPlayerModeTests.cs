@@ -30,13 +30,21 @@ public class PlaylistPlayerModeTests
 {
     private sealed class ModeProbe : PlaylistPlayerInteractiveModel
     {
-        public void SetMode(bool artist = false, bool creator = false, bool genre = false, bool recommended = false)
+        public void SetMode(bool artist = false, bool creator = false, bool genre = false, bool recommended = false, bool topStreamed = false)
         {
             _isArtistMode = artist;
             _isCreatorMode = creator;
             _isGenreMode = genre;
             _isRecommendedMode = recommended;
+            _isTopStreamedMode = topStreamed;
         }
+
+        /// <summary>Turns on the period column the four rolling top-streamed pages carry.</summary>
+        public void SetPeriodStreamLabel(string? label) => _periodStreamLabel = label;
+
+        public bool ShowsPeriodColumn => ShowPeriodStreamCount();
+
+        public string PeriodColumnLabel => GetPeriodStreamLabel();
 
         public void SetTrackLyrics(SongLyrics? lyrics) => _currentTrackLyrics = lyrics;
 
@@ -88,6 +96,10 @@ public class PlaylistPlayerModeTests
             recommended.SetMode(recommended: true);
             Assert.That(recommended.ArtistTreatment, Is.False);
 
+            var topStreamed = new ModeProbe();
+            topStreamed.SetMode(topStreamed: true);
+            Assert.That(topStreamed.ArtistTreatment, Is.False, "/top-streamed lists many artists.");
+
             var playlist = new ModeProbe();
             playlist.SetMode();
             Assert.That(playlist.ArtistTreatment, Is.False, "No flag set is the /playlist fallback.");
@@ -101,6 +113,7 @@ public class PlaylistPlayerModeTests
         var artist = new ModeProbe(); artist.SetMode(artist: true);
         var creator = new ModeProbe(); creator.SetMode(creator: true);
         var recommended = new ModeProbe(); recommended.SetMode(recommended: true);
+        var topStreamed = new ModeProbe(); topStreamed.SetMode(topStreamed: true);
         var playlist = new ModeProbe(); playlist.SetMode();
 
         Assert.Multiple(() =>
@@ -109,11 +122,68 @@ public class PlaylistPlayerModeTests
             Assert.That(artist.Label, Is.EqualTo("Artist"));
             Assert.That(creator.Label, Is.EqualTo("Artist"), "A creator is presented as an artist.");
             Assert.That(recommended.Label, Is.EqualTo("For you"));
+            Assert.That(topStreamed.Label, Is.EqualTo("Most streamed"));
             Assert.That(playlist.Label, Is.EqualTo("Playlist"));
         });
     }
 
     // ---- The small-screen row subtitle ------------------------------------------------
+
+    // ---- The second stream-count column ------------------------------------------------
+
+    [Test]
+    public void ARollingTopStreamedPageCarriesThePeriodColumn()
+    {
+        // The list is ranked on streams inside the period, but the live counter beside it is the
+        // LIFETIME total. Without this column a correctly ordered "Top 10 Today" reads as mis-sorted.
+        var probe = new ModeProbe();
+        probe.SetMode(topStreamed: true);
+        probe.SetPeriodStreamLabel("Today");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(probe.ShowsPeriodColumn, Is.True);
+            Assert.That(probe.PeriodColumnLabel, Is.EqualTo("Today"));
+        });
+    }
+
+    [Test]
+    public void TheAllTimePageDoesNotCarryThePeriodColumn()
+    {
+        // There the ranking number and the lifetime counter are the same figure, so a second column
+        // would only repeat the first. The all-time descriptor carries a null label to say so.
+        var probe = new ModeProbe();
+        probe.SetMode(topStreamed: true);
+        probe.SetPeriodStreamLabel(null);
+
+        Assert.That(probe.ShowsPeriodColumn, Is.False);
+    }
+
+    [Test]
+    public void NoOtherRouteCarriesThePeriodColumn()
+    {
+        Assert.Multiple(() =>
+        {
+            foreach (var (name, probe) in new (string, ModeProbe)[]
+            {
+                ("genre", Probe(p => p.SetMode(genre: true))),
+                ("artist", Probe(p => p.SetMode(artist: true))),
+                ("creator", Probe(p => p.SetMode(creator: true))),
+                ("recommended", Probe(p => p.SetMode(recommended: true))),
+                ("playlist", Probe(p => p.SetMode()))
+            })
+            {
+                Assert.That(probe.ShowsPeriodColumn, Is.False, $"/{name} has no period of its own.");
+            }
+        });
+    }
+
+    private static ModeProbe Probe(Action<ModeProbe> configure)
+    {
+        var probe = new ModeProbe();
+        configure(probe);
+        return probe;
+    }
 
     [Test]
     public void TheRowSubtitleDropsTheArtistOnAnArtistPage()

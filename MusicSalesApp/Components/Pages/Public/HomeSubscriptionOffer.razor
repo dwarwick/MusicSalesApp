@@ -1,83 +1,92 @@
-﻿@inherits HomeSubscriptionOfferModel
+@inherits HomeSubscriptionOfferModel
 
-<section class="hero-section">
-    <div class="hero-content">
-        <p class="section-eyebrow">Independent music, streamed</p>
-        @* Two elements, one sentence. The <h2> keeps the heading structure and the string both
-           HomeTests and search engines expect, but it carried NO css rule anywhere, so it fell to
-           the browser default (~24px) beside a 4rem <h1>. .hero-title-line-2 sizes it to match. *@
-        <h1 class="hero-title">
-            <span class="hero-highlight">Discover your</span>
-        </h1>
-        <h2 class="hero-title hero-title-line-2">next favorite artist!</h2>
-        <p class="hero-subtitle">
-            @if (_audienceLoaded && ShouldShowSubscriptionOffer && HasFreeTrialOffer)
-            {
-                <text>
-                    Support independent music and stream the full catalog free for @TrialDurationDisplay,
-                    then @OfferRegularTermsDisplay through PayPal. Cancel anytime.
-                </text>
-            }
-            else if (_audienceLoaded && ShouldShowSubscriptionOffer && _offerQuote != null)
-            {
-                <text>
-                    Support independent music and stream the full catalog for @OfferRegularTermsDisplay
-                    through PayPal. Cancel anytime.
-                </text>
-            }
-            else
-            {
-                <text>Stream all songs, discover independent artists, and create the perfect playlist for every moment.</text>
-            }
-        </p>
-        <div class="hero-cta">
-            @* Browse Music is the primary LISTENER action on this page, so it must not wear
-               cta-secondary/hero-secondary-cta - AGENTS.md reserves that violet for creator and
-               account actions. It is the outline beside the accent-filled register/subscribe CTA. *@
-            <a href="@AppPageRoutes.MusicLibrary" class="e-control e-btn cta-outline hero-browse-music-button">
-                Browse Music
-            </a>
-            @if (_audienceLoaded && ShouldShowSubscriptionOffer && !_isAuthenticated)
-            {
-                @* Quiet tertiary. Nominally an account action, but three button colours in one
-                   row is noise and the hero is a listener surface - see AGENTS.md. *@
-                <a href="@SubscriberLoginUrl"
-                   class="e-control e-btn cta-quiet hero-login-button"
-                   data-analytics-event="@FunnelAnalyticsEvents.SubscriberLoginClicked"
-                   data-analytics-category="subscriber"
-                   data-analytics-label="home_hero_login">
-                    Log In
+@* Dropped for a signed-in subscriber: they have already subscribed, so the page opens on
+   Featured Music and their playlists instead of a pitch. Everyone else - anonymous,
+   signed-in-but-not-subscribed, and every crawler - still gets it.
+
+   PublicFeaturedMusicTests reads this file as TEXT and matches the opening hero element
+   literally, so keep it on one line with no extra classes or attributes. *@
+@if (ShowHero)
+{
+    <section class="hero-section">
+        <div class="hero-content">
+            <p class="section-eyebrow">Independent music, streamed</p>
+            @* Two elements, one sentence. The <h2> keeps the heading structure and the string both
+               HomeTests and search engines expect, but it carried NO css rule anywhere, so it fell to
+               the browser default (~24px) beside a 4rem <h1>. .hero-title-line-2 sizes it to match. *@
+            <h1 class="hero-title">
+                <span class="hero-highlight">Discover your</span>
+            </h1>
+            <h2 class="hero-title hero-title-line-2">next favorite artist!</h2>
+            <p class="hero-subtitle">
+                @if (_audienceLoaded && ShouldShowSubscriptionOffer && HasFreeTrialOffer)
+                {
+                    <text>
+                        Support independent music and stream the full catalog free for @TrialDurationDisplay,
+                        then @OfferRegularTermsDisplay through PayPal. Cancel anytime.
+                    </text>
+                }
+                else if (_audienceLoaded && ShouldShowSubscriptionOffer && _offerQuote != null)
+                {
+                    <text>
+                        Support independent music and stream the full catalog for @OfferRegularTermsDisplay
+                        through PayPal. Cancel anytime.
+                    </text>
+                }
+                else
+                {
+                    <text>Stream all songs, discover independent artists, and create the perfect playlist for every moment.</text>
+                }
+            </p>
+            <div class="hero-cta">
+                @* Browse Music is the primary LISTENER action on this page, so it must not wear
+                   cta-secondary/hero-secondary-cta - AGENTS.md reserves that violet for creator and
+                   account actions. It is the outline beside the accent-filled register/subscribe CTA. *@
+                <a href="@AppPageRoutes.MusicLibrary" class="e-control e-btn cta-outline hero-browse-music-button">
+                    Browse Music
                 </a>
-                <a href="@SubscriberRegisterUrl"
-                   class="e-control e-btn cta-primary"
-                   data-analytics-event="@FunnelAnalyticsEvents.SubscriberRegisterClicked"
-                   data-analytics-category="subscriber"
-                   data-analytics-label="home_hero_register">
-                    @SubscriberRegisterLabel
-                </a>
-            }
-            else if (_audienceLoaded && ShouldShowSubscriptionOffer && _isEmailVerified)
-            {
-                <a href="@AppPageRoutes.ManageAccountSubscription"
-                   class="e-control e-btn cta-primary"
-                   data-analytics-event="@FunnelAnalyticsEvents.SubscriberSubscribeClicked"
-                   data-analytics-category="subscriber"
-                   data-analytics-label="home_hero_subscribe">
-                    @HeroSubscribeLabel
-                </a>
-            }
-            else if (_audienceLoaded && ShouldShowSubscriptionOffer)
-            {
-                <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-primary">
-                    Validate Your Email for Full Functionality
-                </a>
-            }
+                @if (_audienceLoaded && ShouldShowSubscriptionOffer && !_isAuthenticated)
+                {
+                    @* Quiet tertiary. Nominally an account action, but three button colours in one
+                       row is noise and the hero is a listener surface - see AGENTS.md. *@
+                    <a href="@SubscriberLoginUrl"
+                       class="e-control e-btn cta-quiet hero-login-button"
+                       data-analytics-event="@FunnelAnalyticsEvents.SubscriberLoginClicked"
+                       data-analytics-category="subscriber"
+                       data-analytics-label="home_hero_login">
+                        Log In
+                    </a>
+                    <a href="@SubscriberRegisterUrl"
+                       class="e-control e-btn cta-primary"
+                       data-analytics-event="@FunnelAnalyticsEvents.SubscriberRegisterClicked"
+                       data-analytics-category="subscriber"
+                       data-analytics-label="home_hero_register">
+                        @SubscriberRegisterLabel
+                    </a>
+                }
+                else if (_audienceLoaded && ShouldShowSubscriptionOffer && _isEmailVerified)
+                {
+                    <a href="@AppPageRoutes.ManageAccountSubscription"
+                       class="e-control e-btn cta-primary"
+                       data-analytics-event="@FunnelAnalyticsEvents.SubscriberSubscribeClicked"
+                       data-analytics-category="subscriber"
+                       data-analytics-label="home_hero_subscribe">
+                        @HeroSubscribeLabel
+                    </a>
+                }
+                else if (_audienceLoaded && ShouldShowSubscriptionOffer)
+                {
+                    <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-primary">
+                        Validate Your Email for Full Functionality
+                    </a>
+                }
+            </div>
         </div>
-    </div>
-    <div class="hero-visual">
-        <LottieAnimation CssClass="hero-animation" />
-    </div>
-</section>
+        <div class="hero-visual">
+            <LottieAnimation CssClass="hero-animation" />
+        </div>
+    </section>
+}
 
 @if (ShouldShowSubscriptionOffer)
 {

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Middleware;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -23,6 +24,7 @@ public class MobilePlaylistController : ControllerBase
 
     private readonly IPlaylistService _playlistService;
     private readonly IRecommendationService _recommendationService;
+    private readonly ITopStreamedPlaylistService _topStreamedPlaylistService;
     private readonly ISubscriptionService _subscriptionService;
     private readonly ISongMetadataService _songMetadataService;
     private readonly IAppSettingsService _appSettingsService;
@@ -33,6 +35,7 @@ public class MobilePlaylistController : ControllerBase
     public MobilePlaylistController(
         IPlaylistService playlistService,
         IRecommendationService recommendationService,
+        ITopStreamedPlaylistService topStreamedPlaylistService,
         ISubscriptionService subscriptionService,
         ISongMetadataService songMetadataService,
         IAppSettingsService appSettingsService,
@@ -42,6 +45,7 @@ public class MobilePlaylistController : ControllerBase
     {
         _playlistService = playlistService;
         _recommendationService = recommendationService;
+        _topStreamedPlaylistService = topStreamedPlaylistService;
         _subscriptionService = subscriptionService;
         _songMetadataService = songMetadataService;
         _appSettingsService = appSettingsService;
@@ -100,7 +104,96 @@ public class MobilePlaylistController : ControllerBase
             };
         }
 
+        result.TopStreamed = await BuildTopStreamedTilesAsync();
+
         return Ok(result);
+    }
+
+    /// <summary>
+    /// The five global "most streamed" playlists as tiles, in display order, with empty ones omitted.
+    /// </summary>
+    /// <remarks>
+    /// Anonymous-friendly: nothing here depends on who is asking. Each tile carries <c>Key</c> rather
+    /// than a usable <c>Id</c>, because these are generated lists with no <c>Playlists</c> row - so the
+    /// client must open them by key.
+    /// </remarks>
+    [HttpGet("top-streamed")]
+    [Authorize(AuthenticationSchemes = "Identity.Application,Bearer")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetTopStreamedPlaylists()
+        => Ok(await BuildTopStreamedTilesAsync());
+
+    private async Task<List<MobilePlaylistDto>> BuildTopStreamedTilesAsync()
+    {
+        var counts = await _topStreamedPlaylistService.GetCountsAsync();
+
+        return TopStreamedPlaylists.All
+            .OrderBy(descriptor => descriptor.DisplayOrder)
+            .Where(descriptor => counts.ContainsKey(descriptor.Window))
+            .Select(descriptor => new MobilePlaylistDto
+            {
+                Id = 0,
+                Key = descriptor.Window,
+                Name = descriptor.Name,
+                SongCount = counts[descriptor.Window],
+                IsSystemGenerated = true,
+                DisplayOrder = descriptor.DisplayOrder,
+                Kind = MobilePlaylistKinds.TopStreamed
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Returns one "most streamed" playlist as a playable list, in rank order - most streamed first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Anonymous is allowed so the playlists are browsable before sign-in, matching
+    /// <c>GET api/music/songs</c>. The explicit schemes sit alongside <c>[AllowAnonymous]</c> for the
+    /// reason documented there: without them the MAUI bearer token is ignored and a signed-in
+    /// subscriber would be served preview-length audio. No new exposure - these songs are a strict
+    /// subset of what that endpoint already returns to the same callers.
+    /// </para>
+    /// <para>
+    /// Each song carries both counts. <c>StreamCount</c> is the lifetime total; <c>PeriodStreamCount</c>
+    /// is the number this list was ranked on. They differ for the four rolling windows, so a client
+    /// showing only the first would render a correctly ordered list that looks mis-sorted.
+    /// </para>
+    /// </remarks>
+    [HttpGet("top-streamed/{window}")]
+    [Authorize(AuthenticationSchemes = "Identity.Application,Bearer")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetTopStreamedSongs(string window)
+    {
+        var descriptor = TopStreamedPlaylists.Find(window);
+        if (descriptor is null)
+            return NotFound();
+
+        var entries = await _topStreamedPlaylistService.GetAsync(descriptor.Window);
+        var streamQualifying = await _appSettingsService.GetStreamQualifyingSettingsAsync();
+        var streamContext = await BuildStreamContextForCallerAsync();
+
+        var songs = entries
+            .Where(entry => entry.SongMetadata != null && !string.IsNullOrEmpty(entry.SongMetadata.Mp3BlobPath))
+            .Select(entry =>
+            {
+                var song = _songMapper.MapToPlaylistSong(
+                    entry.SongMetadata, SasLifetime, userPlaylistId: null, streamQualifying, null, streamContext);
+                // Only meaningful for the rolling windows; on the all-time list the ranking number and
+                // the lifetime counter are the same figure, so a second column would just repeat it.
+                song.PeriodStreamCount = descriptor.PeriodLabel is null ? null : entry.StreamCount;
+                return song;
+            })
+            .ToList();
+
+        return Ok(new MobilePlaylistSongsDto
+        {
+            PlaylistId = 0,
+            PlaylistName = descriptor.Name,
+            IsSystemGenerated = true,
+            PeriodLabel = descriptor.PeriodLabel,
+            Songs = songs
+        });
     }
 
     /// <summary>
@@ -129,7 +222,11 @@ public class MobilePlaylistController : ControllerBase
                 Name = p.PlaylistName,
                 SongCount = songs.Count,
                 IsSystemGenerated = p.IsSystemGenerated,
-                Kind = p.IsSystemGenerated ? MobilePlaylistKinds.LikedSongs : MobilePlaylistKinds.Custom
+                // Name-matched, not just IsSystemGenerated: that flag says "the user may not edit
+                // this", not "this is Liked Songs", so a second system playlist would be mislabelled.
+                Kind = p.IsSystemGenerated && p.PlaylistName == PlaylistNames.LikedSongs
+                    ? MobilePlaylistKinds.LikedSongs
+                    : MobilePlaylistKinds.Custom
             });
         }
 
@@ -362,4 +459,18 @@ public class MobilePlaylistController : ControllerBase
     /// </summary>
     private async Task<MobileStreamContext> BuildStreamContextAsync(int userId)
         => new(userId, await _subscriptionService.HasActiveSubscriptionAsync(userId));
+
+    /// <summary>
+    /// The stream context for whoever is calling, signed in or not.
+    ///
+    /// <para>
+    /// Only the anonymous-capable endpoints use this. A caller with no id gets no full access, so the
+    /// manifest they are handed is preview-length - the same treatment a signed-out listener already
+    /// gets from the songs endpoint.
+    /// </para>
+    /// </summary>
+    private async Task<MobileStreamContext> BuildStreamContextForCallerAsync()
+        => TryGetUserId(out var userId)
+            ? await BuildStreamContextAsync(userId)
+            : new MobileStreamContext(null, false);
 }

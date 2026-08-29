@@ -12,6 +12,11 @@ public partial class MyPlaylistsModel : BlazorBase
     protected List<UserPlaylist> _playlistSongs;
     protected List<SongMetadata> _availableSongs;
     protected List<RecommendedPlaylist> _recommendedPlaylist = new();
+
+    /// <summary>
+    /// Song count per top-streamed window key. A window with no songs is absent and renders no card.
+    /// </summary>
+    protected Dictionary<string, int> _topStreamedCounts = new();
     protected Playlist _selectedPlaylist;
     protected Playlist _editingPlaylist;
     protected Playlist _playlistToDelete;
@@ -50,6 +55,10 @@ public partial class MyPlaylistsModel : BlazorBase
                         await LoadRecommendedPlaylist();
                     }
                 }
+
+                // Outside the authenticated block on purpose: these five are the same for every
+                // visitor, so they do not depend on having resolved a user id.
+                await LoadTopStreamedPlaylistsAsync();
             }
             catch (Exception ex)
             {
@@ -74,6 +83,37 @@ public partial class MyPlaylistsModel : BlazorBase
             var songs = await PlaylistService.GetPlaylistSongsAsync(playlist.Id);
             _playlistSongCounts[playlist.Id] = songs.Count;
         }
+    }
+
+    /// <summary>
+    /// The five global "most streamed" playlists. Not personal, so no user id is involved.
+    /// </summary>
+    private async Task LoadTopStreamedPlaylistsAsync()
+    {
+        try
+        {
+            _topStreamedCounts = await TopStreamedPlaylistService.GetCountsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading the most-streamed playlists");
+            _topStreamedCounts = new Dictionary<string, int>();
+        }
+    }
+
+    /// <summary>Only the playlists that have songs, in Day, Week, Month, Year, All Time order.</summary>
+    protected IReadOnlyList<TopStreamedWindowDescriptor> VisibleTopStreamedPlaylists =>
+        TopStreamedPlaylists.All
+            .OrderBy(descriptor => descriptor.DisplayOrder)
+            .Where(descriptor => _topStreamedCounts.ContainsKey(descriptor.Window))
+            .ToList();
+
+    protected int TopStreamedSongCount(TopStreamedWindowDescriptor descriptor) =>
+        _topStreamedCounts.TryGetValue(descriptor.Window, out var count) ? count : 0;
+
+    protected void PlayTopStreamedPlaylist(TopStreamedWindowDescriptor descriptor)
+    {
+        NavigationManager.NavigateTo($"/top-streamed/{descriptor.Window}");
     }
 
     private async Task LoadRecommendedPlaylist()
