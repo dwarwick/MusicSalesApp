@@ -4736,6 +4736,10 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
 .cover-art-target .cover-art-dropzone { font-weight: 600; }
 .cover-art-remove { flex: 0 0 auto; white-space: nowrap; }
 
+/* Same treatment as Remove, because they sit side by side on a row that already
+   has art and a cell 14rem wide has no room for either of them to shrink. */
+.cover-art-browse { flex: 0 0 auto; white-space: nowrap; }
+
 .cover-art-hint-swatch {
     border-style: dashed;
     border-width: 1px;

@@ -35,6 +35,13 @@ public sealed record StagedUploadTarget(
 /// Container scope was rejected outright — it would grant write over every in-flight job folder and
 /// the whole match-batch prefix in the environment.
 /// </para>
+///
+/// <para>
+/// <see cref="StageMatchImageAsync"/> writes from the server rather than minting a token, for the one
+/// case the browser cannot serve. It changes none of the above: the path is still derived here from a
+/// batch id and an index, no caller names one, and the destination is the same batch folder the tokens
+/// point at.
+/// </para>
 /// </summary>
 public interface IUploadStagingSasService
 {
@@ -60,6 +67,31 @@ public interface IUploadStagingSasService
         Guid batchId,
         int index,
         string imageExtension,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes one cover image straight into the batch folder from the server, returning where it
+    /// landed. The server-side sibling of <see cref="CreateMatchImageTargetAsync"/>.
+    ///
+    /// <para>
+    /// Exists because the browser cannot always be the one to upload. The direct path addresses files
+    /// by their position in the page's main file input, which is the only handle JavaScript has - so
+    /// an image the creator adds later, through a different input, has no index there and cannot be
+    /// reached by the browser-side uploader at all. Its bytes are already on this machine by then,
+    /// having come over the circuit for validation, so the server finishes the journey.
+    /// </para>
+    ///
+    /// <para>
+    /// Same destination and same validation as the token path, deliberately: an image staged this way
+    /// is indistinguishable downstream from one the browser PUT itself, and is swept by the same
+    /// batch-folder cleanup.
+    /// </para>
+    /// </summary>
+    Task<string> StageMatchImageAsync(
+        Guid batchId,
+        int index,
+        string imageExtension,
+        Stream content,
         CancellationToken cancellationToken = default);
 }
 
@@ -122,6 +154,54 @@ public sealed class UploadStagingSasService : IUploadStagingSasService
         string imageExtension,
         CancellationToken cancellationToken = default)
     {
+        var (blobPath, contentType) = ResolveMatchImage(batchId, index, imageExtension);
+        return CreateTargetAsync(blobPath, contentType, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<string> StageMatchImageAsync(
+        Guid batchId,
+        int index,
+        string imageExtension,
+        Stream content,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        // Validated through the same helper as the token path, before anything reaches Azure, so the
+        // two cannot drift into accepting different extensions or writing to different places.
+        var (blobPath, contentType) = ResolveMatchImage(batchId, index, imageExtension);
+
+        var staging = _containerFactory.GetUploadStagingContainer()
+            ?? throw new InvalidOperationException("Upload staging is not configured.");
+
+        await EnsureContainerExistsAsync(staging, cancellationToken);
+
+        if (content.CanSeek)
+        {
+            content.Position = 0;
+        }
+
+        // Overwrite deliberately. A retry after a half-finished upload must land on the same blob -
+        // the caller has already committed to this index, and a second one would strand the first.
+        await staging.GetBlobClient(blobPath).UploadAsync(
+            content,
+            new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = contentType } },
+            cancellationToken);
+
+        return blobPath;
+    }
+
+    /// <summary>
+    /// Where one match-batch image goes and what it is, or a throw naming what was wrong with the
+    /// request. Shared by both entry points: the browser and the server must agree on the destination
+    /// and on which extensions are allowed there.
+    /// </summary>
+    private static (string BlobPath, string ContentType) ResolveMatchImage(
+        Guid batchId,
+        int index,
+        string imageExtension)
+    {
         if (batchId == Guid.Empty)
         {
             throw new ArgumentException("A batch id is required.", nameof(batchId));
@@ -138,10 +218,9 @@ public sealed class UploadStagingSasService : IUploadStagingSasService
             throw new InvalidDataException($"'{imageExtension}' is not a supported cover-art extension.");
         }
 
-        return CreateTargetAsync(
+        return (
             MediaProcessingStagingPaths.MatchBatchImage(batchId, index, extension),
-            MusicFileExtensions.GetCoverArtContentType(extension) ?? "application/octet-stream",
-            cancellationToken);
+            MusicFileExtensions.GetCoverArtContentType(extension) ?? "application/octet-stream");
     }
 
     private async Task<StagedUploadTarget> CreateTargetAsync(

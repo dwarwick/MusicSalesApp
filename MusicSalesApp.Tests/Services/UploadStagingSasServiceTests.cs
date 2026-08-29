@@ -147,6 +147,38 @@ public class UploadStagingSasServiceTests
     public void AnUnsupportedImageExtension_IsRefused(string extension)
         => Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateMatchImageTargetAsync(JobId, 0, extension));
 
+    // The server-side sibling of the token path, used for an image the browser cannot upload because
+    // it is not in the FileList the direct uploader indexes into. It must be no more permissive about
+    // what may be written where, which is what these three pin - all of them refuse before any
+    // connection is attempted, so like everything else here they run entirely offline.
+
+    [TestCase(".gif")]
+    [TestCase(".svg")]
+    [TestCase(".mp3")]
+    [TestCase("")]
+    public void StagingAnUnsupportedImageExtensionFromTheServer_IsRefused(string extension)
+        => Assert.ThrowsAsync<InvalidDataException>(
+            () => _service.StageMatchImageAsync(JobId, 0, extension, new MemoryStream([1, 2, 3])));
+
+    [Test]
+    public void StagingWithoutABatchOrASlot_IsRefused()
+    {
+        // The path is derived from these two and nothing else. A caller that could pass Guid.Empty or
+        // a negative index would be naming a blob rather than being given one.
+        Assert.Multiple(() =>
+        {
+            Assert.ThrowsAsync<ArgumentException>(
+                () => _service.StageMatchImageAsync(Guid.Empty, 0, ".png", new MemoryStream([1])));
+            Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => _service.StageMatchImageAsync(JobId, -1, ".png", new MemoryStream([1])));
+        });
+    }
+
+    [Test]
+    public void StagingWithoutContent_IsACallerBugRatherThanAnEmptyBlob()
+        => Assert.ThrowsAsync<ArgumentNullException>(
+            () => _service.StageMatchImageAsync(JobId, 0, ".png", null));
+
     [Test]
     public async Task AnExtensionIsNormalised_SoTheCasingACreatorTypedCannotReachABlobPath()
     {

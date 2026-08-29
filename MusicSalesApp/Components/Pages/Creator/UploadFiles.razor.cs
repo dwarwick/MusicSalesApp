@@ -6,8 +6,10 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Imaging;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using SkiaSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -100,7 +102,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // creator review and edit each title. The buffered temp files have to outlive that pause,
     // which is why they are held here rather than in a local `finally`.
     protected bool _awaitingTitleConfirmation = false;
-    private readonly List<PendingUpload> _pendingUploads = new();
+    protected readonly List<PendingUpload> _pendingUploads = new();
     private readonly List<string> _pendingTempFiles = new();
 
     // Progress for a queued song arrives over SignalR from a different request entirely - the
@@ -134,7 +136,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// and the path is resolved from it at upload time.
     /// </para>
     /// </summary>
-    private sealed record PendingUpload(
+    /// <remarks>
+    /// Protected rather than private, along with <see cref="_pendingUploads"/>, so a test can seed a
+    /// reviewed batch on either upload path - the same reason <see cref="_uploadProgressRouters"/> is.
+    /// Which path a row is on is not observable from anywhere else, and it decides where a cover
+    /// image the creator browses for has to be put.
+    /// </remarks>
+    protected sealed record PendingUpload(
         UploadPairItem Item,
         string AudioTempPath,
         int? BrowserAudioIndex = null);
@@ -197,6 +205,27 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // the row's image is no longer the one it was built with, and IBrowserFile is long gone by then.
     private readonly Dictionary<string, long> _coverArtFileSizes = new(StringComparer.OrdinalIgnoreCase);
 
+    // Cover art filename -> a small inline thumbnail, for images the JS previewer cannot reach.
+    // Everything selected with the batch is addressed by its position in the main file input's
+    // FileList; an image browsed for at the review step arrives through a different input and has no
+    // position there, so its thumbnail is rendered here instead. Downscaled to 128px first - a data
+    // URL of the original would put megabytes of base64 in the DOM for a 48px picture.
+    private readonly Dictionary<string, string> _coverArtPreviewDataUrls = new(StringComparer.OrdinalIgnoreCase);
+
+    // The next free slot in the match-batch folder. Seeded past the images the batch staged for
+    // itself, because those own indexes 0..n-1 and writing over one would replace a different song's
+    // artwork with this one.
+    private int _nextStagedImageIndex;
+
+    // The row whose Browse button opened the file dialog. Held rather than passed, because the file
+    // arrives on the shared input's change event, which knows nothing about which row asked for it.
+    private UploadPairItem _rowCoverArtTargetItem;
+
+    // Same hazard as _isProcessingFiles: a second change event on an InputFile invalidates the
+    // IBrowserFile from the first, so only the first is processed. Protected because the markup
+    // disables both Browse buttons while one is in flight.
+    protected bool _isProcessingRowCoverArt;
+
     /// <summary>
     /// Whether the creator wants to check cover-art pairings before the batch uploads.
     ///
@@ -237,7 +266,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // The match batch whose staged images are still needed. On the direct path those images ARE the
     // cover art - nothing else holds a copy - so the folder cannot be swept until every song that
     // matched one has been created.
-    private Guid? _pendingImageBatchId;
+    // Protected so a test can confirm that art added at the review step is put under this sweep.
+    // Nothing else records that a staged blob exists, so failing to set it is silent until the
+    // container's lifecycle rule eventually clears up after us.
+    protected Guid? _pendingImageBatchId;
 
     /// <summary>What the browser reports back for one file it tried to upload.</summary>
     /// <param name="Index">Position in the browser's FileList, echoed back so this can be matched up.</param>
@@ -292,6 +324,24 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// the moment files are selected until the last song reaches a terminal step.
     /// </summary>
     protected bool ShowOverallProgress => _initialUploadItems.Any() || _uploadItems.Any();
+
+    /// <summary>
+    /// Whether at least one song from this batch has actually reached the catalogue.
+    ///
+    /// <para>
+    /// Gates the pointer to Manage My Songs. Deliberately narrower than "the batch has finished":
+    /// a creator whose second song failed still has a first one worth going to look at, and a link
+    /// that appears only on a flawless run is missing exactly when it is most wanted.
+    /// </para>
+    ///
+    /// <para>
+    /// Just as deliberately not shown earlier. During the review step nothing has been uploaded at
+    /// all, and leaving the page there discards the whole batch - so an invitation to go somewhere
+    /// else would be pointing at songs that do not exist and costing the ones that nearly did.
+    /// </para>
+    /// </summary>
+    protected bool AnySongPublished
+        => _uploadItems.Any(item => item.Step == AudioProcessingStep.Completed);
 
     /// <summary>
     /// True while at least one song is still moving through the pipeline.
@@ -518,6 +568,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     protected InputFile FileInput { get; set;}
+
+    /// <summary>
+    /// The input behind every row's Browse button.
+    ///
+    /// <para>
+    /// Separate from <see cref="FileInput"/> and, critically, without its <c>direct-upload-input</c>
+    /// class. That class is a singleton contract: both the direct uploader and the thumbnail helper
+    /// find the batch's files with a single <c>querySelector</c> and then index into the FileList
+    /// they get back, so a second element wearing it could be handed over instead and every index
+    /// would resolve against the wrong list. The batch's own input cannot be reused either - its
+    /// change handler begins by discarding the batch, and its FileList is still where the audio for
+    /// every row is read from.
+    /// </para>
+    /// </summary>
+    protected InputFile RowCoverArtInput { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -775,7 +840,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _stagedImagePaths.Clear();
         _coverArtTempPaths.Clear();
         _coverArtFileSizes.Clear();
+        _coverArtPreviewDataUrls.Clear();
         _heldCoverArt = null;
+        _rowCoverArtTargetItem = null;
+
+        // Reserved before the batch's own images are staged, so the review step can never mint an
+        // index that collides with one of theirs. Counting the images rather than the whole
+        // selection would be wrong the moment a selection contains audio too.
+        _nextStagedImageIndex = files.Count;
 
         for (var browserIndex = 0; browserIndex < files.Count; browserIndex++)
         {
@@ -1364,6 +1436,29 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 System.Text.Encoding.UTF8.GetBytes(fileName ?? string.Empty)))[..16];
 
     /// <summary>
+    /// An inline thumbnail for one image, or null to leave the element for JavaScript to fill.
+    ///
+    /// <para>
+    /// The two halves of one job. Images that came with the batch are addressable in the browser's
+    /// own FileList, so <see cref="RefreshCoverArtPreviewsAsync"/> points at those directly and no
+    /// bytes cross the circuit; images browsed for at the review step are not, and carry a small
+    /// pre-rendered thumbnail instead. Returning null rather than an empty string matters - Blazor
+    /// omits a null attribute entirely, leaving the JS path an element with no <c>src</c> to
+    /// replace, which is exactly what it expects to find.
+    /// </para>
+    ///
+    /// <para>
+    /// Both the row thumbnail and the pool chip go through here, so an image keeps its picture as
+    /// the creator moves it between them.
+    /// </para>
+    /// </summary>
+    protected string CoverArtPreviewSource(string fileName)
+        => !string.IsNullOrEmpty(fileName)
+            && _coverArtPreviewDataUrls.TryGetValue(fileName, out var dataUrl)
+                ? dataUrl
+                : null;
+
+    /// <summary>
     /// Points every thumbnail at the browser's own copy of its file.
     ///
     /// <para>
@@ -1478,16 +1573,317 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>Where the assigned image lives on this machine, or null. Server path only.</summary>
-    private string ResolveCoverArtTempPath(UploadPairItem item)
+    /// <remarks>
+    /// Protected, with <see cref="ResolveCoverArtStagedPath"/>, because these two are the exact
+    /// question the upload asks of a row - so a test that adds artwork asserts through them rather
+    /// than against whichever dictionary happens to be holding it.
+    /// </remarks>
+    protected string ResolveCoverArtTempPath(UploadPairItem item)
         => item.HasCoverArt && _coverArtTempPaths.TryGetValue(item.CoverArtFileName, out var path)
             ? path
             : null;
 
     /// <summary>Where the assigned image already sits in staging, or null. Direct path only.</summary>
-    private string ResolveCoverArtStagedPath(UploadPairItem item)
+    protected string ResolveCoverArtStagedPath(UploadPairItem item)
         => item.HasCoverArt && _stagedImagePaths.TryGetValue(item.CoverArtFileName, out var path)
             ? path
             : null;
+
+    /// <summary>
+    /// How wide the thumbnail for a browsed image is rendered.
+    ///
+    /// <para>
+    /// The smallest rung of <see cref="ImageVariantSizes.CoverArt"/>, for the same reason that rung
+    /// exists: it is the size a 48-DIP picture actually needs. This one is inlined into the page as
+    /// base64 rather than fetched, so its size is paid in DOM rather than in bandwidth - a data URL
+    /// of a 20 MB master would be some 27 MB of text in the markup for a thumbnail.
+    /// </para>
+    /// </summary>
+    private const int BrowsedCoverArtThumbnailWidth = 128;
+
+    /// <summary>
+    /// Opens the file dialog for one song's cover art.
+    ///
+    /// <para>
+    /// Which row asked is remembered here rather than carried through the event, because the change
+    /// event arrives on a single shared input that knows nothing about rows. One input rather than
+    /// one per row is safe only because the bytes are captured the moment the file is picked - by the
+    /// time a second row is browsed, the first row's file has already been read and no longer needs
+    /// to be in the input's FileList.
+    /// </para>
+    /// </summary>
+    protected async Task BrowseRowCoverArt(UploadPairItem item)
+    {
+        if (item is null || !_awaitingTitleConfirmation || _isProcessingRowCoverArt || RowCoverArtInput is null)
+        {
+            return;
+        }
+
+        _rowCoverArtTargetItem = item;
+
+        try
+        {
+            await JS.InvokeVoidAsync("triggerClick", RowCoverArtInput.Element);
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    /// <summary>
+    /// Takes one image the creator browsed for and gives it to the row that asked.
+    ///
+    /// <para>
+    /// The validation is the same sequence the creator pages use for a song's artwork - extension,
+    /// then declared size, then a complete transfer, then a real decode - and in that order, because
+    /// each step is cheaper than the one after it and rejects a different lie. The
+    /// <c>accept</c> attribute on the input is a filter, not a guarantee; it is trivially bypassed by
+    /// picking "All files", so nothing here trusts it.
+    /// </para>
+    ///
+    /// <para>
+    /// Nothing is written to the row until every check has passed. A rejected image therefore leaves
+    /// whatever artwork the row already had exactly where it was, rather than clearing it and
+    /// reporting a problem - which would punish a mis-click by destroying a good pairing.
+    /// </para>
+    /// </summary>
+    protected async Task HandleRowCoverArtSelected(InputFileChangeEventArgs e)
+    {
+        // Same guard, and the same reason, as HandleFileSelected: a second change event invalidates
+        // the IBrowserFile the first one is still reading.
+        if (_isProcessingRowCoverArt)
+        {
+            return;
+        }
+
+        _isProcessingRowCoverArt = true;
+
+        var item = _rowCoverArtTargetItem;
+        _rowCoverArtTargetItem = null;
+
+        try
+        {
+            // Captured before anything can re-render, for the reason documented throughout this
+            // file: in .NET 9+ Blazor Server a render pass invalidates outstanding IBrowserFile
+            // references, and everything below either reads this file or reports why it did not.
+            await ApplyBrowsedCoverArtAsync(item, e.File);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: could not attach browsed cover art to a review row.");
+
+            if (item is not null)
+            {
+                item.CoverArtError = "That image could not be added. Please try again.";
+            }
+        }
+        finally
+        {
+            _isProcessingRowCoverArt = false;
+            await InvokeAsync(StateHasChanged);
+            await RefreshCoverArtPreviewsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Checks one browsed image, makes it reachable by whichever upload path this row is on, and
+    /// hands it to the row.
+    ///
+    /// <para>
+    /// Split from the event handler so the decisions can be exercised without a renderer: everything
+    /// here is state and I/O, while the caller owns the re-entrancy flag and the re-render, neither
+    /// of which means anything outside a live circuit.
+    /// </para>
+    /// </summary>
+    protected async Task ApplyBrowsedCoverArtAsync(UploadPairItem item, IBrowserFile file)
+    {
+        if (item is null || file is null || !_awaitingTitleConfirmation)
+        {
+            return;
+        }
+
+        item.CoverArtError = null;
+
+        if (!MusicFileExtensions.IsCoverArtFile(file.Name))
+        {
+            item.CoverArtError =
+                $"'{file.Name}' is not a supported image. Use "
+                + $"{string.Join(", ", ValidCoverArtExtensions)}.";
+            return;
+        }
+
+        if (file.Size > _maxImageFileSize)
+        {
+            item.CoverArtError =
+                $"'{file.Name}' is larger than the {_maxImageUploadSizeMBDisplay} MB limit for cover art.";
+            return;
+        }
+
+        // Which path this row is on is read from the row's own pending upload rather than from
+        // DirectUploadAvailable, because that is the flag the submit dispatch actually branches on.
+        // Asking a different question here could register the image in the dictionary the upload
+        // never consults, and the song would publish with no artwork and no error anywhere.
+        var pending = _pendingUploads.FirstOrDefault(candidate => ReferenceEquals(candidate.Item, item));
+        if (pending is null)
+        {
+            item.CoverArtError = "This song is no longer part of the batch.";
+            return;
+        }
+
+        var tempPath = Path.GetTempFileName();
+        await BufferBrowserFileToTempFileAsync(
+            file, tempPath, _maxImageFileSize, progressItem: null, new InitialUploadProgressState());
+
+        // Registered before the decode, so a file that turns out not to be an image is still cleaned
+        // up with the batch rather than left behind on the server.
+        _pendingTempFiles.Add(tempPath);
+
+        await using (var probe = new FileStream(
+            tempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+        {
+            if (!MediaFileContentValidator.ImageContentMatchesExtension(probe, file.Name, out _))
+            {
+                item.CoverArtError =
+                    $"'{file.Name}' is not a readable image, or its contents do not match its extension.";
+                return;
+            }
+        }
+
+        // Every dictionary in this area is keyed by filename, and a creator browsing for artwork has
+        // no idea what the batch already contains. Two images sharing a name would share a staged
+        // blob, a size, a thumbnail and a preview element id - so the second row would silently show
+        // and publish the first row's picture.
+        var fileName = UniqueCoverArtFileName(file.Name);
+
+        if (pending.BrowserAudioIndex is not null)
+        {
+            // Direct path. The image has to reach the batch folder before the row can point at it,
+            // and the browser cannot put it there - it is not in the FileList the uploader indexes
+            // into. Assigning _pendingImageBatchId is what puts the blob under the existing sweep, so
+            // abandoning the batch removes it rather than orphaning it until the lifecycle rule runs.
+            var batchId = _pendingImageBatchId ??= Guid.NewGuid();
+
+            await using var content = new FileStream(
+                tempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+
+            _stagedImagePaths[fileName] = await UploadStagingSasService.StageMatchImageAsync(
+                batchId,
+                _nextStagedImageIndex++,
+                Path.GetExtension(fileName),
+                content,
+                _uploadCts.Token);
+        }
+        else
+        {
+            _coverArtTempPaths[fileName] = tempPath;
+        }
+
+        _coverArtFileSizes[fileName] = file.Size;
+
+        var thumbnail = BuildCoverArtThumbnail(tempPath);
+        if (thumbnail is not null)
+        {
+            _coverArtPreviewDataUrls[fileName] = thumbnail;
+        }
+
+        // The same displaced-artwork rule as AssignHeldCoverArt, and for the same reason: a creator
+        // replacing a wrongly matched image is very often about to put the old one on another song,
+        // so it goes back to the pool rather than out of reach. RemoveFromPool first, in case this
+        // name is somehow already pooled - the invariant is that an image is assigned to exactly one
+        // song or sitting in the pool, never both.
+        var displaced = item.CoverArtFileName;
+
+        RemoveFromPool(fileName);
+        SetCoverArt(item, fileName);
+
+        if (!string.IsNullOrEmpty(displaced))
+        {
+            ReturnToPool(displaced);
+        }
+    }
+
+    /// <summary>
+    /// A cover-art filename this batch is not already using, preserving the extension - which decides
+    /// the staged blob's name and content type, so it cannot be part of what gets changed.
+    /// </summary>
+    private string UniqueCoverArtFileName(string fileName)
+    {
+        if (!CoverArtFileNameInUse(fileName))
+        {
+            return fileName;
+        }
+
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+
+        // Bounded rather than open-ended. A creator who has genuinely browsed a thousand images
+        // called the same thing is past the point where a nicer name helps, and an unbounded search
+        // here would be an unbounded loop on the render path.
+        for (var suffix = 2; suffix <= 1000; suffix++)
+        {
+            var candidate = $"{stem} ({suffix}){extension}";
+            if (!CoverArtFileNameInUse(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{stem} ({Guid.NewGuid():N}){extension}";
+    }
+
+    /// <summary>
+    /// Whether any part of this batch already means something by that filename.
+    ///
+    /// <para>
+    /// Deliberately asks every store rather than just the one about to be written. An image can be
+    /// known to the size table and the pool while belonging to neither path's dictionary, and a name
+    /// that is free in one and taken in another is still taken.
+    /// </para>
+    /// </summary>
+    private bool CoverArtFileNameInUse(string fileName)
+        => _coverArtFileSizes.ContainsKey(fileName)
+            || _stagedImagePaths.ContainsKey(fileName)
+            || _coverArtTempPaths.ContainsKey(fileName)
+            || _browserFileIndexes.ContainsKey(fileName)
+            || _unmatchedCoverArtFiles.Contains(fileName, StringComparer.OrdinalIgnoreCase)
+            || _uploadItems.Any(row =>
+                row.HasCoverArt
+                && string.Equals(row.CoverArtFileName, fileName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// A small inline copy of an image, or null if it could not be rendered.
+    ///
+    /// <para>
+    /// Best-effort by design. The thumbnail is an aid to pairing and the filename beside it is what
+    /// the creator is really working from, so an image Skia cannot resample is still perfectly
+    /// uploadable - it just arrives in the table without a picture.
+    /// </para>
+    /// </summary>
+    private string BuildCoverArtThumbnail(string tempPath)
+    {
+        try
+        {
+            using var bitmap = SKBitmap.Decode(tempPath);
+            if (bitmap is null || bitmap.Width <= 0)
+            {
+                return null;
+            }
+
+            // Clamped, because the encoder resamples to whatever width it is given and will happily
+            // upscale - which would turn a 64px image into a 128px blurry one and make the data URL
+            // four times the size for no extra detail.
+            using var encoded = ImageVariantEncoder.EncodeWebp(
+                bitmap, Math.Min(BrowsedCoverArtThumbnailWidth, bitmap.Width));
+
+            return encoded is null
+                ? null
+                : "data:image/webp;base64," + Convert.ToBase64String(encoded.ToArray());
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not render a thumbnail for browsed cover art.");
+            return null;
+        }
+    }
 
     /// <summary>
     /// Loads the genre and persona lists, and the display name a song falls back to.
@@ -2148,6 +2544,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         var batchId = _pendingImageBatchId;
         _pendingImageBatchId = null;
         _stagedImagePaths.Clear();
+
+        // Dropped with the blobs they depict. These are plain strings rather than object URLs, so
+        // there is nothing for ReleaseCoverArtPreviewsAsync to revoke - but leaving them would keep
+        // a discarded batch's thumbnails resident for the life of the circuit.
+        _coverArtPreviewDataUrls.Clear();
 
         await ReleaseCoverArtPreviewsAsync();
 
@@ -4079,6 +4480,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         public string CoverArtFileName { get; set; } = string.Empty;
         public long CoverArtFileSize { get; set; }
         public bool HasCoverArt { get; set; }
+
+        /// <summary>
+        /// Why the image the creator just browsed for was not accepted, or null.
+        ///
+        /// <para>
+        /// Unlike <see cref="TitleError"/>, <see cref="GenreError"/> and <see cref="AiError"/>, this
+        /// never blocks the upload and <c>PendingBatchNeedsAttentionAsync</c> does not read it.
+        /// Artwork is optional - a song publishes happily without any - so a rejected image is a
+        /// failed attempt to add something, not a song that cannot be published. Blocking on it
+        /// would leave a creator unable to submit a batch that was already valid before they
+        /// picked the wrong file.
+        /// </para>
+        /// </summary>
+        public string CoverArtError { get; set; }
         public UploadStatus Status { get; set; }
         public string StatusMessage { get; set; } = string.Empty;
 

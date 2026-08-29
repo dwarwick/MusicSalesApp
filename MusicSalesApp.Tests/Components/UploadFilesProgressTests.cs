@@ -85,6 +85,78 @@ public class UploadFilesProgressTests
         Assert.That(page.HideBox, Is.True);
     }
 
+    // -----------------------------------------------------------------
+    // The pointer to Manage My Songs, offered once there is something to go and see.
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void ManageSongsLink_IsNotOfferedWhileTheCreatorIsStillReviewing()
+    {
+        // Nothing has been uploaded at this point, and leaving the page discards the whole batch -
+        // so this is the worst possible moment to invite them somewhere else.
+        var page = new TestableUploadFiles { AwaitingReview = true };
+        page.AddUnstagedRow();
+
+        Assert.That(page.ShowManageSongs, Is.False);
+    }
+
+    [Test]
+    public void ManageSongsLink_IsNotOfferedWhileSongsAreStillProcessing()
+    {
+        // The song row does not exist until the pipeline finishes, so the page it points at would
+        // not yet be showing the song the creator went there to fix.
+        var page = new TestableUploadFiles();
+        page.AddQueuedRow(AudioProcessingStep.Transcoding);
+
+        Assert.That(page.ShowManageSongs, Is.False);
+    }
+
+    [Test]
+    public void ManageSongsLink_AppearsOnceASongIsPublished()
+    {
+        var page = new TestableUploadFiles();
+        page.AddQueuedRow(AudioProcessingStep.Completed);
+
+        Assert.That(page.ShowManageSongs, Is.True);
+    }
+
+    [Test]
+    public void ManageSongsLink_AppearsEvenWhenPartOfTheBatchFailed()
+    {
+        // Deliberately not gated on a flawless run. A creator whose second song failed still has a
+        // first one worth cropping, and this is exactly when they most want the page.
+        var page = new TestableUploadFiles();
+        page.AddQueuedRow(AudioProcessingStep.Completed);
+        page.AddQueuedRow(AudioProcessingStep.Failed);
+
+        Assert.That(page.ShowManageSongs, Is.True);
+    }
+
+    [Test]
+    public void ManageSongsLink_StaysAwayWhenTheWholeBatchFailed()
+    {
+        // The batch is terminal, so the bar reads 100%, but nothing published - and pointing at an
+        // empty catalogue page would read as the songs having gone missing.
+        var page = new TestableUploadFiles();
+        page.AddQueuedRow(AudioProcessingStep.Failed);
+
+        Assert.That(page.ShowManageSongs, Is.False);
+    }
+
+    [Test]
+    public void ManageSongsLink_UsesTheSharedRouteAndIsGatedOnAPublishedSong()
+    {
+        // A hand-written "/creator/songs" would not move if the route ever did, and the gate is the
+        // whole reason the invitation is safe to show at all.
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(markup, Does.Contain("@if (AnySongPublished)"));
+            Assert.That(markup, Does.Contain("href=\"@AppPageRoutes.CreatorSongs\""));
+        });
+    }
+
     /// <summary>
     /// Reaches the protected visibility members. Nothing here renders or touches an injected
     /// service, so the component needs no DI graph.
@@ -106,6 +178,8 @@ public class UploadFilesProgressTests
         public bool HideBox => HideUploadBox;
 
         public int OverallPercent => OverallProgressPercent;
+
+        public bool ShowManageSongs => AnySongPublished;
 
         public void AddQueuedRow(AudioProcessingStep step) => _uploadItems.Add(new UploadPairItem
         {

@@ -24,6 +24,17 @@
 
 <div class="container-fluid">
 
+    @* Cover art for one song, browsed for at the review step. Outside the upload box's label on
+       purpose - an input nested in that label is opened by a click anywhere inside it, which would
+       mean the drop box quietly opened the wrong dialog. Deliberately not multiple: this attaches to
+       one named row, so a second file would have nowhere to go. The accept list matches the song
+       edit page; it filters the dialog and nothing more, and the handler re-checks the extension and
+       then decodes the file before believing any of it. *@
+    <InputFile @ref="RowCoverArtInput"
+               OnChange="HandleRowCoverArtSelected"
+               class="hidden-input"
+               accept=".jpeg,.jpg,.png" />
+
     <label class="upload-box @(HideUploadBox ? "upload-box-disabled" : "") mb-2"
            style="display: @(HideUploadBox ? "none" : "flex")">
         @* direct-upload-input is how direct-upload.js finds the live FileList. Blazor's IBrowserFile
@@ -78,13 +89,35 @@
     {
         <div class="row mt-4">
             <div class="col-12">
-                <h5>Overall Progress</h5>
-                @if (!string.IsNullOrEmpty(OverallProgressMessage))
-                {
-                    <div class="mb-2">
-                        <span class="text-muted small">@OverallProgressMessage</span>
+                @* The heading and the batch summary on the left, the way out on the right. Cropping
+                   is deliberately not offered here - the review step happens before any song row
+                   exists, and the crop tool needs a same-origin URL for art that is already in blob
+                   storage - so once a song is published this is where a creator is told where that
+                   lives. Shown only after something has actually published: offered any earlier it
+                   would invite them to navigate away mid-batch, which discards it. *@
+                <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                    <div>
+                        <h5 class="mb-0">Overall Progress</h5>
+                        @if (!string.IsNullOrEmpty(OverallProgressMessage))
+                        {
+                            <span class="text-muted small">@OverallProgressMessage</span>
+                        }
                     </div>
-                }
+                    @if (AnySongPublished)
+                    {
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div class="alert alert-info py-1 px-3 mb-0 small" role="alert">
+                                Go to Manage My Songs to crop your song art or make additional corrections.
+                            </div>
+                            @* A real anchor rather than a button that navigates, so it can be
+                               middle-clicked or opened in a new tab - matching how every other
+                               cross-page action in this app is built. *@
+                            <a href="@AppPageRoutes.CreatorSongs" class="e-control e-btn cta-primary">
+                                Manage My Songs
+                            </a>
+                        </div>
+                    }
+                </div>
                 @* Still and grey while the batch is waiting on the creator. A striped, animated bar
                    is the universal "working, please wait" signal, and showing it during the review
                    step told them to sit still at the exact moment they needed to act - which is
@@ -329,7 +362,14 @@
                                              @ondragstart="@(() => HoldCoverArt(file))"
                                              @ondragend="ReleaseCoverArt"
                                              @onclick="@(() => HoldCoverArt(file))">
-                                            <img id="@PreviewElementId(file)" alt="" class="cover-art-thumb" />
+                                            @* src is null for anything the JS previewer can reach,
+                                               which leaves the element exactly as that code expects
+                                               to find it. It is only set for an image browsed for at
+                                               this step, which has no place in the batch's FileList
+                                               for JavaScript to read. *@
+                                            <img id="@PreviewElementId(file)"
+                                                 src="@CoverArtPreviewSource(file)"
+                                                 alt="" class="cover-art-thumb" />
                                             <div class="cover-art-chip-name" title="@file">@file</div>
                                             <small class="text-muted">@FormatFileSize(CoverArtSizeOf(file))</small>
                                         </div>
@@ -542,7 +582,11 @@
                                         @onclick="@(() => AssignHeldCoverArt(item))">
                                         @if (item.HasCoverArt)
                                         {
-                                            <div class="d-flex align-items-center gap-2">
+                                            @* Wrapping, now that Remove has Replace beside it. Two
+                                               nowrap buttons, a thumbnail and a filename do not fit
+                                               across a 14rem cell, and without this they force the
+                                               column wider and squeeze the editable ones. *@
+                                            <div class="d-flex flex-wrap align-items-center gap-2">
                                                 @if (_awaitingTitleConfirmation)
                                                 {
                                                     @* Tap picks it up as well as drag, so artwork can
@@ -552,6 +596,7 @@
                                                        which would put it straight back. *@
                                                     <img @key="item.CoverArtFileName"
                                                          id="@PreviewElementId(item.CoverArtFileName)"
+                                                         src="@CoverArtPreviewSource(item.CoverArtFileName)"
                                                          alt="@($"Cover art {item.CoverArtFileName}")"
                                                          title="Drag or tap to move this artwork"
                                                          class="cover-art-thumb cover-art-thumb-row @(string.Equals(item.CoverArtFileName, HeldCoverArt, StringComparison.OrdinalIgnoreCase) ? "cover-art-chip-held" : "")"
@@ -583,8 +628,26 @@
                                                                   aria-label="@($"Remove cover art from {item.SongTitle}")"
                                                                   OnClick="@(() => ClearCoverArt(item))" />
                                                     </span>
+                                                    @* Beside Remove rather than instead of it. The
+                                                       matcher pairs on filename, so the image it
+                                                       picked being the wrong one is an ordinary
+                                                       outcome, and fixing it should not mean first
+                                                       throwing away what is there. The displaced
+                                                       image goes to the pool, so this is never
+                                                       destructive. *@
+                                                    <span @onclick:stopPropagation="true">
+                                                        <SfButton CssClass="e-small e-outline cover-art-browse"
+                                                                  Content="Replace art"
+                                                                  Disabled="@_isProcessingRowCoverArt"
+                                                                  aria-label="@($"Choose different cover art for {item.SongTitle}")"
+                                                                  OnClick="@(() => BrowseRowCoverArt(item))" />
+                                                    </span>
                                                 }
                                             </div>
+                                            @if (item.CoverArtError != null)
+                                            {
+                                                <div class="cover-art-error text-danger small mt-1">@item.CoverArtError</div>
+                                            }
                                         }
                                         else if (_awaitingTitleConfirmation)
                                         {
@@ -604,6 +667,24 @@
                                                     }
                                                 </span>
                                             </div>
+                                            @* The way out for a creator who has no image to drop
+                                               because they never selected one. Before this, artwork
+                                               could only enter the batch in the original selection,
+                                               so forgetting it meant abandoning the batch and
+                                               starting again. Inside the dropzone's own cell, so the
+                                               two ways of filling it sit together, and stopping
+                                               propagation because the cell itself is a drop target. *@
+                                            <span @onclick:stopPropagation="true">
+                                                <SfButton CssClass="e-small e-outline cover-art-browse mt-2"
+                                                          Content="Browse for cover art"
+                                                          Disabled="@_isProcessingRowCoverArt"
+                                                          aria-label="@($"Browse for cover art for {item.SongTitle}")"
+                                                          OnClick="@(() => BrowseRowCoverArt(item))" />
+                                            </span>
+                                            @if (item.CoverArtError != null)
+                                            {
+                                                <div class="cover-art-error text-danger small mt-1">@item.CoverArtError</div>
+                                            }
                                         }
                                         else
                                         {
