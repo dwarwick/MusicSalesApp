@@ -46,6 +46,9 @@ public class PlaylistPlayerModeTests
 
         public string PeriodColumnLabel => GetPeriodStreamLabel();
 
+        public static string StreamsSummary(int periodCount, string periodLabel, int lifetimeCount, bool showPeriod)
+            => FormatStreamsSummary(periodCount, periodLabel, lifetimeCount, showPeriod);
+
         public void SetTrackLyrics(SongLyrics? lyrics) => _currentTrackLyrics = lyrics;
 
         public bool ArtistTreatment => IsArtistTreatment();
@@ -183,6 +186,36 @@ public class PlaylistPlayerModeTests
         var probe = new ModeProbe();
         configure(probe);
         return probe;
+    }
+
+    // ---- The small-screen stream summary -------------------------------------------------
+
+    [Test]
+    public void TheSmallScreenSummaryNamesBothCounts()
+    {
+        // Below 992px the Streams columns are hidden, so without this a phone sees none of the
+        // numbers the playlist is ranked by.
+        Assert.That(
+            ModeProbe.StreamsSummary(42, "Today", 5001, showPeriod: true),
+            Is.EqualTo("42 today · 5,001 all time"));
+    }
+
+    [Test]
+    public void TheSmallScreenSummaryFallsBackToOneCountWithoutAPeriod()
+    {
+        // The all-time playlist ranks on the lifetime counter, so there is no second number to name.
+        Assert.That(
+            ModeProbe.StreamsSummary(0, string.Empty, 5001, showPeriod: false),
+            Is.EqualTo("5,001 streams"));
+    }
+
+    [Test]
+    public void TheSmallScreenSummaryGroupsThousands()
+    {
+        // A raw 1234567 in a 12.5px line under a phone-width title is unreadable.
+        Assert.That(
+            ModeProbe.StreamsSummary(1234, "This Week", 1234567, showPeriod: true),
+            Is.EqualTo("1,234 this week · 1,234,567 all time"));
     }
 
     [Test]
