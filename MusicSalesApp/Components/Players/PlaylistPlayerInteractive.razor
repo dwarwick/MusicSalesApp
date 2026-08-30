@@ -252,6 +252,15 @@ else
                                        screens. Hidden above 992px, shown below it - which is how the
                                        table sheds columns instead of shrinking its font to 8px. *@
                                     <span class="track-sub">@GetTrackSubtitle(index)</span>
+                                    @if (_isTopStreamedMode)
+                                    {
+                                        @* Same class on purpose: it inherits being hidden above 992px
+                                           (where the dedicated Streams columns do this job), the
+                                           player text colour, and the ellipsis. A phone would
+                                           otherwise see none of the numbers this playlist is ranked
+                                           by. *@
+                                        <span class="track-sub">@GetTrackStreamsSummary(index)</span>
+                                    }
                                 </td>
                                 @if (!IsArtistTreatment())
                                 {

@@ -1793,6 +1793,39 @@ namespace MusicSalesApp.Components.Players
         protected string GetPeriodStreamLabel() => _periodStreamLabel ?? string.Empty;
 
         /// <summary>
+        /// Both stream counts as one line, for the small-screen subtitle.
+        /// </summary>
+        /// <remarks>
+        /// Below 992px the dedicated Streams columns are hidden along with artist and genre, so on a
+        /// phone these playlists lost the very numbers they are ranked by. This puts them back on the
+        /// same fallback line the artist and genre already use, rather than shrinking the table.
+        /// </remarks>
+        protected string GetTrackStreamsSummary(int index) => FormatStreamsSummary(
+            GetTrackPeriodStreamCount(index),
+            GetPeriodStreamLabel(),
+            GetTrackStreamCount(index),
+            ShowPeriodStreamCount());
+
+        /// <summary>
+        /// Formats the summary. Split out from the row lookups so it can be tested on its own.
+        /// </summary>
+        protected static string FormatStreamsSummary(
+            int periodCount,
+            string periodLabel,
+            int lifetimeCount,
+            bool showPeriod)
+        {
+            // The all-time playlist ranks on the lifetime counter, so naming a period there would be
+            // inventing a distinction that does not exist.
+            if (!showPeriod || string.IsNullOrEmpty(periodLabel))
+            {
+                return $"{lifetimeCount:N0} streams";
+            }
+
+            return $"{periodCount:N0} {periodLabel.ToLowerInvariant()} · {lifetimeCount:N0} all time";
+        }
+
+        /// <summary>
         /// Streams for this track inside the list's period. A snapshot from the nightly job, so it
         /// deliberately does not move as songs play - unlike the lifetime count beside it.
         /// </summary>
