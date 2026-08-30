@@ -17,7 +17,10 @@
     <section class="top-streamed-section">
         <div class="section-head">
             <div>
-                <div class="section-eyebrow">Updated daily</div>
+                @* Says when the ranking was taken, because the counts beside it are live while the
+                   order is up to a day old. Falls back to "Updated daily" before the browser has
+                   been asked for its timezone. *@
+                <div class="section-eyebrow">@SectionEyebrow</div>
                 <h2 class="section-title">Most Streamed</h2>
             </div>
         </div>

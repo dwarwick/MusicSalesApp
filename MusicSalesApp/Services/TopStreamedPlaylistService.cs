@@ -187,7 +187,10 @@ public class TopStreamedPlaylistService : ITopStreamedPlaylistService
                 .WhereVisibleLibrarySongs()
                 .Select(song => song.Id);
 
-            return await context.TopStreamedPlaylistEntries
+            var entries = await context.TopStreamedPlaylistEntries
+                // No-tracking so the live recount below can overwrite StreamCount without any risk of
+                // that reaching the database. The stored value is the ranking record.
+                .AsNoTracking()
                 .Include(entry => entry.SongMetadata)
                     .ThenInclude(song => song.Creator)
                         .ThenInclude(creator => creator.User)
@@ -199,11 +202,78 @@ public class TopStreamedPlaylistService : ITopStreamedPlaylistService
                 .Where(entry => visibleSongIds.Contains(entry.SongMetadataId))
                 .OrderBy(entry => entry.DisplayOrder)
                 .ToListAsync();
+
+            if (descriptor.Lookback.HasValue && entries.Count > 0)
+            {
+                await RefreshPeriodStreamCountsAsync(context, entries, descriptor.Lookback.Value);
+            }
+
+            return entries;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading top-streamed playlist {Window}", descriptor.Window);
             return [];
+        }
+    }
+
+    /// <summary>
+    /// Recounts each entry's window from now, replacing the value the nightly job stored.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The snapshot is up to a day old, so without this a listener who just played a song would see
+    /// their play in the lifetime column and not in the period column beside it - and a play made
+    /// anywhere else in the app would not show here at all until the next rebuild.
+    /// </para>
+    /// <para>
+    /// Ten songs and one date range, served by the composite index on
+    /// <c>(CreatedDate, SongMetadataId)</c>. Deliberately re-derived from <c>now</c> rather than from
+    /// the generation time, so the window really is "the last 24 hours" when the page is opened.
+    /// </para>
+    /// </remarks>
+    private async Task RefreshPeriodStreamCountsAsync(
+        AppDbContext context,
+        List<TopStreamedPlaylistEntry> entries,
+        TimeSpan lookback)
+    {
+        var cutoff = _timeProvider.GetUtcNow().UtcDateTime - lookback;
+        var songIds = entries.Select(entry => entry.SongMetadataId).ToList();
+
+        var liveCounts = await context.SongStreams
+            .Where(stream => songIds.Contains(stream.SongMetadataId) && stream.CreatedDate >= cutoff)
+            .GroupBy(stream => stream.SongMetadataId)
+            .Select(group => new { SongMetadataId = group.Key, StreamCount = group.Count() })
+            .ToListAsync();
+
+        var countBySongId = liveCounts.ToDictionary(item => item.SongMetadataId, item => item.StreamCount);
+
+        foreach (var entry in entries)
+        {
+            // Zero rather than the stored value when nothing is found: the song genuinely has no
+            // streams left inside the window, and showing yesterday's number would be a lie.
+            entry.StreamCount = countBySongId.TryGetValue(entry.SongMetadataId, out var count) ? count : 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<DateTime?> GetLastGeneratedAtAsync()
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            // All five windows are written in one pass, so any row's timestamp is the run's; MAX is
+            // just the safe way to say that.
+            return await context.TopStreamedPlaylistEntries
+                .OrderByDescending(entry => entry.GeneratedAt)
+                .Select(entry => (DateTime?)entry.GeneratedAt)
+                .FirstOrDefaultAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading when the top-streamed playlists were last generated");
+            return null;
         }
     }
 
