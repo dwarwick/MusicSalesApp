@@ -1,3 +1,4 @@
+using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 
@@ -31,6 +32,20 @@ public partial class HomeTopStreamedPlaylistsModel : BlazorBase
     protected Dictionary<string, int> _songCounts = new();
 
     /// <summary>
+    /// When the ranking was taken, already formatted in the viewer's timezone; empty until the
+    /// browser has been asked.
+    /// </summary>
+    /// <remarks>
+    /// Worth showing because rank order is up to a day old while the stream counts on the playlist
+    /// itself are live, so the two can disagree slightly. Naming the moment the ranking was taken is
+    /// what makes that read as "a daily chart" rather than as a sorting bug.
+    /// </remarks>
+    protected string _rankedAtLocal = string.Empty;
+
+    protected string SectionEyebrow =>
+        string.IsNullOrEmpty(_rankedAtLocal) ? "Updated daily" : $"Ranked {_rankedAtLocal}";
+
+    /// <summary>
     /// The playlists that actually have songs, in the order the descriptor table defines - Day, Week,
     /// Month, Year, All Time.
     /// </summary>
@@ -53,6 +68,11 @@ public partial class HomeTopStreamedPlaylistsModel : BlazorBase
         try
         {
             _songCounts = await TopStreamedPlaylistService.GetCountsAsync();
+
+            if (_songCounts.Count > 0)
+            {
+                await LoadRankedAtAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -62,6 +82,38 @@ public partial class HomeTopStreamedPlaylistsModel : BlazorBase
         {
             _loading = false;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Formats the generation time in the browser's timezone.
+    /// </summary>
+    /// <remarks>
+    /// The browser rather than the server, because this section is shown to anonymous visitors and
+    /// <c>UserTimeZoneDisplayHelper</c> resolves its timezone from the signed-in user's profile - so
+    /// every signed-out reader would be told the time in UTC. Best-effort: if the interop fails the
+    /// eyebrow simply stays on "Updated daily".
+    /// </remarks>
+    private async Task LoadRankedAtAsync()
+    {
+        var generatedAtUtc = await TopStreamedPlaylistService.GetLastGeneratedAtAsync();
+        if (generatedAtUtc is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var module = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./js/local-time-helper.js");
+
+            _rankedAtLocal = await module.InvokeAsync<string>(
+                "formatUtcInLocalTime",
+                DateTime.SpecifyKind(generatedAtUtc.Value, DateTimeKind.Utc).ToString("o"));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not format the top-streamed ranking time in local time.");
         }
     }
 

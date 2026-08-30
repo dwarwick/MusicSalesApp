@@ -48,6 +48,16 @@ public class MobilePlaylistDto
 
     /// <summary>Server-dictated position when several playlists are listed together. Lower first.</summary>
     public int DisplayOrder { get; set; }
+
+    /// <summary>
+    /// UTC time the top-streamed playlists were last rebuilt, or null for every other kind.
+    /// </summary>
+    /// <remarks>
+    /// Shown to listeners because rank order is up to a day old while the stream counts beside it are
+    /// live, so the two can disagree slightly. Saying when the ranking was taken is what makes that
+    /// legible rather than looking like a sorting bug.
+    /// </remarks>
+    public DateTime? GeneratedAtUtc { get; set; }
 }
 
 /// <summary>
@@ -198,6 +208,11 @@ public class MobilePlaylistSongsDto
     /// </para>
     /// </summary>
     public string? PeriodLabel { get; set; }
+
+    /// <summary>
+    /// UTC time this playlist was last ranked, or null when it is not a top-streamed one.
+    /// </summary>
+    public DateTime? GeneratedAtUtc { get; set; }
 }
 
 public class CreateMobilePlaylistRequest

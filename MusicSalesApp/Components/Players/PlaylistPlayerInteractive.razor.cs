@@ -251,12 +251,41 @@ namespace MusicSalesApp.Components.Players
             // Update local tracking if this song is in our list. The membership test only reads; the
             // write is inside the hop, because a Dictionary written from a hub thread while the
             // renderer enumerates it is not a repaint bug.
-            if (!_trackStreamCounts.ContainsKey(songMetadataId))
+            if (!_trackStreamCounts.TryGetValue(songMetadataId, out var previousCount))
             {
                 return;
             }
 
-            DispatchUiUpdate(() => _trackStreamCounts[songMetadataId] = newCount);
+            DispatchUiUpdate(() =>
+            {
+                _trackStreamCounts[songMetadataId] = newCount;
+                ApplyPeriodStreamDelta(songMetadataId, newCount - previousCount);
+            });
+        }
+
+        /// <summary>
+        /// Moves the period count by the same number of streams the lifetime count just moved by.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A stream recorded now falls inside every rolling window, so one new stream is one more for
+        /// the period as well as for all time.
+        /// </para>
+        /// <para>
+        /// <b>Derived from the lifetime delta rather than counting the notification.</b> The
+        /// stream-count broadcast fires even when the stream was deliberately not recorded - a
+        /// creator playing their own song, or a non-subscriber past the featured free-stream cap - and
+        /// in those cases the lifetime count is unchanged, so this correctly adds nothing.
+        /// </para>
+        /// </remarks>
+        private void ApplyPeriodStreamDelta(int songMetadataId, int delta)
+        {
+            if (delta <= 0 || !_trackPeriodStreamCounts.ContainsKey(songMetadataId))
+            {
+                return;
+            }
+
+            _trackPeriodStreamCounts[songMetadataId] += delta;
         }
 
         private void SetModeFlags()
@@ -1984,7 +2013,9 @@ namespace MusicSalesApp.Components.Players
             {
                 // Call StreamCountService directly (bypasses HTTP which loses auth context in Blazor Server)
                 var newCount = await StreamCountService.IncrementStreamCountAsync(songMetadataId, _currentUserId, _isAdmin);
+                var previousCount = _trackStreamCounts.TryGetValue(songMetadataId, out var tracked) ? tracked : newCount;
                 _trackStreamCounts[songMetadataId] = newCount;
+                ApplyPeriodStreamDelta(songMetadataId, newCount - previousCount);
                 await InvokeAsync(StateHasChanged);
             }
             catch (Exception ex)

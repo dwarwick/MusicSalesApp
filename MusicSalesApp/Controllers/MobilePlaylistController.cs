@@ -126,6 +126,7 @@ public class MobilePlaylistController : ControllerBase
     private async Task<List<MobilePlaylistDto>> BuildTopStreamedTilesAsync()
     {
         var counts = await _topStreamedPlaylistService.GetCountsAsync();
+        var generatedAtUtc = await _topStreamedPlaylistService.GetLastGeneratedAtAsync();
 
         return TopStreamedPlaylists.All
             .OrderBy(descriptor => descriptor.DisplayOrder)
@@ -138,6 +139,7 @@ public class MobilePlaylistController : ControllerBase
                 SongCount = counts[descriptor.Window],
                 IsSystemGenerated = true,
                 DisplayOrder = descriptor.DisplayOrder,
+                GeneratedAtUtc = generatedAtUtc,
                 Kind = MobilePlaylistKinds.TopStreamed
             })
             .ToList();
@@ -192,6 +194,7 @@ public class MobilePlaylistController : ControllerBase
             PlaylistName = descriptor.Name,
             IsSystemGenerated = true,
             PeriodLabel = descriptor.PeriodLabel,
+            GeneratedAtUtc = entries.Count > 0 ? entries[0].GeneratedAt : null,
             Songs = songs
         });
     }

@@ -250,6 +250,46 @@ public class MobilePlaylistControllerTopStreamedTests
     }
 
     [Test]
+    public async Task GetTopStreamedSongs_ReportsWhenTheRankingWasTaken()
+    {
+        // The client shows this because rank order is up to a day old while the counts beside it are
+        // live, so the two can disagree slightly.
+        var generatedAt = new DateTime(2026, 8, 29, 2, 0, 0, DateTimeKind.Utc);
+        var entry = Entry(1, 1, 12);
+        entry.GeneratedAt = generatedAt;
+        _mockTopStreamed.Setup(s => s.GetAsync(TopStreamedWindows.Day)).ReturnsAsync([entry]);
+
+        var body = Body<MobilePlaylistSongsDto>(await CreateController(null).GetTopStreamedSongs(TopStreamedWindows.Day));
+
+        Assert.That(body.GeneratedAtUtc, Is.EqualTo(generatedAt));
+    }
+
+    [Test]
+    public async Task GetTopStreamedPlaylists_ReportsWhenTheRankingWasTaken()
+    {
+        var generatedAt = new DateTime(2026, 8, 29, 2, 0, 0, DateTimeKind.Utc);
+        _mockTopStreamed.Setup(s => s.GetCountsAsync())
+            .ReturnsAsync(new Dictionary<string, int> { [TopStreamedWindows.Day] = 10 });
+        _mockTopStreamed.Setup(s => s.GetLastGeneratedAtAsync()).ReturnsAsync(generatedAt);
+
+        var tiles = Body<List<MobilePlaylistDto>>(await CreateController(null).GetTopStreamedPlaylists());
+
+        Assert.That(tiles.Single().GeneratedAtUtc, Is.EqualTo(generatedAt));
+    }
+
+    [Test]
+    public async Task GetTopStreamedSongs_PassesThroughWhateverPeriodCountTheServiceReports()
+    {
+        // The service recounts the window at read time, so the controller must not substitute
+        // anything of its own here.
+        _mockTopStreamed.Setup(s => s.GetAsync(TopStreamedWindows.Day)).ReturnsAsync([Entry(1, 1, 42)]);
+
+        var body = Body<MobilePlaylistSongsDto>(await CreateController(null).GetTopStreamedSongs(TopStreamedWindows.Day));
+
+        Assert.That(body.Songs.Single().PeriodStreamCount, Is.EqualTo(42));
+    }
+
+    [Test]
     public async Task GetTopStreamedSongs_RejectsAnUnknownWindow()
     {
         var result = await CreateController(null).GetTopStreamedSongs("LastTuesday");

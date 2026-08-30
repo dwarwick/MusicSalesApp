@@ -49,15 +49,21 @@ public class TopStreamedPlaylistEntry
     public int DisplayOrder { get; set; }
 
     /// <summary>
-    /// The stream count this row was ranked on - streams inside the window, or the lifetime total for
-    /// the all-time playlist.
-    ///
-    /// <para>
-    /// Stored rather than recomputed so the ranking that produced a playlist stays inspectable after the
-    /// window has moved on. Note it is <b>not</b> what the player displays: the player's counter is
-    /// the live lifetime count, kept current by SignalR.
-    /// </para>
+    /// Streams inside this playlist's window.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The <b>stored</b> value is what the row was ranked on when the job ran, kept so the ranking
+    /// stays inspectable after the window has moved on.
+    /// </para>
+    /// <para>
+    /// <b>What <c>ITopStreamedPlaylistService.GetAsync</c> returns is not that number.</b> It
+    /// recounts the window from the moment of the read and overwrites this property, so a listener
+    /// who played a song five minutes ago sees that play reflected rather than waiting for the next
+    /// nightly rebuild. The entities are read no-tracking precisely so that overwrite can never be
+    /// persisted.
+    /// </para>
+    /// </remarks>
     [Required]
     public int StreamCount { get; set; }
 

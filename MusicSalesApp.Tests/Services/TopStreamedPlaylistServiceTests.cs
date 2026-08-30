@@ -454,6 +454,126 @@ public class TopStreamedPlaylistServiceTests
         Assert.That(await service.GetCountsAsync(), Does.Not.ContainKey(TopStreamedWindows.Day));
     }
 
+    // ---- The period count is live, not the snapshot -------------------------------
+
+    [Test]
+    public async Task GetAsync_CountsStreamsMadeSinceThePlaylistWasGenerated()
+    {
+        // The whole point: a listener who played a song after the nightly job must see that play in
+        // the period column, not wait until 2am for it.
+        await SeedAsync(
+            songs: [Song(1), Song(2)],
+            streams: Streams(1, 5, Now.UtcDateTime).Concat(Streams(2, 3, Now.UtcDateTime)));
+
+        await CreateService().GenerateAllAsync();
+
+        await SeedAsync(streams: Streams(1, 4, Now.UtcDateTime.AddMinutes(30)));
+
+        // An hour later, so the new plays are inside the 24-hour window.
+        var entries = await CreateService(Now.AddHours(1)).GetAsync(TopStreamedWindows.Day);
+
+        Assert.That(entries.Single(e => e.SongMetadataId == 1).StreamCount, Is.EqualTo(9),
+            "Five at generation plus four since.");
+    }
+
+    [Test]
+    public async Task GetAsync_CountsStreamsMadeAnywhereNotJustInThePlaylist()
+    {
+        // Nothing about the recount is scoped to how the song was reached, so a play from the music
+        // library counts exactly like a play from the playlist itself.
+        await SeedAsync(songs: [Song(1)], streams: Streams(1, 2, Now.UtcDateTime));
+        await CreateService().GenerateAllAsync();
+
+        await SeedAsync(streams: Streams(1, 1, Now.UtcDateTime.AddMinutes(5)));
+
+        var entries = await CreateService(Now.AddMinutes(10)).GetAsync(TopStreamedWindows.Day);
+
+        Assert.That(entries.Single().StreamCount, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task GetAsync_RollsTheWindowForwardSoStaleStreamsDropOut()
+    {
+        // The window is re-derived from the read, not from the generation time, so "the last 24
+        // hours" means the last 24 hours now.
+        await SeedAsync(songs: [Song(1)], streams: Streams(1, 6, Now.UtcDateTime));
+        await CreateService().GenerateAllAsync();
+
+        var entries = await CreateService(Now.AddDays(2)).GetAsync(TopStreamedWindows.Day);
+
+        Assert.That(entries.Single().StreamCount, Is.Zero,
+            "Two days on, none of those streams are inside the window any more.");
+    }
+
+    [Test]
+    public async Task GetAsync_DoesNotPersistTheRecountedValue()
+    {
+        // The stored column is the ranking record. The entities are read no-tracking so the live
+        // overwrite cannot leak back into the database.
+        await SeedAsync(songs: [Song(1)], streams: Streams(1, 2, Now.UtcDateTime));
+        await CreateService().GenerateAllAsync();
+
+        await SeedAsync(streams: Streams(1, 7, Now.UtcDateTime.AddMinutes(5)));
+        await CreateService(Now.AddMinutes(10)).GetAsync(TopStreamedWindows.Day);
+
+        Assert.That((await ReadAsync(TopStreamedWindows.Day)).Single().StreamCount, Is.EqualTo(2),
+            "The ranking record must still say what the row was ranked on.");
+    }
+
+    [Test]
+    public async Task GetAsync_LeavesTheAllTimeCountAlone()
+    {
+        // All Time ranks on the lifetime counter, which has no window to recount.
+        await SeedAsync(songs: [Song(1, lifetimeStreams: 400)]);
+        await CreateService().GenerateAllAsync();
+
+        var entries = await CreateService(Now.AddDays(30)).GetAsync(TopStreamedWindows.AllTime);
+
+        Assert.That(entries.Single().StreamCount, Is.EqualTo(400));
+    }
+
+    [Test]
+    public async Task GetAsync_KeepsTheGeneratedRankOrderEvenWhenLiveCountsDisagree()
+    {
+        // Membership and order are the nightly job's; only the numbers are live. Song 2 overtakes
+        // song 1 on plays but must stay at rank 2 until the next rebuild.
+        await SeedAsync(
+            songs: [Song(1), Song(2)],
+            streams: Streams(1, 5, Now.UtcDateTime).Concat(Streams(2, 3, Now.UtcDateTime)));
+
+        await CreateService().GenerateAllAsync();
+
+        await SeedAsync(streams: Streams(2, 50, Now.UtcDateTime.AddMinutes(10)));
+
+        var entries = await CreateService(Now.AddMinutes(20)).GetAsync(TopStreamedWindows.Day);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entries.Select(e => e.SongMetadataId), Is.EqualTo(new[] { 1, 2 }));
+            Assert.That(entries[1].StreamCount, Is.EqualTo(53));
+        });
+    }
+
+    // ---- When the ranking was taken ------------------------------------------------
+
+    [Test]
+    public async Task GetLastGeneratedAtAsync_ReportsTheMostRecentRun()
+    {
+        await SeedAsync(songs: [Song(1)], streams: Streams(1, 1, Now.UtcDateTime));
+
+        var later = Now.AddDays(1);
+        await CreateService().GenerateAllAsync();
+        await CreateService(later).GenerateAllAsync();
+
+        Assert.That(await CreateService().GetLastGeneratedAtAsync(), Is.EqualTo(later.UtcDateTime));
+    }
+
+    [Test]
+    public async Task GetLastGeneratedAtAsync_IsNullBeforeTheJobHasEverRun()
+    {
+        Assert.That(await CreateService().GetLastGeneratedAtAsync(), Is.Null);
+    }
+
     [Test]
     public async Task GetAsync_ReturnsEmptyForAnUnknownWindow()
     {
