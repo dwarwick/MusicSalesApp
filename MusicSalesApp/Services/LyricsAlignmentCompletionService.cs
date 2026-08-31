@@ -390,7 +390,7 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
 
         // NOTHING IS PUBLISHED HERE, at any confidence. Machine alignment of sung vocals lands
         // 150-300 ms out on a good day, and a listener notices that immediately, so the last word
-        // belongs to the person whose song it is. The creator opens Preview Results, listens, taps
+        // belongs to the person whose song it is. The creator opens Preview Lyrics, listens, taps
         // anything that drifts, and presses Publish.
         //
         // One message, with no score in it. The structural checks above are what "this run failed"

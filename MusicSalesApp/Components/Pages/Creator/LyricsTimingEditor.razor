@@ -7,7 +7,42 @@
 @using MusicSalesApp.Components.Shared
 @attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
 
-<PageTitle>Preview results</PageTitle>
+<PageTitle>Preview Lyrics</PageTitle>
+
+@* THE LAST GATE BEFORE THE WORK IS SILENTLY WASTED. Timings that were never published are invisible
+   to every listener, and nothing about this page looks unfinished once a creator is happy with what
+   they hear - so leaving is the moment to ask. Follows UploadFiles.razor, which locks navigation the
+   same way; a Blazor dialog rather than a JS confirm because the "Yes" here does something (it
+   publishes) rather than merely permitting the exit. *@
+<NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigation"
+                ConfirmExternalNavigation="@ShouldGuardNavigation" />
+
+@* No close icon: the two buttons are the whole answer, and an X would read as "cancel", which is
+   not on offer - the creator has already asked to leave and both answers let them. *@
+<SfDialog @bind-Visible="_showPublishPrompt" Width="440px" IsModal="true" ShowCloseIcon="false">
+    <DialogTemplates>
+        <Header>
+            <div class="lyrics-dialog-header">
+                <i class="bi bi-megaphone me-2"></i>
+                Publish these lyrics?
+            </div>
+        </Header>
+        <Content>
+            <p class="mb-0">
+                Do you want to publish the lyrics for this song? Listeners won't see them until
+                you do.
+            </p>
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="ConfirmPublishAndLeave" CssClass="e-btn cta-secondary hero-secondary-cta">
+                Yes
+            </SfButton>
+            <SfButton OnClick="LeaveWithoutPublishing" CssClass="e-btn e-small">
+                No
+            </SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
 
 @if (_loading)
 {
@@ -30,9 +65,21 @@ else
         <div class="lyrics-editor-header">
             <div>
                 <h3 class="mb-1">@_songTitle</h3>
-                <span class="text-muted">Preview results</span>
+                <span class="text-muted">Preview Lyrics</span>
             </div>
-            <a class="btn btn-outline-secondary btn-sm" href="@AppPageRoutes.CreatorSongs">Back to my songs</a>
+            @* TWO PUBLISH BUTTONS ON PURPOSE, and this is the one most creators will use. The one
+               in the side column is where somebody ends up after tuning; this one is what they see
+               on arrival and on the way out, which is exactly where the step was being missed - a
+               creator who listened, was happy, and reached for "Back to my songs" never scrolled
+               past the transport to find it. Label and disabled state come from the same fields as
+               the other copy, so the two cannot disagree. *@
+            <div class="d-flex gap-2 align-items-start">
+                <a class="btn btn-outline-secondary btn-sm" href="@AppPageRoutes.CreatorSongs">Back to my songs</a>
+                <button type="button" class="btn btn-success btn-sm"
+                        @onclick="Publish" disabled="@(_isSaving || _adminDisabled)">
+                    @(_isPublished ? "Publish changes" : "Publish")
+                </button>
+            </div>
         </div>
 
         @* The advisory banner. Score-independent: it used to grade its own copy by the aligner's

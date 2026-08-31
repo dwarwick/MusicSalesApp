@@ -164,7 +164,7 @@ public sealed class LyricsAlignmentEmailService : ILyricsAlignmentEmailService
                     <a href='{editorUrl}'
                        style='background: #1db954; color: #fff; padding: 12px 24px; text-decoration: none;
                               border-radius: 4px; display: inline-block;'>
-                        Preview results
+                        Preview lyrics
                     </a>
                 </p>
 

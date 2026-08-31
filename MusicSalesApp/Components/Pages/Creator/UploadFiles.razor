@@ -10,6 +10,36 @@
 
 <NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigation" ConfirmExternalNavigation="@(_isUploading || _isProcessingFiles || _awaitingTitleConfirmation)" />
 
+@* Matches the timing editor's leave prompt rather than the browser's confirm box this replaced: a
+   native dialog names the SITE and cannot say which files are at stake, which is most of what makes
+   it easy to dismiss without reading.
+
+   THE EMPHASIS IS ON STAYING, and that is the one deliberate difference from the timing editor's
+   version. There the encouraged answer is Yes, because it publishes; here Yes discards work that
+   cannot be recovered, so the safe answer is the one styled as the call to action. No close icon
+   either - the two buttons are the whole answer. *@
+<SfDialog @bind-Visible="_showLeavePrompt" Width="460px" IsModal="true" ShowCloseIcon="false">
+    <DialogTemplates>
+        <Header>
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Leave this page?
+            </div>
+        </Header>
+        <Content>
+            <p class="mb-0">@LeavePromptMessage</p>
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="StayOnThisPage" CssClass="e-btn cta-secondary hero-secondary-cta">
+                No
+            </SfButton>
+            <SfButton OnClick="LeaveAndDiscard" CssClass="e-btn e-small e-danger">
+                Yes
+            </SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
 <div class="d-flex flex-row align-items-center mb-2">
     <h3 class="me-2 mb-0">Upload Music Files</h3>
     

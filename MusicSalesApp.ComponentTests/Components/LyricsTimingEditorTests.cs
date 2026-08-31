@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System.Security.Claims;
 using Bunit;
 using Microsoft.AspNetCore.Components;
@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Moq;
 using MusicSalesApp.Common.Contracts;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Pages.Creator;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Models;
@@ -29,14 +30,18 @@ public class LyricsTimingEditorTests : BUnitTestBase
     private const int SongId = 1;
     private const int CreatorId = 7;
 
+    /// <summary>The page's own JS module, so what it is asked to do can be asserted on.</summary>
+    private Mock<IJSObjectReference> _jsModule = null!;
+
     [SetUp]
     public override void BaseSetup()
     {
         base.BaseSetup();
 
         var js = new Mock<IJSRuntime>();
+        _jsModule = new Mock<IJSObjectReference>();
         js.Setup(x => x.InvokeAsync<IJSObjectReference>("import", It.IsAny<object[]>()))
-            .ReturnsAsync(new Mock<IJSObjectReference>().Object);
+            .ReturnsAsync(_jsModule.Object);
         TestContext.Services.AddSingleton(js.Object);
 
         SetupRendererInfo();
@@ -93,7 +98,8 @@ public class LyricsTimingEditorTests : BUnitTestBase
         LyricsEditOutcome outcome = LyricsEditOutcome.Success,
         LyricsTimingsDocument? document = null,
         bool isDraft = false,
-        double confidence = 0.52)
+        double confidence = 0.52,
+        SongLyricsStatus status = SongLyricsStatus.Pending)
     {
         MockLyricsService
             .Setup(x => x.GetEditableTimingsAsync(SongId, CreatorId, It.IsAny<CancellationToken>()))
@@ -101,7 +107,7 @@ public class LyricsTimingEditorTests : BUnitTestBase
                 outcome,
                 outcome == LyricsEditOutcome.Success ? document ?? Document() : null,
                 isDraft,
-                new SongLyrics { SongMetadataId = SongId, Confidence = confidence }));
+                new SongLyrics { SongMetadataId = SongId, Confidence = confidence, Status = status }));
     }
 
     private IRenderedComponent<LyricsTimingEditor> Render()
@@ -729,5 +735,269 @@ public class LyricsTimingEditorTests : BUnitTestBase
         var publish = cut.FindAll("button").First(b => b.TextContent.Trim().StartsWith("Publish"));
 
         Assert.That(publish.HasAttribute("disabled"), Is.False);
+    }
+
+    // -----------------------------------------------------------------
+    // Naming, and the last gate before the work is wasted
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void ThePageNamesItselfAfterTheLyricsRatherThanTheResults()
+    {
+        // "Preview results" said nothing about lyrics and nothing about publishing. The page is
+        // where lyrics are checked and released, and every route to it now says so.
+        GivenTimings();
+
+        Assert.That(Render().Markup, Does.Contain("Preview Lyrics"));
+    }
+
+    [Test]
+    public void PublishIsReachableFromTheTopOfThePageAsWellAsTheBottom()
+    {
+        // The one in the side column is below the transport, the words and two help panels. A
+        // creator who listened, was happy and reached for "Back to my songs" never saw it.
+        GivenTimings();
+
+        var publishButtons = Render().FindAll("button")
+            .Where(b => b.TextContent.Trim().StartsWith("Publish"))
+            .ToList();
+
+        Assert.That(publishButtons, Has.Count.EqualTo(2));
+    }
+
+    /// <summary>Asks to leave, without waiting for the answer the guard is about to demand.</summary>
+    private static void TryToLeave(IRenderedComponent<LyricsTimingEditor> cut, NavigationManager nav) =>
+        _ = cut.InvokeAsync(() => nav.NavigateTo(AppPageRoutes.CreatorSongs));
+
+    private static void Answer(IRenderedComponent<LyricsTimingEditor> cut, string label) =>
+        cut.FindAll("button").First(b => b.TextContent.Trim() == label).Click();
+
+    [Test]
+    public void LeavingUnpublishedLyricsAsksBeforeItLetsThemGo()
+    {
+        // The failure this exists to stop: timings that were never published are invisible to every
+        // listener, and nothing about a page the creator is happy with looks unfinished.
+        GivenTimings();
+
+        var cut = Render();
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+        var before = nav.Uri;
+
+        TryToLeave(cut, nav);
+        cut.WaitForState(
+            () => cut.Markup.Contains("Do you want to publish"), TimeSpan.FromSeconds(5));
+
+        Assert.That(nav.Uri, Is.EqualTo(before), "Still here until they answer.");
+    }
+
+    [Test]
+    public void APublishedSongLetsThemLeaveWithoutBeingAsked()
+    {
+        // Nothing is at risk of being silently lost - listeners can already see these - so a prompt
+        // here would be a question with no consequence, which is how prompts stop being read.
+        GivenTimings(status: SongLyricsStatus.Published);
+
+        var cut = Render();
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+
+        TryToLeave(cut, nav);
+        cut.WaitForState(
+            () => nav.Uri.Contains(AppPageRoutes.CreatorSongs), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Not.Contain("Do you want to publish"));
+    }
+
+    // -----------------------------------------------------------------
+    // The path that actually fires: an anchor, held by JavaScript
+    // -----------------------------------------------------------------
+    //
+    // NavigationLock alone did not work here and the tests above cannot show why: bUnit's
+    // NavigationManager runs location-changing handlers for every NavigateTo, whereas the real app
+    // routes with a static SSR <Routes /> and per-page interactive islands, so a link click is
+    // enhanced navigation and never reaches the circuit. The anchors are caught in JavaScript and
+    // arrive through RequestLeave, which is what these cover.
+
+    [Test]
+    public void TheLinkGuardIsArmedAsSoonAsThePageIsUsable()
+    {
+        GivenTimings();
+
+        Render();
+
+        _jsModule.Verify(
+            x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "arm", It.IsAny<object?[]?>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task AHeldLinkIsReleasedOnceTheCreatorSaysNo()
+    {
+        // The exact failure reported from the test server: "Back to my songs" took them away with
+        // no prompt at all, because an anchor never touches the circuit's NavigationManager.
+        GivenTimings();
+
+        var cut = Render();
+        var decision = cut.InvokeAsync(() => Model(cut).RequestLeave());
+
+        cut.WaitForState(
+            () => cut.Markup.Contains("Do you want to publish"), TimeSpan.FromSeconds(5));
+
+        Answer(cut, "No");
+
+        Assert.That(await decision, Is.True, "They asked to go; they go.");
+        MockLyricsService.Verify(
+            x => x.PublishAsync(SongId, CreatorId, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task AHeldLinkPublishesFirstWhenTheCreatorSaysYes()
+    {
+        GivenTimings();
+        GivenPublishReturns(LyricsEditResult.Ok("Published."));
+
+        var cut = Render();
+        var decision = cut.InvokeAsync(() => Model(cut).RequestLeave());
+
+        cut.WaitForState(
+            () => cut.Markup.Contains("Do you want to publish"), TimeSpan.FromSeconds(5));
+
+        Answer(cut, "Yes");
+
+        Assert.That(await decision, Is.True);
+        MockLyricsService.Verify(
+            x => x.PublishAsync(SongId, CreatorId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task AHeldLinkStaysHeldWhenThePublishIsRefused()
+    {
+        GivenTimings();
+        GivenPublishReturns(new LyricsEditResult(
+            LyricsEditOutcome.Invalid,
+            "These timings aren't ready to publish yet.",
+            ["Line 4 starts before the line above it finishes."]));
+
+        var cut = Render();
+        var decision = cut.InvokeAsync(() => Model(cut).RequestLeave());
+
+        cut.WaitForState(
+            () => cut.Markup.Contains("Do you want to publish"), TimeSpan.FromSeconds(5));
+
+        Answer(cut, "Yes");
+
+        var mayLeave = await decision;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mayLeave, Is.False, "The reasons are on this page.");
+            Assert.That(cut.Markup, Does.Contain("Line 4 starts before"));
+        });
+    }
+
+    [Test]
+    public async Task APublishedSongLetsALinkThroughWithoutAsking()
+    {
+        // Every link on the page asks .NET first, so this answer has to be immediate - a prompt on
+        // a song that is already live would be a question with no consequence.
+        GivenTimings(status: SongLyricsStatus.Published);
+
+        var cut = Render();
+
+        Assert.That(await cut.InvokeAsync(() => Model(cut).RequestLeave()), Is.True);
+        Assert.That(cut.Markup, Does.Not.Contain("Do you want to publish"));
+    }
+
+    [Test]
+    public void ASongWithNoTimingsYetHasNothingToOfferToPublish()
+    {
+        // The lock renders outside the loading and error branches - it has to, or a creator could
+        // leave before it existed - so this is the branch where it could ask about timings that do
+        // not exist. That page's whole message is "there is nothing here yet".
+        GivenTimings(LyricsEditOutcome.NoTimings);
+
+        var cut = Render();
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+
+        TryToLeave(cut, nav);
+        cut.WaitForState(
+            () => nav.Uri.Contains(AppPageRoutes.CreatorSongs), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Not.Contain("Do you want to publish"));
+    }
+
+    [Test]
+    public void YesPublishesAndThenGoesWhereTheyWereGoing()
+    {
+        GivenTimings();
+        GivenPublishReturns(LyricsEditResult.Ok("Published."));
+
+        var cut = Render();
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+
+        TryToLeave(cut, nav);
+        cut.WaitForState(
+            () => cut.Markup.Contains("Do you want to publish"), TimeSpan.FromSeconds(5));
+
+        Answer(cut, "Yes");
+        cut.WaitForState(
+            () => nav.Uri.Contains(AppPageRoutes.CreatorSongs), TimeSpan.FromSeconds(5));
+
+        // Both halves matter. Publishing and then stranding them here would be as wrong as the
+        // silent exit this replaced.
+        MockLyricsService.Verify(
+            x => x.PublishAsync(SongId, CreatorId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public void NoIsAnAnswerRatherThanARefusalToLetThemLeave()
+    {
+        // They asked to go and they were asked a question, not stopped. Trapping somebody who has
+        // decided their timings are not ready is how a guard becomes something people route around.
+        GivenTimings();
+
+        var cut = Render();
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+
+        TryToLeave(cut, nav);
+        cut.WaitForState(
+            () => cut.Markup.Contains("Do you want to publish"), TimeSpan.FromSeconds(5));
+
+        Answer(cut, "No");
+        cut.WaitForState(
+            () => nav.Uri.Contains(AppPageRoutes.CreatorSongs), TimeSpan.FromSeconds(5));
+
+        MockLyricsService.Verify(
+            x => x.PublishAsync(SongId, CreatorId, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public void ARefusedPublishKeepsThemHereWithTheReasons()
+    {
+        // Validation reasons render on THIS page. Leaving now would throw the explanation away at
+        // the exact moment it appeared, which is the worst possible time to lose it.
+        GivenTimings();
+        GivenPublishReturns(new LyricsEditResult(
+            LyricsEditOutcome.Invalid,
+            "These timings aren't ready to publish yet.",
+            ["Line 4 starts before the line above it finishes."]));
+
+        var cut = Render();
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+        var before = nav.Uri;
+
+        TryToLeave(cut, nav);
+        cut.WaitForState(
+            () => cut.Markup.Contains("Do you want to publish"), TimeSpan.FromSeconds(5));
+
+        Answer(cut, "Yes");
+        cut.WaitForState(
+            () => cut.Markup.Contains("Line 4 starts before"), TimeSpan.FromSeconds(5));
+
+        Assert.That(nav.Uri, Is.EqualTo(before));
     }
 }

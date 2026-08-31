@@ -31,9 +31,24 @@
                     </SfMessage>
                 }
 
-                @if (_status is not null)
+                @* Not gated on _status any more, and that is the point of the change. A song being
+                   timed for the FIRST time has no SongLyrics row at all, so this whole block used to
+                   render nothing while the creator was pasting - which is precisely when they needed
+                   telling that pasting is step one of three rather than the end of it. *@
+                @if (_status is not null || _showPublishingSteps)
                 {
-                    <SfMessage Severity="@_statusSeverity" ShowIcon="true">@_statusMessage</SfMessage>
+                    <SfMessage Severity="@_statusSeverity" ShowIcon="true">
+                        @_statusMessage
+                        @if (_showPublishingSteps)
+                        {
+                            <ol class="lyrics-dialog-steps">
+                                @foreach (var step in PublishingSteps)
+                                {
+                                    <li>@step</li>
+                                }
+                            </ol>
+                        }
+                    </SfMessage>
                 }
 
                 @if (_isRunning)

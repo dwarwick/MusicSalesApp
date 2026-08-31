@@ -15,7 +15,7 @@ namespace MusicSalesApp.ComponentTests.Components;
 ///
 /// <para>
 /// <b>Nothing creator-facing consults this setting any more.</b> It used to choose the wording of
-/// the greeting on the Preview Results page, until it became clear the aligner scores sung vocals so
+/// the greeting on the Preview Lyrics page, until it became clear the aligner scores sung vocals so
 /// far below speech that the low-confidence warning fired on timings creators were perfectly happy
 /// with.  The setting is kept - stored, loaded and saved - so the greeting can be reinstated if the
 /// scoring is ever made trustworthy, and these tests are kept with it.

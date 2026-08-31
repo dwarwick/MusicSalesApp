@@ -2320,6 +2320,18 @@ h1:focus {
     padding-left: 1.25rem;
 }
 
+/* The three steps between pasting words and a listener seeing them. Sits inside the same SfMessage
+   as its lead-in sentence, so it needs a top margin the error list does not - and room to breathe
+   between steps, since these are read once and have to land. */
+.lyrics-dialog-steps {
+    margin: 0.5rem 0 0;
+    padding-left: 1.25rem;
+}
+
+.lyrics-dialog-steps li + li {
+    margin-top: 0.35rem;
+}
+
 /* ============================================================
    Scrolling lyrics
    ============================================================

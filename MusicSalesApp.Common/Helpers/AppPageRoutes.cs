@@ -23,7 +23,7 @@ public static class AppPageRoutes
     /// </summary>
     /// <remarks>
     /// A round trip rather than a paste box on the timing page, because the grid already hosts that
-    /// dialog and already owns what happens when a run finishes. Preview Results is only where the
+    /// dialog and already owns what happens when a run finishes. Preview Lyrics is only where the
     /// creator FINDS OUT the words are wrong - hearing them against the song is the one way to
     /// notice - so it needs to point at the fix, not own it.
     /// </remarks>

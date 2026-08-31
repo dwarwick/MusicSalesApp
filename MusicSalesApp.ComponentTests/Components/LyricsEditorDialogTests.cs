@@ -100,7 +100,7 @@ public class LyricsEditorDialogTests : BUnitTestBase
     /// </summary>
     /// <remarks>
     /// Every action it used to offer has moved somewhere it belongs better: the export to the songs
-    /// grid, the editor to Preview Results, and the re-run nowhere at all. A re-run costs another
+    /// grid, the editor to Preview Lyrics, and the re-run nowhere at all. A re-run costs another
     /// separation pass and comes back with the same inherent drift, so offering it read as advice to
     /// take it - and creators did, on timings that were already good.
     /// </remarks>
@@ -288,7 +288,7 @@ public class LyricsEditorDialogTests : BUnitTestBase
     public void ReplaceModeOffersThePasteBoxBackOnASongThatAlreadyHasTimings()
     {
         // The way back from a faithful alignment of the WRONG words - the one failure this feature
-        // otherwise has no answer for, because nothing on Preview Results changes what the words are
+        // otherwise has no answer for, because nothing on Preview Lyrics changes what the words are
         // and the paste box is hidden once timings exist.
         MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
         MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -555,6 +555,99 @@ public class LyricsEditorDialogTests : BUnitTestBase
             cut.Markup,
             Does.Not.Contain("progress-bar"),
             "The bar must clear on the dialog's own repaint, not depend on the parent's reload surviving.");
+    }
+
+    // -----------------------------------------------------------------
+    // The three steps
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// The misunderstanding this dialog now heads off: pasting is step one of three, not the end.
+    /// </summary>
+    /// <remarks>
+    /// Alignment lands a song in <see cref="SongLyricsStatus.NeedsReview"/> and only a creator
+    /// pressing Publish moves it to <see cref="SongLyricsStatus.Published"/>, which is the only
+    /// status a player reads from - so a creator who pastes and walks away has lyrics no listener
+    /// will ever see.
+    /// </remarks>
+    [Test]
+    public void TheThreeStepsAreOnScreenBeforeAnythingIsPasted()
+    {
+        // THE CASE THAT MATTERS. A song being timed for the first time has no SongLyrics row at all,
+        // which is exactly when "you are doing this now" needs to be readable - and exactly the
+        // state in which this banner used not to render.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+
+        var cut = RenderDialog();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("There are 3 steps to publishing your lyrics"));
+            Assert.That(cut.Markup, Does.Contain("you are doing this now"));
+            Assert.That(cut.Markup, Does.Contain("Preview Lyrics page"));
+            Assert.That(
+                cut.Markup,
+                Does.Contain("Listeners will not see the lyrics unless you click Publish"),
+                "The sentence the whole change exists for.");
+        });
+    }
+
+    [Test]
+    public void TheThreeStepsStayUpWhileTimingIsQueued()
+    {
+        // A queued run is still step one as far as the creator is concerned: nothing they have done
+        // yet reaches a listener, and this is the state they sit in longest.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics { SongMetadataId = 1, Status = SongLyricsStatus.Pending });
+
+        var cut = RenderDialog();
+        cut.WaitForState(
+            () => cut.Markup.Contains("There are 3 steps"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("you are doing this now"));
+    }
+
+    [Test]
+    public void TheThreeStepsAreGoneOnceThereIsSomethingToHear()
+    {
+        // Past step one. That creator is being told something else - that timings exist and are
+        // still withheld - and repeating the whole sequence at them would bury it.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics
+            {
+                SongMetadataId = 1,
+                Status = SongLyricsStatus.NeedsReview,
+                TimingsBlobPath = "abc/abc-lyrics.json"
+            });
+
+        var cut = RenderDialog();
+        cut.WaitForState(() => cut.Markup.Contains("These lyrics are timed"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Not.Contain("There are 3 steps"));
+    }
+
+    [Test]
+    public void AReplacementIsWarnedAboutItsOwnCostRatherThanTaughtTheThreeSteps()
+    {
+        // Somebody replacing words has been round this loop already. The warning they need is that
+        // the replacement destroys the timings they have - which is a different message, and it
+        // must not have to compete with a recital of the basics.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics
+            {
+                SongMetadataId = 1,
+                Status = SongLyricsStatus.NeedsReview,
+                TimingsBlobPath = "abc/abc-lyrics.json"
+            });
+
+        var cut = RenderDialog(replacing: true);
+        cut.WaitForState(
+            () => cut.Markup.Contains("Paste the corrected words"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Not.Contain("There are 3 steps"));
     }
 
     private IRenderedComponent<LyricsEditorDialog> RenderDialog(
