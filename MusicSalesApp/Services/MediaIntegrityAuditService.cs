@@ -140,8 +140,6 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
             .FirstOrDefaultAsync(run => run.Id == runId);
     }
 
-    [AutomaticRetry(Attempts = 2)]
-    [DisableConcurrentExecution(timeoutInSeconds: 3600)]
     public async Task RunAsync(int runId)
     {
         try

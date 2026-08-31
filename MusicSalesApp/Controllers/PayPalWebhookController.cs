@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
@@ -91,10 +91,36 @@ public class PayPalWebhookController : ControllerBase
 
         if (!isPlaceholder)
         {
-            var verified = await VerifyWebhookSignatureAsync(body, webhookId!);
-            if (!verified)
+            var verification = await VerifyWebhookSignatureAsync(body, webhookId!);
+            if (verification == WebhookVerification.HeadersMissing)
             {
-                _logger.LogWarning("PayPal webhook signature verification failed");
+                // Never a webhook. This endpoint is [AllowAnonymous] and publicly routable, and
+                // rejecting it costs no outbound call, so anyone could otherwise mint admin alerts
+                // - and fill the notification queue - for free. Junk stays at Warning.
+                return Unauthorized("Webhook signature verification failed");
+            }
+
+            if (verification == WebhookVerification.Unavailable)
+            {
+                // We could not verify, which says nothing about the caller. 503 rather than 401 so
+                // PayPal retries the delivery instead of treating it as permanently refused - the
+                // inner paths have already logged what actually went wrong.
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    "PayPal webhook verification is temporarily unavailable");
+            }
+
+            if (verification != WebhookVerification.Verified)
+            {
+                // Headers were present and verification still failed. Error, not Warning: that is
+                // either a forged request or - as in August 2026 - a PayPal:WebhookId that no
+                // longer matches the webhook registered with PayPal, which silently drops every
+                // lifecycle event. At Warning that went unnoticed for a month. Error routes it to
+                // the admin notification email, and a genuine mismatch always presents with
+                // headers, so nothing is lost by exempting the header-less case above.
+                _logger.LogError(
+                    "PayPal webhook signature verification failed for webhook id {WebhookId}",
+                    webhookId);
                 return Unauthorized("Webhook signature verification failed");
             }
         }
@@ -775,7 +801,30 @@ public class PayPalWebhookController : ControllerBase
 
     // ---- Helper methods ----
 
-    private async Task<bool> VerifyWebhookSignatureAsync(string body, string webhookId)
+    /// <summary>
+    /// Outcome of a webhook signature check. HeadersMissing is kept distinct from Rejected because
+    /// only the latter can indicate a real configuration fault worth alerting on.
+    /// </summary>
+    private enum WebhookVerification
+    {
+        Verified,
+
+        /// <summary>No PayPal transmission headers at all: junk traffic, not a webhook.</summary>
+        HeadersMissing,
+
+        /// <summary>PayPal was asked and the signature did not check out.</summary>
+        Rejected,
+
+        /// <summary>
+        /// PayPal could not be asked - no access token, or the verify call itself failed. Nobody
+        /// rejected anything, so this must not be reported as a signature failure: doing so blamed
+        /// the webhook id for what was really an outage, and sent the admin to re-register a
+        /// webhook that was never wrong.
+        /// </summary>
+        Unavailable
+    }
+
+    private async Task<WebhookVerification> VerifyWebhookSignatureAsync(string body, string webhookId)
     {
         try
         {
@@ -786,17 +835,29 @@ public class PayPalWebhookController : ControllerBase
             var certUrl = Request.Headers["PAYPAL-CERT-URL"].FirstOrDefault();
             var transmissionSig = Request.Headers["PAYPAL-TRANSMISSION-SIG"].FirstOrDefault();
 
-            if (string.IsNullOrEmpty(transmissionId) || string.IsNullOrEmpty(transmissionTime) ||
-                string.IsNullOrEmpty(authAlgo) || string.IsNullOrEmpty(certUrl) ||
-                string.IsNullOrEmpty(transmissionSig))
+            var presentHeaders = new[] { transmissionId, transmissionTime, authAlgo, certUrl, transmissionSig }
+                .Count(header => !string.IsNullOrEmpty(header));
+
+            if (presentHeaders < 5)
             {
-                _logger.LogWarning("Missing PayPal webhook verification headers");
-                return false;
+                // All five absent is junk traffic. A partial set is not: that is a real delivery
+                // some proxy mangled, and silently dropping it is the invisible-failure mode this
+                // whole change exists to end - so it is escalated rather than shrugged off.
+                if (presentHeaders == 0)
+                {
+                    _logger.LogWarning("Missing PayPal webhook verification headers");
+                    return WebhookVerification.HeadersMissing;
+                }
+
+                _logger.LogError(
+                    "PayPal webhook carried only {PresentHeaders} of 5 verification headers",
+                    presentHeaders);
+                return WebhookVerification.Rejected;
             }
 
             var token = await GetPayPalAccessTokenAsync();
             if (string.IsNullOrEmpty(token))
-                return false;
+                return WebhookVerification.Unavailable;
 
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
             var client = _httpClientFactory.CreateClient();
@@ -824,7 +885,7 @@ public class PayPalWebhookController : ControllerBase
             {
                 _logger.LogWarning("PayPal webhook verification API returned {Status}: {Body}",
                     response.StatusCode, responseBody);
-                return false;
+                return WebhookVerification.Unavailable;
             }
 
             using var doc = JsonDocument.Parse(responseBody);
@@ -832,12 +893,14 @@ public class PayPalWebhookController : ControllerBase
                 ? vs.GetString()
                 : null;
 
-            return verificationStatus == "SUCCESS";
+            return verificationStatus == "SUCCESS"
+                ? WebhookVerification.Verified
+                : WebhookVerification.Rejected;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error verifying PayPal webhook signature");
-            return false;
+            return WebhookVerification.Unavailable;
         }
     }
 

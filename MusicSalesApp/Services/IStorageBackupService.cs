@@ -1,3 +1,4 @@
+﻿using Hangfire;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
@@ -23,6 +24,10 @@ public interface IStorageBackupService
         bool overwriteNewerLive);
 
     /// <summary>Executes a queued run. Invoked by Hangfire; safe to re-enter after a process recycle.</summary>
+    // Hangfire resolves filters from Job.Method, which for an interface-registered job is
+    // this declaration. The same attribute on the implementation is silently ignored.
+    [AutomaticRetry(Attempts = 2)]
+    [DisableConcurrentExecution(timeoutInSeconds: 300)]
     Task RunAsync(int runId);
 
     /// <summary>Entry point for the nightly recurring backup.</summary>

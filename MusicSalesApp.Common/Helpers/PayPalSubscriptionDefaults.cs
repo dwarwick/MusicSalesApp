@@ -27,4 +27,11 @@ public static class PayPalSubscriptionDefaults
     /// Maximum stale checkouts processed per sweep. Each one costs at least one PayPal API call.
     /// </summary>
     public const int StalePendingCheckoutBatchSize = 200;
+
+    /// <summary>
+    /// Maximum locally-current PayPal subscriptions verified against the provider per drift sweep.
+    /// One PayPal API call each, so this bounds the run rather than the backlog; a truncated sweep
+    /// is logged so a growing subscriber base cannot quietly outpace it.
+    /// </summary>
+    public const int EntitlementDriftBatchSize = 200;
 }

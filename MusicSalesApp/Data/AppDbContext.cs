@@ -55,6 +55,53 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<LyricsAlignmentJob> LyricsAlignmentJobs { get; set; }
     public DbSet<SongLyrics> SongLyrics { get; set; }
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        StampSubscriptionActivations();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        StampSubscriptionActivations();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Records the first time a subscription reaches ACTIVE.
+    ///
+    /// <para>
+    /// Done here rather than at the nine places that assign Status, because the value has to be a
+    /// durable fact and the ninth assignment is the one someone forgets. Trial eligibility depends
+    /// on it: HasPriorActivatedSubscriptionAsync used to infer "has subscribed before" from the
+    /// row's current status, so a cancellation - by webhook, by the drift sweep, by anything -
+    /// handed the user another free trial.
+    /// </para>
+    ///
+    /// <para>
+    /// Write-once. Never cleared, never overwritten, so a resubscribe on the same row keeps the
+    /// original activation.
+    /// </para>
+    /// </summary>
+    private void StampSubscriptionActivations()
+    {
+        foreach (var entry in ChangeTracker.Entries<Subscription>())
+        {
+            if (entry.State != EntityState.Added && entry.State != EntityState.Modified)
+            {
+                continue;
+            }
+
+            if (entry.Entity.ActivatedAtUtc == null
+                && string.Equals(entry.Entity.Status, SubscriptionStatuses.Active, StringComparison.Ordinal))
+            {
+                entry.Entity.ActivatedAtUtc = DateTime.UtcNow;
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -234,6 +281,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .WithMany()
             .HasForeignKey(am => am.CanceledByUserId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // Covers the nightly entitlement drift sweep, which filters on BillingSource and orders by
+        // LastProviderCheckAtUtc. Subscriptions otherwise carries only a UserId index, so the sweep
+        // would be a full scan plus a sort every night, growing with the subscriber base.
+        builder.Entity<Subscription>()
+            .HasIndex(subscription => new
+            {
+                subscription.BillingSource,
+                subscription.LastProviderCheckAtUtc,
+                subscription.Id
+            });
 
         builder.Entity<AdminMessage>()
             .HasIndex(am => am.CreatedAtUtc);

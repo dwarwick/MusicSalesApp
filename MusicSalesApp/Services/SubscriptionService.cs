@@ -88,13 +88,17 @@ public class SubscriptionService : ISubscriptionService
 
         return await context.Subscriptions
             .Where(s => s.UserId == userId)
+            // ActivatedAtUtc rather than "is the row currently ACTIVE or SUSPENDED". Reading the
+            // current status made trial eligibility a side effect of any status change: a
+            // cancellation - from a webhook, from the entitlement drift sweep, from anything -
+            // moved the row to CANCELLED and handed the user a second free trial. Activation is a
+            // fact about the past, so it is now recorded as one.
             .AnyAsync(s => s.Status != SubscriptionStatuses.ApprovalPending &&
-                           (s.LastPaymentDate.HasValue ||
+                           (s.ActivatedAtUtc.HasValue ||
+                            s.LastPaymentDate.HasValue ||
                             s.TrialStartDate.HasValue ||
                             s.TrialEndDate.HasValue ||
                             s.TrialConvertedAt.HasValue ||
-                            s.Status == SubscriptionStatuses.Active ||
-                            s.Status == SubscriptionStatuses.Suspended ||
                             (s.BillingSource == BillingSources.GooglePlay
                              && s.GooglePlayPurchaseToken != null) ||
                             (s.BillingSource == BillingSources.Apple

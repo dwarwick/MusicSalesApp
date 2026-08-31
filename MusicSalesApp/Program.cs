@@ -61,7 +61,13 @@ try
             Path.Combine(logDirectory, "app-log-.log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 30,
-            shared: true));
+            shared: true)
+        // Errors and above are also queued for an email to the admin address. The sink only
+        // enqueues; AdminErrorNotificationDispatcher does the throttling and the sending, so a
+        // logging call is never held up by mail delivery.
+        .WriteTo.Sink(
+            services.GetRequiredService<AdminErrorNotificationSink>(),
+            LogEventLevel.Error));
 
     // Add services to the container.
     builder.Services.AddRazorComponents()
@@ -308,6 +314,18 @@ try
 
     builder.Services.AddSingleton(TimeProvider.System);
 
+    // Admin error notifications. The queue and sink are singletons because Serilog resolves the
+    // sink once while the logging pipeline is built; the dispatcher opens its own scope per email
+    // so it can use the scoped IEmailService.
+    builder.Services.Configure<AdminErrorNotificationOptions>(
+        builder.Configuration.GetSection(AdminErrorNotificationOptions.SectionName));
+    builder.Services.AddSingleton<IAdminErrorNotificationQueue, AdminErrorNotificationQueue>();
+    // Registered as its concrete type deliberately. As ILogEventSink, the ReadFrom.Services call
+    // above would attach it a SECOND time with no minimum level, turning every Warning in the app
+    // into an admin email.
+    builder.Services.AddSingleton<AdminErrorNotificationSink>();
+    builder.Services.AddHostedService<AdminErrorNotificationDispatcher>();
+
     // One instance per scope, surfaced under three service types. The previous pair of
     // registrations built TWO separate objects per scope - AddScoped<TService, TImpl>() and
     // AddScoped<TImpl>() are independent - so whoever resolved the concrete type was talking to a
@@ -351,6 +369,7 @@ try
     builder.Services.AddScoped<IPayPalSubscriptionManagementService, PayPalSubscriptionManagementService>();
     builder.Services.AddScoped<IPayPalSubscriptionAnomalyService, PayPalSubscriptionAnomalyService>();
     builder.Services.AddScoped<IPayPalCheckoutHygieneService, PayPalCheckoutHygieneService>();
+    builder.Services.AddScoped<IPayPalEntitlementDriftService, PayPalEntitlementDriftService>();
     builder.Services.AddSingleton<IGooglePlayVerificationService, GooglePlayVerificationService>();
     builder.Services.AddSingleton<IAppleAppStoreVerificationService, AppleAppStoreVerificationService>();
     builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
@@ -737,6 +756,13 @@ catch (Microsoft.Extensions.Hosting.HostAbortedException)
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+
+    // Sent directly, not through AdminErrorNotificationSink. Two reasons the pipeline cannot carry
+    // this one: a failure before builder.Build() is logged by the bootstrap logger, which has no
+    // sink attached; and a failure out of app.Run() enqueues a notice the dispatcher will never
+    // drain, because the process is about to die and the shutdown timeout is shorter than one SMTP
+    // send. The site failing to start is the highest-value alert there is, so it gets its own path.
+    await StartupFailureNotifier.TryNotifyAsync(ex);
     throw;
 }
 finally

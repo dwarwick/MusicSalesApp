@@ -8,6 +8,20 @@ public static class HangfireJobIds
     public const string ReobservePayPalMismatches = "reobserve-paypal-subscription-mismatches";
 
     /// <summary>
+    /// Re-checks PayPal subscriptions that still grant access locally against the provider, so a
+    /// lifecycle webhook that never arrived cannot leave a cancelled agreement entitling someone
+    /// forever.
+    ///
+    /// <para>
+    /// Nothing else covers this. NormalizeExpiredSubscriptions only touches rows with an EndDate in
+    /// the past, ReobservePayPalMismatches only revisits episodes that are already open, and
+    /// CleanupStalePayPalCheckouts is APPROVAL_PENDING only. Everything else that reconciles is
+    /// triggered by the user visiting the site - which a lapsed subscriber has no reason to do.
+    /// </para>
+    /// </summary>
+    public const string ReconcilePayPalEntitlementDrift = "reconcile-paypal-entitlement-drift";
+
+    /// <summary>
     /// Fails upload jobs and closes audit runs whose Azure Function callbacks never arrived.
     /// Without it a poisoned queue message leaves a creator watching a progress bar forever.
     /// </summary>

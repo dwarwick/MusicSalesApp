@@ -1,5 +1,6 @@
-#nullable enable
+﻿#nullable enable
 
+using Hangfire;
 namespace MusicSalesApp.Services;
 
 /// <summary>
@@ -15,6 +16,14 @@ public interface IPayPalCheckoutHygieneService
     /// against PayPal and closes out the ones the buyer never approved.
     /// </summary>
     /// <returns>The number of stale checkouts successfully closed.</returns>
+    // Hangfire resolves filters from Job.Method, which for an interface-registered job is
+    // this declaration. The same attribute on the implementation is silently ignored.
+    //
+    // AutomaticRetry(0) is new, and required rather than optional: DisableConcurrentExecution
+    // throws on lock timeout instead of swallowing it, so without an explicit policy one harmless
+    // overlap becomes ten retries. A daily sweep simply runs again tomorrow.
+    [DisableConcurrentExecution(timeoutInSeconds: 300)]
+    [AutomaticRetry(Attempts = 0)]
     Task<int> CleanupStalePendingCheckoutsAsync();
 
     /// <summary>
@@ -22,5 +31,9 @@ public interface IPayPalCheckoutHygieneService
     /// window, so they either self-resolve or release their emails.
     /// </summary>
     /// <returns>The number of episodes re-observed.</returns>
+    // Hangfire resolves filters from Job.Method, which for an interface-registered job is
+    // this declaration. The same attribute on the implementation is silently ignored.
+    [DisableConcurrentExecution(timeoutInSeconds: 300)]
+    [AutomaticRetry(Attempts = 0)]
     Task<int> ReobserveOpenMismatchEpisodesAsync();
 }

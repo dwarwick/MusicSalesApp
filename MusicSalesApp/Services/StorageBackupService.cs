@@ -1,4 +1,4 @@
-using Hangfire;
+﻿using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MusicSalesApp.Common.Helpers;
@@ -271,8 +271,6 @@ public sealed class StorageBackupService : IStorageBackupService
         await context.SaveChangesAsync();
     }
 
-    [AutomaticRetry(Attempts = 2)]
-    [DisableConcurrentExecution(timeoutInSeconds: 300)]
     public async Task RunAsync(int runId)
     {
         try

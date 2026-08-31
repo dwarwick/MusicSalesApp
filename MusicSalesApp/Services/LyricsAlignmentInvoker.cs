@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using Hangfire;
 using Hangfire.Server;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +14,9 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public interface ILyricsAlignmentInvoker
 {
+    // Hangfire resolves filters from Job.Method, which for an interface-registered job is
+    // this declaration. The same attribute on the implementation is silently ignored.
+    [AutomaticRetry(Attempts = LyricsAlignmentInvoker.MaxAttempts)]
     Task InvokeAsync(Guid jobId, PerformContext? context);
 }
 
@@ -74,7 +77,6 @@ public sealed class LyricsAlignmentInvoker : ILyricsAlignmentInvoker
     }
 
     /// <inheritdoc />
-    [AutomaticRetry(Attempts = MaxAttempts)]
     public async Task InvokeAsync(Guid jobId, PerformContext? context)
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync();

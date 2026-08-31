@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using System.Collections.Concurrent;
@@ -137,6 +137,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         }
 
         var latestSubscription = await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
+        var latestConfirmedMissingAtProvider = false;
         if (latestSubscription != null
             && string.Equals(latestSubscription.BillingSource, BillingSources.PayPal, StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(latestSubscription.PayPalSubscriptionId)
@@ -146,20 +147,35 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
                 SubscriptionStatuses.ApprovalPending,
                 StringComparison.OrdinalIgnoreCase))
         {
-            var reconciled = await ReconcileSubscriptionAsync(
+            var attempt = await TryReconcileSubscriptionAsync(
                 latestSubscription.PayPalSubscriptionId,
                 fallbackBaseUrl,
-                cancellationToken);
-            if (reconciled == null)
+                cancellationToken: cancellationToken);
+            switch (attempt.Outcome)
             {
-                return PayPalCheckoutResult.Failed(
-                    "The previous PayPal subscription could not be verified. A second subscription was not started; please try again later.");
-            }
+                case PayPalReconcileOutcome.Unverifiable:
+                    return PayPalCheckoutResult.Failed(
+                        "The previous PayPal subscription could not be verified. A second subscription was not started; please try again later.");
 
-            latestSubscription = reconciled.Subscription;
+                case PayPalReconcileOutcome.ProviderConfirmedMissing:
+                    // PayPal has no such agreement, so the local row's status is a claim the
+                    // provider has just refuted. It cannot be "still active or suspended with its
+                    // billing provider", and it cannot bill anyone, so it must not block checkout.
+                    _logger.LogWarning(
+                        "PayPal subscription {SubscriptionId} for user {UserId} does not exist at the provider; not blocking a new checkout on it",
+                        latestSubscription.PayPalSubscriptionId,
+                        user.Id);
+                    latestConfirmedMissingAtProvider = true;
+                    break;
+
+                default:
+                    latestSubscription = attempt.Result!.Subscription;
+                    break;
+            }
         }
 
-        if (latestSubscription != null
+        if (!latestConfirmedMissingAtProvider
+            && latestSubscription != null
             && (string.Equals(latestSubscription.Status, SubscriptionStatuses.Active, StringComparison.Ordinal)
                 || string.Equals(latestSubscription.Status, SubscriptionStatuses.Suspended, StringComparison.Ordinal)))
         {
@@ -320,9 +336,46 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         return new PayPalActivationResult(true, IsTrial: isTrial);
     }
 
+    public Task<PayPalSubscriptionReconciliationResult?> ReconcileSubscriptionAsync(
+        string paypalSubscriptionId,
+        string baseUrl,
+        CancellationToken cancellationToken = default)
+        => ReconcileSubscriptionAsync(
+            paypalSubscriptionId,
+            baseUrl,
+            sendTransitionEmails: true,
+            cancellationToken);
+
+    /// <inheritdoc />
     public async Task<PayPalSubscriptionReconciliationResult?> ReconcileSubscriptionAsync(
         string paypalSubscriptionId,
         string baseUrl,
+        bool sendTransitionEmails,
+        CancellationToken cancellationToken = default)
+    {
+        var attempt = await TryReconcileSubscriptionAsync(
+            paypalSubscriptionId,
+            baseUrl,
+            sendTransitionEmails,
+            cancellationToken);
+        return attempt.Result;
+    }
+
+    /// <summary>
+    /// Reconciles a PayPal agreement and reports *why* it could not be reconciled, which
+    /// <see cref="ReconcileSubscriptionAsync"/> flattens away to null.
+    ///
+    /// A provider-confirmed 404 and an unreachable PayPal are not the same answer. PayPal does not
+    /// retain agreements the buyer never approved - they are purged within hours of creation - so a
+    /// 404 is the normal, definitive end state of an abandoned checkout: nothing exists that could
+    /// bill the user. Callers that gate a user action on a previous checkout must tell the two
+    /// apart. Treating the 404 as unverifiable stranded users behind their own abandoned checkout
+    /// until the nightly sweep deleted the row, up to 72 hours later.
+    /// </summary>
+    public async Task<PayPalReconcileAttempt> TryReconcileSubscriptionAsync(
+        string paypalSubscriptionId,
+        string baseUrl,
+        bool sendTransitionEmails = true,
         CancellationToken cancellationToken = default)
     {
         PayPalSubscriptionDetails details;
@@ -333,7 +386,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         catch (PayPalSubscriptionApiException ex)
         {
             _logger.LogWarning(ex, "Unable to retrieve PayPal subscription {SubscriptionId}", paypalSubscriptionId);
-            return null;
+            return PayPalReconcileAttempt.Unverifiable;
         }
 
         if (details == null)
@@ -350,7 +403,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
                 await _anomalyService.ResolveOpenEpisodeAsync(missingSubscription.Id, cancellationToken);
             }
 
-            return null;
+            return PayPalReconcileAttempt.ProviderConfirmedMissing;
         }
 
         var localSubscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
@@ -373,22 +426,25 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
                         paypalSubscriptionId,
                         otherProviderSubscription.BillingSource,
                         otherProviderSubscription.Id);
-                    return null!;
+                    return PayPalReconcileAttempt.Unverifiable;
                 }
 
                 var stoppedSubscription = await _subscriptionService
                     .GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
                 return stoppedSubscription == null
-                    ? null!
-                    : new PayPalSubscriptionReconciliationResult
+                    ? PayPalReconcileAttempt.Unverifiable
+                    : PayPalReconcileAttempt.Reconciled(new PayPalSubscriptionReconciliationResult
                     {
                         Subscription = stoppedSubscription,
                         PreviousStatus = previousStatus
-                    };
+                    });
             }
         }
 
-        var reconciliation = await ReconcileRetrievedSubscriptionAsync(details, baseUrl);
+        var reconciliation = await ReconcileRetrievedSubscriptionAsync(
+            details,
+            baseUrl,
+            sendTransitionEmails);
         await SynchronizeAnomalyEpisodeAsync(
             localSubscription,
             details,
@@ -396,7 +452,9 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
             reconciliation == null ? "The local subscription could not be reconciled with PayPal." : null,
             baseUrl,
             cancellationToken);
-        return reconciliation;
+        return reconciliation == null
+            ? PayPalReconcileAttempt.Unverifiable
+            : PayPalReconcileAttempt.Reconciled(reconciliation);
     }
 
     private async Task<PayPalSubscriptionReconciliationResult> ReconcileRetrievedSubscriptionAsync(
@@ -987,15 +1045,33 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
             return null;
         }
 
-        var reconciled = await ReconcileSubscriptionAsync(
+        var attempt = await TryReconcileSubscriptionAsync(
             pending.PayPalSubscriptionId,
             baseUrl,
-            cancellationToken);
-        if (reconciled == null)
+            cancellationToken: cancellationToken);
+
+        if (attempt.Outcome == PayPalReconcileOutcome.ProviderConfirmedMissing)
+        {
+            // The overwhelmingly common end state of an abandoned checkout: PayPal purges an
+            // agreement the buyer never approved within hours of creation, so every later GET 404s.
+            // Reporting that as unverifiable locked the user out of subscribing at all until the
+            // nightly sweep deleted the row - up to 72 hours - and the retry it invited produced
+            // nothing but another 404. The 404 is provider-confirmed, so drop the local row (the
+            // same conclusion AbandonPendingCheckoutAsync reaches) and let checkout continue.
+            _logger.LogInformation(
+                "Deleting pending PayPal checkout {SubscriptionId} for user {UserId}: the provider confirmed it no longer exists",
+                pending.PayPalSubscriptionId,
+                user.Id);
+            await _subscriptionService.DeletePendingSubscriptionAsync(user.Id);
+            return null;
+        }
+
+        if (attempt.Outcome == PayPalReconcileOutcome.Unverifiable)
         {
             return "The earlier PayPal checkout could not be verified, so a second subscription was not started. Please try again later.";
         }
 
+        var reconciled = attempt.Result;
         var reconciledStatus = reconciled?.Subscription.Status;
 
         if (string.Equals(reconciledStatus, SubscriptionStatuses.Active, StringComparison.Ordinal)

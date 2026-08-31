@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -14,6 +14,10 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public interface ISongUploadJobReconciler
 {
+    // Hangfire resolves filters from Job.Method, which for an interface-registered job is
+    // this declaration. The same attribute on the implementation is silently ignored.
+    [AutomaticRetry(Attempts = 1)]
+    [DisableConcurrentExecution(timeoutInSeconds: 300)]
     Task ReconcileAsync();
 }
 
@@ -62,8 +66,6 @@ public sealed class SongUploadJobReconciler : ISongUploadJobReconciler
         _logger = logger;
     }
 
-    [AutomaticRetry(Attempts = 1)]
-    [DisableConcurrentExecution(timeoutInSeconds: 300)]
     public async Task ReconcileAsync()
     {
         var cutoff = DateTime.UtcNow - _options.Value.StalledJobTimeout;
