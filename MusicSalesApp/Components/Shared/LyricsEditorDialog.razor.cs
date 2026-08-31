@@ -62,7 +62,7 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     /// <remarks>
     /// Separate from <see cref="OnCompleted"/>, which fires however an attempt ended and means only
     /// "your data is stale". This one is the handoff: it fires solely on success, and it is the host's
-    /// cue to take the creator to Preview Results. Kept as a callback rather than a navigation of our
+    /// cue to take the creator to Preview Lyrics. Kept as a callback rather than a navigation of our
     /// own so that the host - which knows what page it is and whether the creator is still there -
     /// decides, instead of this dialog inferring it from its own visibility.
     /// </remarks>
@@ -151,8 +151,48 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         && _status.Status is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview;
 
 
+    /// <summary>
+    /// Whether to spell out the three steps between pasting words and a listener seeing them.
+    /// </summary>
+    /// <remarks>
+    /// <b>Deliberately true when there is no <c>SongLyrics</c> row at all</b>, which is the state a
+    /// song is in while its words are being pasted for the first time. That is the moment this
+    /// matters: creators have been pasting lyrics and assuming the job is done, because nothing
+    /// between here and Publish ever said otherwise - alignment lands a song in
+    /// <see cref="SongLyricsStatus.NeedsReview"/> and only a creator pressing Publish moves it to
+    /// <see cref="SongLyricsStatus.Published"/>, which is the only status a player reads from.
+    ///
+    /// <para>
+    /// Not for a replacement. Somebody replacing words has already been round this loop once and is
+    /// being warned about something else entirely - that the replacement destroys their timings.
+    /// </para>
+    /// </remarks>
+    protected bool _showPublishingSteps =>
+        !IsReplacing && _status?.Status is null or SongLyricsStatus.Pending;
+
+    /// <summary>
+    /// The three steps, rendered as a numbered list by the dialog.
+    /// </summary>
+    /// <remarks>
+    /// A list rather than one paragraph, because the numbering IS the message: the whole
+    /// misunderstanding is that pasting is the last step rather than the first of three.
+    /// </remarks>
+    protected static readonly string[] PublishingSteps =
+    [
+        "Upload your lyrics (you are doing this now).",
+
+        "Preview the lyrics. You will do that next. You will be taken to the Preview Lyrics page "
+        + "after your lyrics are uploaded. If there are errors, you can fix them during the preview "
+        + "step.",
+
+        "After previewing / fixing, you have to click the Publish button to make them live. "
+        + "Listeners will not see the lyrics unless you click Publish on the Preview Lyrics page."
+    ];
+
     protected MessageSeverity _statusSeverity => IsReplacing && _hasTimings
         ? MessageSeverity.Warning
+        : _showPublishingSteps
+        ? MessageSeverity.Info
         : _status?.Status switch
     {
         SongLyricsStatus.Published => MessageSeverity.Success,
@@ -173,6 +213,9 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     protected string _statusMessage => IsReplacing && _hasTimings
         ? "Paste the corrected words below. Timing runs again from scratch and replaces this song's "
           + "current timings - including anything you have tapped, saved or published."
+        : _showPublishingSteps
+        // The lead-in only. The steps themselves are a list, not a sentence - see PublishingSteps.
+        ? "There are 3 steps to publishing your lyrics."
         : _status?.Status switch
     {
         SongLyricsStatus.Published =>

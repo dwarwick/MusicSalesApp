@@ -73,14 +73,14 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected bool _replacingLyrics;
 
     /// <summary>
-    /// A song whose words the creator wants to replace, sent here by Preview Results.
+    /// A song whose words the creator wants to replace, sent here by Preview Lyrics.
     /// </summary>
     [SupplyParameterFromQuery(Name = CreatorSongsQueryKeys.ReplaceLyrics)]
     public int? ReplaceLyricsSongId { get; set; }
 
     /// <summary>
     /// How long the "your lyrics are timed" notice stands before it takes the creator to Preview
-    /// Results by itself.
+    /// Lyrics by itself.
     /// </summary>
     /// <remarks>
     /// Long enough to read two short sentences, short enough that nobody wonders whether it is stuck.
@@ -211,6 +211,18 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         song.LyricsStatus is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview;
 
     /// <summary>
+    /// Whether any song is timed but still invisible to every listener.
+    /// </summary>
+    /// <remarks>
+    /// <b>NeedsReview only, and deliberately the same test the Publish Lyrics button uses</b>, so the
+    /// banner and the buttons it sends people to can never disagree. A published song carrying an
+    /// unreleased draft is a different and much smaller problem - listeners still see the version the
+    /// creator released - and it already has its own note in the Lyrics column.
+    /// </remarks>
+    protected bool _hasUnpublishedLyrics =>
+        _lyricsAvailable && _songs.Any(song => song.LyricsStatus == SongLyricsStatus.NeedsReview);
+
+    /// <summary>
     /// Hand the creator this song's Enhanced LRC.
     /// </summary>
     /// <remarks>
@@ -231,7 +243,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// A song's timings just landed: say so, then take the creator to Preview Results.
+    /// A song's timings just landed: say so, then take the creator to Preview Lyrics.
     /// </summary>
     /// <remarks>
     /// <b>This page is the guard.</b> The dialog raises this on every successful attempt, open or
@@ -242,9 +254,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected async Task OnLyricsTimingCompletedAsync(int songMetadataId)
     {
         Logger.LogInformation(
-            "Lyrics timing finished for song {SongId}; offering Preview Results.", songMetadataId);
+            "Lyrics timing finished for song {SongId}; offering Preview Lyrics.", songMetadataId);
 
-        // Before the notice, so the grid behind it already shows Download LRC and Preview Results -
+        // Before the notice, so the grid behind it already shows Download LRC and Preview Lyrics -
         // and so the title below is read off fresh data.
         await LoadSongsAsync();
 
@@ -287,7 +299,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         if (!await IsBrowserStillListeningAsync())
         {
             Logger.LogInformation(
-                "Skipped the automatic Preview Results handoff for song {SongId}: the browser is no "
+                "Skipped the automatic Preview Lyrics handoff for song {SongId}: the browser is no "
                 + "longer attached to this circuit.",
                 songMetadataId);
             return;
@@ -358,7 +370,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Go to Preview Results for the song the notice is about.</summary>
+    /// <summary>Go to Preview Lyrics for the song the notice is about.</summary>
     protected void OpenPreviewResults()
     {
         if (_timedSongId is null)
@@ -373,7 +385,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         NavigationManager.NavigateTo(AppPageRoutes.CreatorSongLyrics(_timedSongId.Value));
     }
 
-    /// <summary>Leave them on the grid. Preview Results is still a button away on the song's row.</summary>
+    /// <summary>Leave them on the grid. Preview Lyrics is still a button away on the song's row.</summary>
     protected void DismissTimingCompleteNotice()
     {
         CancelPendingHandoff();
@@ -762,7 +774,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Open the paste box ready to replace a song's words, when Preview Results asked us to.
+    /// Open the paste box ready to replace a song's words, when Preview Lyrics asked us to.
     /// </summary>
     /// <remarks>
     /// Runs after the songs are loaded, because the dialog is handed a row from that list rather than

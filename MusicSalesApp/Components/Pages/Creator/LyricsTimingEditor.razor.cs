@@ -1,5 +1,6 @@
 #nullable enable
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Contracts;
@@ -147,6 +148,12 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected bool _canUndo => _undo.Count > 0;
 
     private IJSObjectReference? _module;
+
+    /// <summary>
+    /// The shared anchor-click guard. A module of its own because <c>NavigationLock</c> cannot see a
+    /// link click in this app - see the header of <c>wwwroot/js/leave-guard.js</c>.
+    /// </summary>
+    private IJSObjectReference? _leaveGuard;
     private DotNetObjectReference<LyricsTimingEditorModel>? _selfRef;
     private int? _creatorId;
 
@@ -326,7 +333,9 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
             }
 
             // Back to the grid: this page has nothing left to show, and the row it came from now
-            // offers the paste box again.
+            // offers the paste box again. Past the guard, obviously - there is nothing left to
+            // publish, and asking would be a question about lyrics that no longer exist.
+            _bypassGuard = true;
             NavigationManager.NavigateTo(AppPageRoutes.CreatorSongs);
         }
         finally
@@ -335,11 +344,149 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    protected void ReplaceLyrics() =>
+    protected void ReplaceLyrics()
+    {
+        // Past the guard: a creator on their way to paste corrected words has decided these ones are
+        // wrong, and offering to publish them on the way out would be offering the exact mistake
+        // they are leaving to fix.
+        _bypassGuard = true;
         NavigationManager.NavigateTo(AppPageRoutes.CreatorSongsReplaceLyrics(SongId));
+    }
 
     /// <summary>Whether an administrator has taken these lyrics down.</summary>
     protected bool _adminDisabled => _lyrics?.DisabledAt is not null;
+
+    // -----------------------------------------------------------------
+    // Leaving without publishing
+    // -----------------------------------------------------------------
+
+    /// <summary>Whether the "publish before you go?" dialog is on screen.</summary>
+    protected bool _showPublishPrompt;
+
+    /// <summary>
+    /// Set before a navigation this page itself initiates, so the guard stands aside for it.
+    /// </summary>
+    /// <remarks>
+    /// Both of them are cases where offering to publish would be actively wrong: <see
+    /// cref="RemoveLyricsAsync"/> has just deleted the lyrics, and <see cref="ReplaceLyrics"/> is on
+    /// its way to paste corrected words over them. <see cref="SendHome"/> needs nothing - it runs
+    /// during initialisation, before the lock has rendered.
+    /// </remarks>
+    private bool _bypassGuard;
+
+    /// <summary>
+    /// The creator's answer to the prompt, awaited by the navigation handler that raised it.
+    /// </summary>
+    private TaskCompletionSource<bool>? _publishDecision;
+
+    /// <summary>
+    /// Whether leaving should be interrupted to ask about publishing.
+    /// </summary>
+    /// <remarks>
+    /// Only while listeners can see nothing at all. A song already published is not at risk of being
+    /// silently lost, whatever else is unsaved on it. An admin takedown is excluded too: Publish is
+    /// disabled in that state, so the prompt would be a question with no answer available.
+    ///
+    /// <para>
+    /// The document test is not redundant with the others. This lock renders outside the loading and
+    /// error branches - it has to, or a creator could leave before it existed - so without it the
+    /// "this song has no lyric timings yet" page would offer to publish timings that are not there.
+    /// </para>
+    /// </remarks>
+    protected bool ShouldGuardNavigation =>
+        _document is not null && !_isPublished && !_adminDisabled && !_bypassGuard;
+
+    /// <summary>
+    /// Asks about publishing, and answers whether the creator may now leave.
+    ///
+    /// <para>
+    /// <b>The single decision point, reached from two directions</b>, because this page can be left
+    /// two structurally different ways. An <c>&lt;a href&gt;</c> is carried off by enhanced
+    /// navigation without the circuit being consulted at all, so those arrive here from JavaScript
+    /// via <see cref="RequestLeave"/>; a <c>NavigateTo</c> from inside the circuit arrives via
+    /// <see cref="OnBeforeInternalNavigation"/>. Both need the same question asked and the same
+    /// verdict applied, and having written it twice is how they would come to differ.
+    /// </para>
+    /// </summary>
+    private async Task<bool> MayLeaveAsync()
+    {
+        if (!ShouldGuardNavigation)
+        {
+            return true;
+        }
+
+        _publishDecision = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _showPublishPrompt = true;
+        StateHasChanged();
+
+        var publishFirst = await _publishDecision.Task;
+
+        if (publishFirst)
+        {
+            await Publish();
+
+            // A publish can be refused - overlapping rows, an empty document - and its reasons
+            // render on THIS page. Leaving now would throw the explanation away at the exact moment
+            // it appeared, so a failure keeps them here with it in front of them.
+            if (!_isPublished)
+            {
+                StateHasChanged();
+                return false;
+            }
+        }
+
+        // "No" is an answer, not a refusal to leave. Either way they asked to go, and nothing is
+        // left to ask them about - so the guard stands down rather than firing again on the way out.
+        _bypassGuard = true;
+        return true;
+    }
+
+    /// <summary>
+    /// An anchor on this page was clicked; JavaScript is holding the navigation until we answer.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is the path that actually fires in production</b>, and the reason a
+    /// <c>NavigationLock</c> alone was not enough. The router in this app is static SSR with
+    /// per-page interactive islands, so a link click is enhanced navigation - handled by
+    /// blazor.web.js, outside the circuit, with the circuit's <c>NavigationManager</c> told only
+    /// afterwards. See the leave-guard section of <c>LyricsTimingEditor.razor.js</c>.
+    /// </remarks>
+    [JSInvokable]
+    public Task<bool> RequestLeave() => MayLeaveAsync();
+
+    /// <summary>
+    /// Intercepts a <c>NavigateTo</c> made from inside this circuit.
+    /// </summary>
+    /// <remarks>
+    /// The other half of the story, and the smaller one: it catches programmatic navigation from any
+    /// interactive component on the page - they share one circuit and one NavigationManager - but
+    /// never an ordinary link. Kept rather than replaced by the JavaScript guard, because between
+    /// them they cover both ways off this page.
+    /// </remarks>
+    protected async Task OnBeforeInternalNavigation(LocationChangingContext context)
+    {
+        if (!await MayLeaveAsync())
+        {
+            context.PreventNavigation();
+        }
+    }
+
+    /// <summary>Publish, then continue to wherever they were going.</summary>
+    protected void ConfirmPublishAndLeave() => AnswerPublishPrompt(true);
+
+    /// <summary>Leave the timings unpublished and continue.</summary>
+    protected void LeaveWithoutPublishing() => AnswerPublishPrompt(false);
+
+    private void AnswerPublishPrompt(bool publishFirst)
+    {
+        _showPublishPrompt = false;
+
+        // TrySet rather than Set: the circuit can be torn down between the prompt appearing and an
+        // answer arriving, and a second answer to an already-settled decision must not throw.
+        _publishDecision?.TrySetResult(publishFirst);
+    }
 
     private void BuildBanner(bool hasUnpublishedChanges)
     {
@@ -396,6 +543,12 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
             "import", "./Components/Pages/Creator/LyricsTimingEditor.razor.js");
 
         await _module.InvokeVoidAsync("init", _audioElement, _selfRef, _progressBarContainer, _volumeBarContainer);
+
+        // Armed here rather than on every state change: the guard always asks .NET before it lets a
+        // link through, and ShouldGuardNavigation answers instantly once there is nothing left to
+        // ask about. One place to arm it, one place that decides - see MayLeaveAsync.
+        _leaveGuard = await JS.InvokeAsync<IJSObjectReference>("import", "./js/leave-guard.js");
+        await _leaveGuard.InvokeVoidAsync("arm", _selfRef);
 
         // One more render, so the scroller is handed the element references this render populated.
         // It is declared above the <audio> element it follows, so on the render that first drew both
@@ -1008,6 +1161,21 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
             catch (JSDisconnectedException)
             {
                 // Circuit already gone.
+            }
+        }
+
+        if (_leaveGuard is not null)
+        {
+            try
+            {
+                // The listener is on the document, not on anything this page owns, so leaving it
+                // behind would hold every later link click hostage to a component that is gone.
+                await _leaveGuard.InvokeVoidAsync("disarm");
+                await _leaveGuard.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Circuit already gone, and so is the page the listener was on.
             }
         }
 

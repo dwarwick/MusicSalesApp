@@ -85,7 +85,20 @@
             </div>
         </div>
 
-        <SfGrid @ref="_grid" 
+        @* Above the grid rather than in it, because the whole problem is that the per-row state was
+           easy to scroll past: a creator who pasted lyrics and left has no reason to come back and
+           inspect a Lyrics column. Points at the button rather than repeating what it does, so there
+           is one explanation of publishing and not two that can drift. *@
+        @if (_hasUnpublishedLyrics)
+        {
+            <div class="alert alert-warning" role="status">
+                The lyrics for some of your songs are not published. See the
+                <strong>Publish Lyrics</strong> button in the Actions column in the grid below for
+                details.
+            </div>
+        }
+
+        <SfGrid @ref="_grid"
                 TValue="SongAdminViewModel"
                 DataSource="@_songs"
                 AllowPaging="true" 
@@ -96,7 +109,11 @@
             <GridPageSettings PageSize="10"></GridPageSettings>
             <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
             <GridColumns>
-                <GridColumn HeaderText="Actions" Width="200" AllowFiltering="false" AllowSorting="false">
+                @* 320 rather than 200: a timed song carries four buttons - Edit, Download LRC,
+                   Publish Lyrics / Preview Lyrics, Delete - and the narrower default cut the lyrics
+                   ones off, which is a poor way to advertise the step creators were already missing.
+                   AllowResizing is on, so this is only where the column starts. *@
+                <GridColumn HeaderText="Actions" Width="320" AllowFiltering="false" AllowSorting="false">
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
@@ -112,7 +129,7 @@
                                            work to start. Once an alignment has landed the creator's
                                            next move is to hear it, not to paste the same words again
                                            - so the slot that used to open the dialog hands them the
-                                           .lrc instead, and Preview Results is where the timing gets
+                                           .lrc instead, and Preview Lyrics is where the timing gets
                                            judged. The LrcBlobPath test is not redundant: the LRC copy
                                            can fail without costing the timings. *@
                                         @if (HasTimingsToEdit(song) && !string.IsNullOrEmpty(song.LyricsLrcBlobPath))
@@ -131,12 +148,22 @@
                                         @* Only once there is something to tune. Before an alignment
                                            lands the editor has nothing to show, and sending a creator
                                            to a page that can only apologise is worse than not
-                                           offering it. *@
+                                           offering it.
+
+                                           ONE DESTINATION, TWO LABELS. The button is gated on
+                                           Published-or-NeedsReview, so the state maps exactly onto
+                                           what the creator still has to do there: NeedsReview means
+                                           listeners see nothing until they press Publish, and naming
+                                           the button after the preview was most of why they never
+                                           did. Styled as a call to action in that state for the same
+                                           reason. *@
                                         @if (HasTimingsToEdit(song))
                                         {
-                                            <a class="e-btn e-small e-outline"
+                                            var lyricsPublished = song.LyricsStatus == SongLyricsStatus.Published;
+                                            <a class="e-btn e-small @(lyricsPublished ? "e-outline" : "e-success")"
                                                href="@AppPageRoutes.CreatorSongLyrics(int.Parse(song.Id))">
-                                                <i class="bi bi-sliders me-1"></i> Preview Results
+                                                <i class="bi @(lyricsPublished ? "bi-sliders" : "bi-megaphone") me-1"></i>
+                                                @(lyricsPublished ? "Preview Lyrics" : "Publish Lyrics")
                                             </a>
                                         }
                                     }
@@ -558,7 +585,7 @@
     @* Says what happened and what is about to happen, and only then moves. A creator who has just
        watched a progress bar for several minutes should not have the screen change under them with
        no explanation - and a non-technical one, left on a grid with no idea the run had finished,
-       has no reason to guess that Preview Results is the next step. No close icon: the two buttons
+       has no reason to guess that Preview Lyrics is the next step. No close icon: the two buttons
        are the answer, and an X here would read as "cancel", which is not on offer. *@
     <SfDialog @bind-Visible="_showTimingCompleteNotice" Width="460px" IsModal="true" ShowCloseIcon="false">
         <DialogTemplates>
@@ -574,14 +601,14 @@
                     <strong>@_timedSongTitle</strong>.
                 </p>
                 <p class="mb-0">
-                    We're taking you to <strong>Preview Results</strong>, where you can play the song
+                    We're taking you to <strong>Preview Lyrics</strong>, where you can play the song
                     and watch the words light up. Nothing is shown to listeners until you press
                     Publish there.
                 </p>
             </Content>
             <FooterTemplate>
                 <SfButton OnClick="OpenPreviewResults" CssClass="e-btn cta-secondary hero-secondary-cta">
-                    <i class="bi bi-sliders me-1"></i> Preview results now
+                    <i class="bi bi-sliders me-1"></i> Preview lyrics now
                 </SfButton>
                 <SfButton OnClick="DismissTimingCompleteNotice" CssClass="e-btn e-small">
                     Not just now

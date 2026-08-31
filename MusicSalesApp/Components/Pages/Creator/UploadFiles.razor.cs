@@ -101,7 +101,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // Titles are no longer derived from filenames, so the batch pauses after matching to let the
     // creator review and edit each title. The buffered temp files have to outlive that pause,
     // which is why they are held here rather than in a local `finally`.
-    protected bool _awaitingTitleConfirmation = false;
+    /// <remarks>
+    /// Visible to the test assembly so the leave guard can be driven into the state it exists for -
+    /// a batch reviewed but not yet uploaded, which is the one that is silently discarded.
+    /// </remarks>
+    protected internal bool _awaitingTitleConfirmation = false;
     protected readonly List<PendingUpload> _pendingUploads = new();
     private readonly List<string> _pendingTempFiles = new();
 
@@ -179,6 +183,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // Direct-to-storage upload state. Null until the module is imported on first render.
     private IJSObjectReference _uploadModule;
     private DotNetObjectReference<UploadFilesModel> _uploadCallbackRef;
+
+    /// <summary>
+    /// The shared anchor-click guard, and the reference it calls back on.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="_uploadCallbackRef"/>, which only exists when direct-to-storage
+    /// upload is configured. Warning somebody that their files are about to be discarded is not
+    /// something to make conditional on an unrelated feature being switched on.
+    /// </remarks>
+    private IJSObjectReference _leaveGuardModule;
+    private DotNetObjectReference<UploadFilesModel> _leaveGuardRef;
 
     private readonly Dictionary<string, TaskCompletionSource<IReadOnlyList<DirectUploadResult>>> _uploadPhases = new();
     private readonly object _uploadPhasesLock = new();
@@ -603,6 +618,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await UploadProgressHubClient.StartAsync();
 
             await InitialiseDirectUploadAsync();
+            await ArmLeaveGuardAsync();
 
             // Songs queued on a previous visit are still being processed, so rebuild their rows
             // rather than showing an empty page while work is in flight.
@@ -4540,34 +4556,128 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// queued needs to be.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Installs the anchor-click guard, so a link cannot carry a part-finished batch away silently.
+    /// </summary>
+    /// <remarks>
+    /// <b>Necessary because <see cref="OnBeforeInternalNavigation"/> never runs for a link.</b> This
+    /// app routes with a static SSR <c>&lt;Routes /&gt;</c> and per-page interactive islands, so an
+    /// <c>&lt;a href&gt;</c> is enhanced navigation and the circuit's NavigationManager is told only
+    /// afterwards. The symptom was exact and misleading: refreshing warned - that is
+    /// <c>ConfirmExternalNavigation</c>, a beforeunload path that still works - while clicking a nav
+    /// link discarded a reviewed batch without a word. See <c>wwwroot/js/leave-guard.js</c>.
+    /// </remarks>
+    private async Task ArmLeaveGuardAsync()
+    {
+        try
+        {
+            _leaveGuardRef = DotNetObjectReference.Create(this);
+            _leaveGuardModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/leave-guard.js");
+            await _leaveGuardModule.InvokeVoidAsync("arm", _leaveGuardRef);
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception ex)
+        {
+            // A page that warns is better than a page that will not load, and the beforeunload half
+            // of the lock is unaffected by this - a refresh still asks.
+            Logger.LogWarning(ex, "Could not arm the leave guard on the upload page.");
+        }
+    }
+
+    /// <summary>Whether there is anything on this page that leaving would throw away.</summary>
+    private bool HasWorkToLose => _isUploading || _isProcessingFiles || _awaitingTitleConfirmation;
+
+    /// <summary>Whether the "leave this page?" dialog is on screen.</summary>
+    protected bool _showLeavePrompt;
+
+    /// <summary>
+    /// The creator's answer to that dialog, awaited by whichever path raised it.
+    /// </summary>
+    private TaskCompletionSource<bool> _leaveDecision;
+
+    /// <summary>
+    /// What leaving would actually cost, which is two different things.
+    /// </summary>
+    /// <remarks>
+    /// The distinction is worth the branch. A batch waiting for titles has sent nothing, so leaving
+    /// discards all of it. A batch mid-flight has usually queued some songs already, and those are
+    /// finished by the Function and the API whether or not this page is open - so promising to
+    /// remove everything would be a lie, and so would implying nothing is lost.
+    /// </remarks>
+    protected string LeavePromptMessage => _awaitingTitleConfirmation && !_isUploading
+        ? "Your files are ready to upload but have not been uploaded yet. If you leave now they "
+          + "will be discarded. Are you sure you want to leave?"
+        : "Files are still being sent. If you leave now, anything not yet sent will be cancelled. "
+          + "Songs already queued will finish processing without you. Are you sure you want to "
+          + "leave?";
+
+    /// <summary>Leave, discarding whatever has not been sent.</summary>
+    protected void LeaveAndDiscard() => AnswerLeavePrompt(true);
+
+    /// <summary>Stay, keeping the batch as it is.</summary>
+    protected void StayOnThisPage() => AnswerLeavePrompt(false);
+
+    private void AnswerLeavePrompt(bool mayLeave)
+    {
+        _showLeavePrompt = false;
+
+        // TrySet rather than Set: the circuit can be torn down between the prompt appearing and an
+        // answer arriving, and a second answer to an already-settled decision must not throw.
+        _leaveDecision?.TrySetResult(mayLeave);
+    }
+
+    /// <summary>
+    /// Asks whether to leave, and clears up if the answer is yes.
+    /// </summary>
+    /// <remarks>
+    /// The single decision point for both ways off this page: a link click, held by JavaScript and
+    /// arriving at <see cref="RequestLeave"/>, and a <c>NavigateTo</c> from inside the circuit
+    /// arriving at <see cref="OnBeforeInternalNavigation"/>. Returns whether the navigation may
+    /// proceed.
+    /// </remarks>
+    private async Task<bool> MayLeaveAsync()
+    {
+        if (!HasWorkToLose)
+            return true;
+
+        _leaveDecision = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _showLeavePrompt = true;
+        StateHasChanged();
+
+        if (!await _leaveDecision.Task)
+        {
+            // User chose to stay.
+            return false;
+        }
+
+        // Cancels only what is still being sent. Queued songs are left alone deliberately.
+        _uploadCts.Cancel();
+
+        // The token reaches nothing the browser is doing. On the direct path the bytes are moving
+        // from the creator's machine to Azure with this server not in the transfer at all, so
+        // without telling the browser to stop it would finish uploading 1.4 GB for a page that is
+        // no longer on screen.
+        await AbortDirectUploadsAsync();
+
+        _awaitingTitleConfirmation = false;
+        CleanupPendingTempFiles();
+        await SweepPendingImageBatchAsync();
+
+        return true;
+    }
+
+    /// <summary>A link was clicked; JavaScript is holding the navigation until we answer.</summary>
+    /// <remarks>The path that actually fires for a link - see <see cref="ArmLeaveGuardAsync"/>.</remarks>
+    [JSInvokable]
+    public Task<bool> RequestLeave() => MayLeaveAsync();
+
+    /// <summary>Intercepts a <c>NavigateTo</c> made from inside this circuit.</summary>
     protected async Task OnBeforeInternalNavigation(LocationChangingContext context)
     {
-        if (!_isUploading && !_isProcessingFiles && !_awaitingTitleConfirmation)
-            return;
-
-        var isConfirmed = await JS.InvokeAsync<bool>("confirm",
-            _awaitingTitleConfirmation && !_isUploading
-                ? "Your files are ready to upload but have not been uploaded yet. If you leave now they will be discarded. Are you sure you want to leave?"
-                : "Files are still being sent. If you leave now, anything not yet sent will be cancelled. Songs already queued will finish processing without you. Are you sure you want to leave?");
-
-        if (isConfirmed)
+        if (!await MayLeaveAsync())
         {
-            // Cancels only what is still being sent. Queued songs are left alone deliberately.
-            _uploadCts.Cancel();
-
-            // The token reaches nothing the browser is doing. On the direct path the bytes are moving
-            // from the creator's machine to Azure with this server not in the transfer at all, so
-            // without telling the browser to stop it would finish uploading 1.4 GB for a page that is
-            // no longer on screen.
-            await AbortDirectUploadsAsync();
-
-            _awaitingTitleConfirmation = false;
-            CleanupPendingTempFiles();
-            await SweepPendingImageBatchAsync();
-        }
-        else
-        {
-            // User chose to stay — prevent navigation
             context.PreventNavigation();
         }
     }
@@ -4628,6 +4738,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // Backstop for a batch buffered for review that was never uploaded or cancelled,
         // e.g. the circuit dropped while the creator was still editing titles.
         CleanupPendingTempFiles();
+
+        // The click listener is on the document rather than on anything this page owns, so leaving
+        // it behind would hold every later link click hostage to a component that is gone.
+        if (_leaveGuardModule is not null)
+        {
+            try
+            {
+                await _leaveGuardModule.InvokeVoidAsync("disarm");
+                await _leaveGuardModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+        }
+
+        _leaveGuardRef?.Dispose();
 
         _uploadCts.Dispose();
     }

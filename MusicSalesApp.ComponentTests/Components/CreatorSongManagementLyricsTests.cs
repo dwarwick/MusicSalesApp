@@ -231,7 +231,8 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
         {
             Assert.That(labels, Does.Contain("Download LRC"));
             Assert.That(labels, Does.Not.Contain("Lyrics"));
-            Assert.That(cut.Markup, Does.Contain("Preview Results"));
+            Assert.That(cut.Markup, Does.Contain("Publish Lyrics"),
+                "Unpublished, so the button names the step that is still missing.");
             Assert.That(cut.Markup, Does.Not.Contain("Fix the timing"));
         });
     }
@@ -268,12 +269,76 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
         {
             Assert.That(labels, Does.Contain("Lyrics"));
             Assert.That(labels, Does.Not.Contain("Download LRC"));
-            Assert.That(cut.Markup, Does.Contain("Preview Results"), "The timings are still there.");
+            Assert.That(cut.Markup, Does.Contain("Publish Lyrics"), "The timings are still there.");
         });
     }
 
     // -----------------------------------------------------------------
-    // The handoff to Preview Results
+    // Naming the step that was being missed
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void AnUnpublishedSongIsToldToPublishRatherThanToPreview()
+    {
+        // The whole point of the change. Creators were pasting lyrics, seeing a row that offered
+        // "Preview Results", and walking away with timings no listener would ever see - because
+        // nothing in the label said a step was outstanding. NeedsReview is exactly that state.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+
+        var cut = RenderLoaded();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Publish Lyrics"));
+            Assert.That(cut.Markup, Does.Not.Contain("Preview Lyrics"));
+        });
+    }
+
+    [Test]
+    public void APublishedSongIsOfferedThePreviewInstead()
+    {
+        // Same destination, and it has to keep saying something: a published song can still be
+        // re-tuned, so the button is not withdrawn - it stops asking for something already done.
+        GivenLyricsFor(SongLyricsStatus.Published, 0.52d);
+
+        var cut = RenderLoaded();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Preview Lyrics"));
+            Assert.That(cut.Markup, Does.Not.Contain("Publish Lyrics"));
+        });
+    }
+
+    [Test]
+    public void UnpublishedLyricsAreAnnouncedAboveTheGrid()
+    {
+        // Per-row state was easy to scroll past, which is how this went unnoticed for so long. The
+        // banner is what a creator sees without looking for it, and it points at the button rather
+        // than re-explaining publishing, so there is one account of it and not two.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+
+        Assert.That(
+            RenderLoaded().Markup,
+            Does.Contain("The lyrics for some of your songs are not published"));
+    }
+
+    [TestCase(SongLyricsStatus.Published)]
+    [TestCase(SongLyricsStatus.Pending)]
+    [TestCase(SongLyricsStatus.Failed)]
+    public void NothingIsAnnouncedWhenNoSongIsWaitingToBePublished(SongLyricsStatus status)
+    {
+        // A banner that is always there is a banner nobody reads. Pending and Failed have no timings
+        // to publish yet, and Published has already been.
+        GivenLyricsFor(status, confidence: null);
+
+        Assert.That(
+            RenderLoaded().Markup,
+            Does.Not.Contain("The lyrics for some of your songs are not published"));
+    }
+
+    // -----------------------------------------------------------------
+    // The handoff to Preview Lyrics
     // -----------------------------------------------------------------
 
     /// <summary>
@@ -306,7 +371,7 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(cut.Markup, Does.Contain("Night Drive"), "Named, so it is clear which song.");
-            Assert.That(cut.Markup, Does.Contain("Preview Results"), "And where they are going.");
+            Assert.That(cut.Markup, Does.Contain("Preview Lyrics"), "And where they are going.");
             Assert.That(cut.Markup, Does.Contain("Publish"), "And what is still required of them.");
         });
     }
@@ -329,7 +394,7 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
     [Test]
     public void NotJustNowLeavesThemOnTheGrid()
     {
-        // The escape hatch. Preview Results is still one button away on the song's own row, so
+        // The escape hatch. The timing editor is still one button away on the song's own row, so
         // declining costs them nothing - and being moved somewhere you just said no to is worse than
         // never having been offered.
         GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
@@ -346,7 +411,7 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(nav.Uri, Is.EqualTo(before));
-            Assert.That(cut.Markup, Does.Contain("Preview Results"), "Still reachable from the row.");
+            Assert.That(cut.Markup, Does.Contain("Publish Lyrics"), "Still reachable from the row.");
         });
     }
 
