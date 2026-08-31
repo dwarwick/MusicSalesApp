@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -526,7 +526,7 @@ public class PayPalSubscriptionManagementServiceTests
     }
 
     [Test]
-    public async Task CreateSubscriptionAsync_WhenPendingCannotBeReconciled_DoesNotMutateOrStartAnotherCheckout()
+    public async Task CreateSubscriptionAsync_WhenPendingCheckoutCannotBeReached_DoesNotMutateOrStartAnotherCheckout()
     {
         var user = new ApplicationUser { Id = 42, Email = "listener@example.com" };
         var pending = new Subscription
@@ -545,10 +545,12 @@ public class PayPalSubscriptionManagementServiceTests
             .ReturnsAsync(pending);
         _subscriptionService.Setup(service => service.GetPendingSubscriptionAsync(user.Id))
             .ReturnsAsync(pending);
+        // An unreachable PayPal, not a 404: the provider state is genuinely unknown, so the
+        // pending row must be left exactly as it is.
         _payPalApi.Setup(service => service.GetSubscriptionAsync(
                 pending.PayPalSubscriptionId,
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PayPalSubscriptionDetails?)null!);
+            .ThrowsAsync(new PayPalSubscriptionApiException("temporary failure"));
 
         var result = await _service.CreateSubscriptionAsync(
             user,
@@ -576,6 +578,153 @@ public class PayPalSubscriptionManagementServiceTests
                 It.IsAny<string>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Test]
+    public async Task CreateSubscriptionAsync_WhenPendingCheckoutNoLongerExistsAtPayPal_DropsItAndStartsANewCheckout()
+    {
+        // PayPal purges an agreement the buyer never approved within hours, so every later GET
+        // 404s. Blocking on that stranded the user behind their own abandoned checkout until the
+        // nightly sweep deleted the row - up to 72 hours - and each retry produced another 404.
+        var user = new ApplicationUser { Id = 590, Email = "listener@example.com" };
+        var offer = CreateOffer();
+        var pending = new Subscription
+        {
+            Id = 44,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-ABANDONED",
+            PayPalPlanId = "P-TRIAL",
+            Status = SubscriptionStatuses.ApprovalPending,
+            CreatedAt = DateTime.UtcNow.AddHours(-8)
+        };
+        _subscriptionService.Setup(service => service.GetActiveSubscriptionAsync(user.Id))
+            .ReturnsAsync((Subscription?)null);
+        _subscriptionService.Setup(service => service.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(pending);
+        _subscriptionService.Setup(service => service.GetPendingSubscriptionAsync(user.Id))
+            .ReturnsAsync(pending);
+        _subscriptionService.Setup(service => service.HasPriorActivatedSubscriptionAsync(user.Id))
+            .ReturnsAsync(false);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                pending.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PayPalSubscriptionDetails?)null!);
+        _appSettingsService.Setup(service => service.GetPayPalWebSubscriptionOfferAsync())
+            .ReturnsAsync(offer);
+        _payPalApi.Setup(service => service.GetPlanAsync("P-TRIAL", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTrialPlan());
+        _payPalApi.Setup(service => service.CreateSubscriptionAsync(
+                "P-TRIAL",
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalCreatedSubscription("I-NEW", "https://paypal.example/approve"));
+        _subscriptionService.Setup(service => service.CreateSubscriptionAsync(
+                user.Id,
+                "I-NEW",
+                "P-TRIAL",
+                0.99m,
+                PayPalSubscriptionDefaults.UsdCurrencyCode,
+                offer.Version,
+                It.IsAny<DateTime>()))
+            .ReturnsAsync(new Subscription
+            {
+                UserId = user.Id,
+                PayPalSubscriptionId = "I-NEW",
+                Status = SubscriptionStatuses.ApprovalPending
+            });
+
+        var result = await _service.CreateSubscriptionAsync(
+            user,
+            agreeToTerms: true,
+            displayedOfferVersion: offer.Version,
+            displayedPlanId: offer.PrimaryPlan.Id,
+            fallbackBaseUrl: "https://fallback.example");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.ApprovalUrl, Is.EqualTo("https://paypal.example/approve"));
+            Assert.That(result.SubscriptionId, Is.EqualTo("I-NEW"));
+        });
+        _subscriptionService.Verify(
+            service => service.DeletePendingSubscriptionAsync(user.Id),
+            Times.Once);
+        _payPalApi.Verify(service => service.CreateSubscriptionAsync(
+                "P-TRIAL",
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task CreateSubscriptionAsync_WhenSuspendedPayPalNoLongerExistsAtProvider_DoesNotBlockNewCheckout()
+    {
+        // "Still active or suspended with its billing provider" is a claim about the provider. A
+        // provider-confirmed 404 refutes it, so the stale local status must not gate checkout.
+        var user = new ApplicationUser { Id = 594 };
+        var offer = CreateOffer();
+        var suspended = new Subscription
+        {
+            Id = 45,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-GONE",
+            Status = SubscriptionStatuses.Suspended
+        };
+        _subscriptionService.Setup(service => service.GetActiveSubscriptionAsync(user.Id))
+            .ReturnsAsync((Subscription?)null);
+        _subscriptionService.Setup(service => service.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(suspended);
+        _subscriptionService.Setup(service => service.GetPendingSubscriptionAsync(user.Id))
+            .ReturnsAsync((Subscription?)null);
+        _subscriptionService.Setup(service => service.HasPriorActivatedSubscriptionAsync(user.Id))
+            .ReturnsAsync(false);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                suspended.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PayPalSubscriptionDetails?)null!);
+        _appSettingsService.Setup(service => service.GetPayPalWebSubscriptionOfferAsync())
+            .ReturnsAsync(offer);
+        _payPalApi.Setup(service => service.GetPlanAsync("P-TRIAL", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTrialPlan());
+        _payPalApi.Setup(service => service.CreateSubscriptionAsync(
+                "P-TRIAL",
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalCreatedSubscription("I-NEW", "https://paypal.example/approve"));
+        _subscriptionService.Setup(service => service.CreateSubscriptionAsync(
+                user.Id,
+                "I-NEW",
+                "P-TRIAL",
+                0.99m,
+                PayPalSubscriptionDefaults.UsdCurrencyCode,
+                offer.Version,
+                It.IsAny<DateTime>()))
+            .ReturnsAsync(new Subscription
+            {
+                UserId = user.Id,
+                PayPalSubscriptionId = "I-NEW",
+                Status = SubscriptionStatuses.ApprovalPending
+            });
+
+        var result = await _service.CreateSubscriptionAsync(
+            user,
+            agreeToTerms: true,
+            displayedOfferVersion: offer.Version,
+            displayedPlanId: offer.PrimaryPlan.Id,
+            fallbackBaseUrl: "https://fallback.example");
+
+        Assert.That(result.Success, Is.True);
+        _payPalApi.Verify(service => service.CreateSubscriptionAsync(
+                "P-TRIAL",
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Test]

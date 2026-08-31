@@ -1,3 +1,4 @@
+﻿using Hangfire;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
@@ -11,6 +12,10 @@ public interface IMediaIntegrityAuditService
         string initiatedByEmail,
         int? sourceRunId = null);
 
+    // Hangfire resolves filters from Job.Method, which for an interface-registered job is
+    // this declaration. The same attribute on the implementation is silently ignored.
+    [AutomaticRetry(Attempts = 2)]
+    [DisableConcurrentExecution(timeoutInSeconds: 3600)]
     Task RunAsync(int runId);
     Task<List<MediaIntegrityAuditRun>> GetRunsAsync();
     Task<MediaIntegrityAuditRun> GetRunAsync(int runId);

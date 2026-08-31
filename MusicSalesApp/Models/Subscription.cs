@@ -76,6 +76,30 @@ public class Subscription
 
     public DateTime? TrialConversionEmailSentAt { get; set; }
 
+    /// <summary>
+    /// When this subscription first reached ACTIVE, or null if it never has.
+    ///
+    /// <para>
+    /// Exists because "has this user subscribed before" must not be inferred from the row's
+    /// *current* status. HasPriorActivatedSubscriptionAsync used to read Status == ACTIVE or
+    /// SUSPENDED, so anything that moved a row out of those - a cancellation webhook, the
+    /// entitlement drift sweep - silently made the user eligible for another free trial. Set once
+    /// and never cleared, by AppDbContext.SaveChanges.
+    /// </para>
+    /// </summary>
+    public DateTime? ActivatedAtUtc { get; set; }
+
+    /// <summary>
+    /// When the PayPal entitlement drift sweep last verified this row against the provider.
+    ///
+    /// <para>
+    /// Null sorts first, so rows never checked are covered before old ones are re-checked. Without
+    /// it the sweep re-reads the same lowest ids every night and everything past its batch cap is
+    /// never verified at all.
+    /// </para>
+    /// </summary>
+    public DateTime? LastProviderCheckAtUtc { get; set; }
+
     [MaxLength(100)]
     public string TrialBasePlanId { get; set; }
 

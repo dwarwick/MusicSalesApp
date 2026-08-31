@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System.Net;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +14,9 @@ public interface ILyricsAlignmentEmailService
     /// <summary>
     /// Send the completion email for one attempt. Safe to call for an attempt that no longer exists.
     /// </summary>
+    // Hangfire resolves filters from Job.Method, which for an interface-registered job is
+    // this declaration. The same attribute on the implementation is silently ignored.
+    [AutomaticRetry(Attempts = 3)]
     Task SendCompletionEmailAsync(Guid jobId);
 }
 
@@ -58,7 +61,6 @@ public sealed class LyricsAlignmentEmailService : ILyricsAlignmentEmailService
     }
 
     /// <inheritdoc />
-    [AutomaticRetry(Attempts = 3)]
     public async Task SendCompletionEmailAsync(Guid jobId)
     {
         // Checked inside the job rather than before enqueuing, so switching it off drains whatever is

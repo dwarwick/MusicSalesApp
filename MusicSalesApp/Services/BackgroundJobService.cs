@@ -82,6 +82,13 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.ReobserveOpenMismatchEpisodesAsync(),
                 "20 * * * *");
 
+            // Catch-up for missed PayPal lifecycle webhooks. 04:15 UTC sits clear of the other
+            // daily jobs (03:45 checkout hygiene, 04:00 new-song emails) and of the hourly ones.
+            RecurringJob.AddOrUpdate<IPayPalEntitlementDriftService>(
+                HangfireJobIds.ReconcilePayPalEntitlementDrift,
+                service => service.ReconcileDriftedSubscriptionsAsync(),
+                "15 4 * * *");
+
             // Schedule nightly new song notification emails at 4 AM UTC
             // This runs after song cleanup and sends emails to opted-in users about new songs added in the past 24 hours
             RecurringJob.AddOrUpdate<INewSongNotificationService>(

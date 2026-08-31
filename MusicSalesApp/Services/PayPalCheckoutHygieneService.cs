@@ -1,4 +1,4 @@
-using Hangfire;
+﻿using Hangfire;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
@@ -47,7 +47,6 @@ public class PayPalCheckoutHygieneService : IPayPalCheckoutHygieneService
         _logger = logger;
     }
 
-    [DisableConcurrentExecution(timeoutInSeconds: 300)]
     public async Task<int> CleanupStalePendingCheckoutsAsync()
     {
         try
@@ -162,8 +161,8 @@ public class PayPalCheckoutHygieneService : IPayPalCheckoutHygieneService
         }
     }
 
-    // Runs hourly; a batch that overruns the hour must not stack with the next tick.
-    [DisableConcurrentExecution(timeoutInSeconds: 300)]
+    // Runs hourly; a batch that overruns the hour must not stack with the next tick - which the
+    // attribute on IPayPalCheckoutHygieneService now actually enforces.
     public async Task<int> ReobserveOpenMismatchEpisodesAsync()
     {
         try
