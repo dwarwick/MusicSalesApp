@@ -112,9 +112,25 @@ public class Subscription
     public bool? GooglePlayAutoRenewEnabled { get; set; }
 
     /// <summary>
-    /// Billing source: "PayPal" or "GooglePlay". Defaults to PayPal for existing records.
-    /// Use <see cref="BillingSources"/> constants.
+    /// Which provider bills this subscription. Use the <see cref="BillingSources"/> constants.
+    ///
+    /// <para>
+    /// Required at the database, not merely by convention. An unlabelled row is not a tidiness
+    /// problem: GetCurrentSubscriptionFromOtherProviderAsync asks for rows whose provider differs
+    /// from a given one, and EF gives that comparison C# null semantics - so a NULL differs from
+    /// every provider, including its own. Such a row reads as its own competitor, and
+    /// reconciliation cancels the agreement at the provider as a redundant overlap. Rows created
+    /// before this property existed were exactly that shape.
+    /// </para>
+    ///
+    /// <para>
+    /// The initialiser is a second line of defence: an insert path that forgets to set a provider
+    /// stores PayPal rather than NULL. The project has nullable reference types disabled, so
+    /// without <see cref="RequiredAttribute"/> EF would map this to a nullable column no matter
+    /// what the initialiser says.
+    /// </para>
     /// </summary>
+    [Required]
     [MaxLength(20)]
     public string BillingSource { get; set; } = BillingSources.PayPal;
 

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
@@ -54,7 +54,14 @@ public class SubscriptionService : ISubscriptionService
 
         var now = DateTime.UtcNow;
         return await context.Subscriptions
+            // BillingSource != x is not enough on its own. EF gives it C# null semantics, so a row
+            // whose provider is unknown counts as "from a different provider" than every provider,
+            // including its own - and the caller responds by cancelling that agreement at the
+            // provider as a redundant overlap. Legacy rows predating the column were exactly that
+            // shape. The database now rejects a null, but [Required] still admits an empty string,
+            // which differs from every provider just as a null does, so both are excluded here.
             .Where(subscription => subscription.UserId == userId
+                && !string.IsNullOrEmpty(subscription.BillingSource)
                 && subscription.BillingSource != billingSource)
             .Where(subscription =>
                 (subscription.Status == SubscriptionStatuses.Active
@@ -992,8 +999,11 @@ public class SubscriptionService : ISubscriptionService
     {
         var now = DateTime.UtcNow;
         var conflictingSubscription = await context.Subscriptions
+            // See GetCurrentSubscriptionFromOtherProviderAsync: an unknown provider must never be
+            // treated as a known-different one.
             .Where(subscription => subscription.UserId == userId
                 && subscription.Id != excludedSubscriptionId
+                && !string.IsNullOrEmpty(subscription.BillingSource)
                 && subscription.BillingSource != requestedBillingSource)
             .Where(subscription =>
                 ((subscription.Status == SubscriptionStatuses.Active
