@@ -5,178 +5,216 @@
 @using Syncfusion.Blazor.Popups
 @inherits NavMenuModel
 
-<SfAppBar>
-    <SfButton OnClick="@ToggleMenu" IsToggle="true"><SfIcon Name="IconName.Menu" /></SfButton>
+@* Every Syncfusion component below calls into the sfBlazor JavaScript global from
+   OnAfterRenderAsync. If that global is missing - the script 404'd, was blocked, or failed to
+   execute - the interop call throws, and an unhandled exception in OnAfterRenderAsync does not
+   just fail the component: it destroys the circuit. The whole page then goes dead and
+   ReconnectModal reloads it, which for a deterministic failure is a reload loop. That is what
+   production hit on 2026-08-31, twice, from SfSwitch and SfMenu in this file.
 
-    @if (_isDarkTheme)
-    {
-        <img src="@Assets["images/logo-dark-small.png"]" alt="Website Logo" class="app-logo" />
-    }
-    else
-    {
-        <img src="@Assets["images/logo-light-small.png"]" alt="Website Logo" class="app-logo" />
-    }
+   The boundary has to be inside NavMenu, not around it in MainLayout. NavMenu is its own
+   InteractiveServer root, so a boundary in the layout is in a different render tree and catches
+   nothing from here.
 
-    <AppBarSpacer></AppBarSpacer>
-    <div class="theme-switcher">
-        <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
-        <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
-    </div>
-</SfAppBar>
-
-@if (ShowTestingServerBanner)
-{
-    <div class="test-server-banner">
-        <span class="test-server-banner-label">@TestingServerBannerText</span>
-        <a class="test-server-banner-link"
-           href="@ProductionServerUrl"
-           target="_blank"
-           rel="noopener noreferrer">@ProductionServerUrl</a>
-    </div>
-}
-
-@if (_showMaintenanceWarning)
-{
-    <div class="maintenance-banner">
-        <span class="maintenance-warning-label">
-            &#9888; Planned maintenance: @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTzAbbr
-        </span>
-    </div>
-}
-
-@if (_showMaintenanceDialog)
-{
-    <SfDialog @bind-Visible="_showMaintenanceDialog" Width="450px" IsModal="true" ShowCloseIcon="false"
-              CssClass="maintenance-notice-dialog" AllowDragging="false">
-        <DialogTemplates>
-            <Header>
-                <span class="maintenance-dialog-header">&#9888; Planned Maintenance Notice</span>
-            </Header>
-            <Content>
-                <div class="maintenance-dialog-content">
-                    <p>We have scheduled maintenance during the following time:</p>
-                    <p class="maintenance-dialog-times">
-                        <strong>@_maintenanceStartLocal</strong> &ndash; <strong>@_maintenanceEndLocal</strong> @_maintenanceTzAbbr
-                    </p>
-                    <p>The site may be temporarily unavailable during this period. We apologize for any inconvenience.</p>
-                </div>
-            </Content>
-            <FooterTemplate>
-                <SfButton OnClick="AcknowledgeMaintenance" IsPrimary="true" CssClass="e-btn e-primary maintenance-ack-button">
-                    I Understand
-                </SfButton>
-            </FooterTemplate>
-        </DialogTemplates>
-    </SfDialog>
-}
-
-<SfSidebar @ref="_sidebar"
-           @bind-IsOpen="_isMenuOpen"
-           Width="220px"
-           Type="SidebarType.Over"
-           Position="SidebarPosition.Left"
-           CloseOnDocumentClick="true">
+   The fallback is plain HTML with no Syncfusion and no JavaScript, so it still renders and its
+   links still navigate when the component tree above it cannot. *@
+<ErrorBoundary>
     <ChildContent>
-        <div class="sidebar-content">
-            <div class="sidebar-menu">
-                <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical">
-                    <MenuItems>
-                        <MenuItem Url="/" Text="Home" IconCss="streamtunes-menu-icon streamtunes-menu-icon-home"></MenuItem>
-                        <MenuItem Url="/music-library" Text="Music Library" IconCss="streamtunes-menu-icon streamtunes-menu-icon-semiquaver"></MenuItem>
-                        <AuthorizeView Roles="@Roles.Creator">
-                            <NotAuthorized>
-                                <MenuItem Url="@AppPageRoutes.NewCreatorSignup" Text="Upload Your Music" IconCss="streamtunes-menu-icon streamtunes-menu-icon-upload-music"></MenuItem>
-                            </NotAuthorized>
-                        </AuthorizeView>
+    <SfAppBar>
+        <SfButton OnClick="@ToggleMenu" IsToggle="true"><SfIcon Name="IconName.Menu" /></SfButton>
 
-                        <AuthorizeView Policy="@Permissions.NonValidatedUser">
-                            <Authorized>
-                                <MenuItem Url="/validate-email" Text="Validate my Email" IconCss="streamtunes-menu-icon streamtunes-menu-icon-check"></MenuItem>
-                            </Authorized>
-                        </AuthorizeView>
+        @if (_isDarkTheme)
+        {
+            <img src="@Assets.Root("images/logo-dark-small.png")" alt="Website Logo" class="app-logo" />
+        }
+        else
+        {
+            <img src="@Assets.Root("images/logo-light-small.png")" alt="Website Logo" class="app-logo" />
+        }
 
-                        <AuthorizeView Policy="@Permissions.ValidatedUser">
-                            <Authorized>
-                                <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="streamtunes-menu-icon streamtunes-menu-icon-list"></MenuItem>
-                                <MenuItem Url="/manage-account" Text="Manage Account" IconCss="streamtunes-menu-icon streamtunes-menu-icon-account"></MenuItem>
-                                <MenuItem Url="/CreatorSettings" Text="Creator / Artist Settings" IconCss="streamtunes-menu-icon streamtunes-menu-icon-creator"></MenuItem>
-                            </Authorized>
-                        </AuthorizeView>
-
-                        <AuthorizeView Policy="@Permissions.UploadFiles">
-                            <Authorized>
-                                <MenuItem Url="/upload-files" Text="  Upload Music" IconCss="streamtunes-menu-icon streamtunes-menu-icon-upload-music"></MenuItem>
-                            </Authorized>
-                        </AuthorizeView>
-
-                        <AuthorizeView Policy="@Permissions.ManageOwnSongs">
-                            <Authorized>
-                                <MenuItem Url="/creator/dashboard" Text="  Dashboard" IconCss="streamtunes-menu-icon streamtunes-menu-icon-dashboard"></MenuItem>
-                                <MenuItem Url="/creator/songs" Text="  Manage My Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-song-list"></MenuItem>
-                                <MenuItem Url="@AppPageRoutes.CreatorPersonas" Text="  Manage My Personas" IconCss="streamtunes-menu-icon streamtunes-menu-icon-personality"></MenuItem>
-                            </Authorized>
-                        </AuthorizeView>
-
-                <AuthorizeView Policy="@Permissions.ManageUsers">
-                    <Authorized>
-                        <MenuItem Separator="true"></MenuItem>
-                        <MenuItem Text="Admin" IconCss="streamtunes-menu-icon streamtunes-menu-icon-lock" Disabled="true"></MenuItem>
-                        <MenuItem Url="/admin/users" Text="  Manage Users" IconCss="streamtunes-menu-icon streamtunes-menu-icon-users"></MenuItem>
-                        <MenuItem Url="/admin/messages" Text="  User Messages" IconCss="streamtunes-menu-icon streamtunes-menu-icon-mail"></MenuItem>
-                        <MenuItem Url="/admin/contact-messages" Text="  Contact Messages" IconCss="streamtunes-menu-icon streamtunes-menu-icon-inbox"></MenuItem>
-                        <MenuItem Url="/admin/songs" Text="  Song Management" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
-                        <MenuItem Url="/admin/media-integrity" Text="  Media Integrity Audit" IconCss="streamtunes-menu-icon streamtunes-menu-icon-status-history"></MenuItem>
-                        <MenuItem Url="/admin/song-status-history" Text="  Song Status History" IconCss="streamtunes-menu-icon streamtunes-menu-icon-status-history"></MenuItem>
-                        <MenuItem Url="/admin/personas" Text="  Persona Management" IconCss="streamtunes-menu-icon streamtunes-menu-icon-masks"></MenuItem>
-                        <MenuItem Url="/admin/user-history" Text="  User History" IconCss="streamtunes-menu-icon streamtunes-menu-icon-user-history"></MenuItem>
-                        <MenuItem Url="/admin/payouts" Text="  Payouts" IconCss="streamtunes-menu-icon streamtunes-menu-icon-money"></MenuItem>
-                        <MenuItem Url="/admin/tip-fraud" Text="  Tip Fraud Monitor" IconCss="streamtunes-menu-icon streamtunes-menu-icon-warning"></MenuItem>
-                        <MenuItem Url="/admin/reported-songs" Text="  Reported Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-flag"></MenuItem>
-                        <MenuItem Url="/admin/logs" Text="  View Logs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-document"></MenuItem>
-                        <MenuItem Url="/admin/storage-backup" Text="  Storage Backup" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
-                        <MenuItem Url="/admin/image-variant-backfill" Text="  Image Variant Backfill" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
-                        <MenuItem Url="/admin/hls-packaging-backfill" Text="  Encrypted HLS Packaging" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
-                        <MenuItem Url="/hangfire" Text="  Hangfire Dashboard" IconCss="streamtunes-menu-icon streamtunes-menu-icon-gauge"></MenuItem>
-                        <MenuItem Url="/admin/settings" Text="  Settings" IconCss="streamtunes-menu-icon streamtunes-menu-icon-settings"></MenuItem>
-                        <MenuItem Separator="true"></MenuItem>
-                    </Authorized>
-                </AuthorizeView>
-
-                        <AuthorizeView>
-                            <Authorized>
-                                <MenuItem Url="/logout" Text="Logout" IconCss="streamtunes-menu-icon streamtunes-menu-icon-logout"></MenuItem>
-                            </Authorized>
-                            <NotAuthorized>
-                                <MenuItem Url="/login" Text="Login" IconCss="streamtunes-menu-icon streamtunes-menu-icon-login"></MenuItem>
-                                <MenuItem Url="/register" Text="Register" IconCss="streamtunes-menu-icon streamtunes-menu-icon-add"></MenuItem>
-                            </NotAuthorized>
-                        </AuthorizeView>
-                    </MenuItems>
-                    <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
-                </SfMenu>
-            </div>
-            <div class="sidebar-footer">
-                <SfMenu CssClass="e-inherit ms-2" TValue="MenuItem" Orientation="Orientation.Vertical">
-                    <MenuItems>
-                        <MenuItem Url="mailto://customerservice@streamtunes.net" Text="Contact Us" IconCss="streamtunes-menu-icon streamtunes-menu-icon-send"></MenuItem>
-                        <MenuItem Url="/terms-of-use" Text="Terms of Use" IconCss="streamtunes-menu-icon streamtunes-menu-icon-document"></MenuItem>
-                        <MenuItem Url="/privacy-policy" Text="Privacy Policy" IconCss="streamtunes-menu-icon streamtunes-menu-icon-lock"></MenuItem>
-                        <MenuItem Url="/account-deletion" Text="Account Deletion" IconCss="streamtunes-menu-icon streamtunes-menu-icon-delete"></MenuItem>
-                        <MenuItem Url="/creator-agreement" Text="Creator Agreement" IconCss="streamtunes-menu-icon streamtunes-menu-icon-edit"></MenuItem>
-                        <MenuItem Url="/user-refund-policy" Text="User Refund Policy" IconCss="streamtunes-menu-icon streamtunes-menu-icon-money"></MenuItem>
-                    </MenuItems>
-                    <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
-                </SfMenu>
-                <div class="copyright-notice">
-                    © @DateTime.Now.Year Streamtunes
-                </div>
-                @if (!string.IsNullOrEmpty(_appVersion))
-                {
-                    <div class="copyright-notice">
-                        version: @_appVersion
-                    </div>
-                }
-            </div>
+        <AppBarSpacer></AppBarSpacer>
+        <div class="theme-switcher">
+            <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
+            <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
         </div>
+    </SfAppBar>
+
+    @if (ShowTestingServerBanner)
+    {
+        <div class="test-server-banner">
+            <span class="test-server-banner-label">@TestingServerBannerText</span>
+            <a class="test-server-banner-link"
+               href="@ProductionServerUrl"
+               target="_blank"
+               rel="noopener noreferrer">@ProductionServerUrl</a>
+        </div>
+    }
+
+    @if (_showMaintenanceWarning)
+    {
+        <div class="maintenance-banner">
+            <span class="maintenance-warning-label">
+                &#9888; Planned maintenance: @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTzAbbr
+            </span>
+        </div>
+    }
+
+    @if (_showMaintenanceDialog)
+    {
+        <SfDialog @bind-Visible="_showMaintenanceDialog" Width="450px" IsModal="true" ShowCloseIcon="false"
+                  CssClass="maintenance-notice-dialog" AllowDragging="false">
+            <DialogTemplates>
+                <Header>
+                    <span class="maintenance-dialog-header">&#9888; Planned Maintenance Notice</span>
+                </Header>
+                <Content>
+                    <div class="maintenance-dialog-content">
+                        <p>We have scheduled maintenance during the following time:</p>
+                        <p class="maintenance-dialog-times">
+                            <strong>@_maintenanceStartLocal</strong> &ndash; <strong>@_maintenanceEndLocal</strong> @_maintenanceTzAbbr
+                        </p>
+                        <p>The site may be temporarily unavailable during this period. We apologize for any inconvenience.</p>
+                    </div>
+                </Content>
+                <FooterTemplate>
+                    <SfButton OnClick="AcknowledgeMaintenance" IsPrimary="true" CssClass="e-btn e-primary maintenance-ack-button">
+                        I Understand
+                    </SfButton>
+                </FooterTemplate>
+            </DialogTemplates>
+        </SfDialog>
+    }
+
+    <SfSidebar @ref="_sidebar"
+               @bind-IsOpen="_isMenuOpen"
+               Width="220px"
+               Type="SidebarType.Over"
+               Position="SidebarPosition.Left"
+               CloseOnDocumentClick="true">
+        <ChildContent>
+            <div class="sidebar-content">
+                <div class="sidebar-menu">
+                    <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical">
+                        <MenuItems>
+                            <MenuItem Url="/" Text="Home" IconCss="streamtunes-menu-icon streamtunes-menu-icon-home"></MenuItem>
+                            <MenuItem Url="/music-library" Text="Music Library" IconCss="streamtunes-menu-icon streamtunes-menu-icon-semiquaver"></MenuItem>
+                            <AuthorizeView Roles="@Roles.Creator">
+                                <NotAuthorized>
+                                    <MenuItem Url="@AppPageRoutes.NewCreatorSignup" Text="Upload Your Music" IconCss="streamtunes-menu-icon streamtunes-menu-icon-upload-music"></MenuItem>
+                                </NotAuthorized>
+                            </AuthorizeView>
+
+                            <AuthorizeView Policy="@Permissions.NonValidatedUser">
+                                <Authorized>
+                                    <MenuItem Url="/validate-email" Text="Validate my Email" IconCss="streamtunes-menu-icon streamtunes-menu-icon-check"></MenuItem>
+                                </Authorized>
+                            </AuthorizeView>
+
+                            <AuthorizeView Policy="@Permissions.ValidatedUser">
+                                <Authorized>
+                                    <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="streamtunes-menu-icon streamtunes-menu-icon-list"></MenuItem>
+                                    <MenuItem Url="/manage-account" Text="Manage Account" IconCss="streamtunes-menu-icon streamtunes-menu-icon-account"></MenuItem>
+                                    <MenuItem Url="/CreatorSettings" Text="Creator / Artist Settings" IconCss="streamtunes-menu-icon streamtunes-menu-icon-creator"></MenuItem>
+                                </Authorized>
+                            </AuthorizeView>
+
+                            <AuthorizeView Policy="@Permissions.UploadFiles">
+                                <Authorized>
+                                    <MenuItem Url="/upload-files" Text="  Upload Music" IconCss="streamtunes-menu-icon streamtunes-menu-icon-upload-music"></MenuItem>
+                                </Authorized>
+                            </AuthorizeView>
+
+                            <AuthorizeView Policy="@Permissions.ManageOwnSongs">
+                                <Authorized>
+                                    <MenuItem Url="/creator/dashboard" Text="  Dashboard" IconCss="streamtunes-menu-icon streamtunes-menu-icon-dashboard"></MenuItem>
+                                    <MenuItem Url="/creator/songs" Text="  Manage My Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-song-list"></MenuItem>
+                                    <MenuItem Url="@AppPageRoutes.CreatorPersonas" Text="  Manage My Personas" IconCss="streamtunes-menu-icon streamtunes-menu-icon-personality"></MenuItem>
+                                </Authorized>
+                            </AuthorizeView>
+
+                    <AuthorizeView Policy="@Permissions.ManageUsers">
+                        <Authorized>
+                            <MenuItem Separator="true"></MenuItem>
+                            <MenuItem Text="Admin" IconCss="streamtunes-menu-icon streamtunes-menu-icon-lock" Disabled="true"></MenuItem>
+                            <MenuItem Url="/admin/users" Text="  Manage Users" IconCss="streamtunes-menu-icon streamtunes-menu-icon-users"></MenuItem>
+                            <MenuItem Url="/admin/messages" Text="  User Messages" IconCss="streamtunes-menu-icon streamtunes-menu-icon-mail"></MenuItem>
+                            <MenuItem Url="/admin/contact-messages" Text="  Contact Messages" IconCss="streamtunes-menu-icon streamtunes-menu-icon-inbox"></MenuItem>
+                            <MenuItem Url="/admin/songs" Text="  Song Management" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
+                            <MenuItem Url="/admin/media-integrity" Text="  Media Integrity Audit" IconCss="streamtunes-menu-icon streamtunes-menu-icon-status-history"></MenuItem>
+                            <MenuItem Url="/admin/song-status-history" Text="  Song Status History" IconCss="streamtunes-menu-icon streamtunes-menu-icon-status-history"></MenuItem>
+                            <MenuItem Url="/admin/personas" Text="  Persona Management" IconCss="streamtunes-menu-icon streamtunes-menu-icon-masks"></MenuItem>
+                            <MenuItem Url="/admin/user-history" Text="  User History" IconCss="streamtunes-menu-icon streamtunes-menu-icon-user-history"></MenuItem>
+                            <MenuItem Url="/admin/payouts" Text="  Payouts" IconCss="streamtunes-menu-icon streamtunes-menu-icon-money"></MenuItem>
+                            <MenuItem Url="/admin/tip-fraud" Text="  Tip Fraud Monitor" IconCss="streamtunes-menu-icon streamtunes-menu-icon-warning"></MenuItem>
+                            <MenuItem Url="/admin/reported-songs" Text="  Reported Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-flag"></MenuItem>
+                            <MenuItem Url="/admin/logs" Text="  View Logs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-document"></MenuItem>
+                            <MenuItem Url="/admin/storage-backup" Text="  Storage Backup" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
+                            <MenuItem Url="/admin/image-variant-backfill" Text="  Image Variant Backfill" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
+                            <MenuItem Url="/admin/hls-packaging-backfill" Text="  Encrypted HLS Packaging" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
+                            <MenuItem Url="/hangfire" Text="  Hangfire Dashboard" IconCss="streamtunes-menu-icon streamtunes-menu-icon-gauge"></MenuItem>
+                            <MenuItem Url="/admin/settings" Text="  Settings" IconCss="streamtunes-menu-icon streamtunes-menu-icon-settings"></MenuItem>
+                            <MenuItem Separator="true"></MenuItem>
+                        </Authorized>
+                    </AuthorizeView>
+
+                            <AuthorizeView>
+                                <Authorized>
+                                    <MenuItem Url="/logout" Text="Logout" IconCss="streamtunes-menu-icon streamtunes-menu-icon-logout"></MenuItem>
+                                </Authorized>
+                                <NotAuthorized>
+                                    <MenuItem Url="/login" Text="Login" IconCss="streamtunes-menu-icon streamtunes-menu-icon-login"></MenuItem>
+                                    <MenuItem Url="/register" Text="Register" IconCss="streamtunes-menu-icon streamtunes-menu-icon-add"></MenuItem>
+                                </NotAuthorized>
+                            </AuthorizeView>
+                        </MenuItems>
+                        <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
+                    </SfMenu>
+                </div>
+                <div class="sidebar-footer">
+                    <SfMenu CssClass="e-inherit ms-2" TValue="MenuItem" Orientation="Orientation.Vertical">
+                        <MenuItems>
+                            <MenuItem Url="mailto://customerservice@streamtunes.net" Text="Contact Us" IconCss="streamtunes-menu-icon streamtunes-menu-icon-send"></MenuItem>
+                            <MenuItem Url="/terms-of-use" Text="Terms of Use" IconCss="streamtunes-menu-icon streamtunes-menu-icon-document"></MenuItem>
+                            <MenuItem Url="/privacy-policy" Text="Privacy Policy" IconCss="streamtunes-menu-icon streamtunes-menu-icon-lock"></MenuItem>
+                            <MenuItem Url="/account-deletion" Text="Account Deletion" IconCss="streamtunes-menu-icon streamtunes-menu-icon-delete"></MenuItem>
+                            <MenuItem Url="/creator-agreement" Text="Creator Agreement" IconCss="streamtunes-menu-icon streamtunes-menu-icon-edit"></MenuItem>
+                            <MenuItem Url="/user-refund-policy" Text="User Refund Policy" IconCss="streamtunes-menu-icon streamtunes-menu-icon-money"></MenuItem>
+                        </MenuItems>
+                        <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
+                    </SfMenu>
+                    <div class="copyright-notice">
+                        © @DateTime.Now.Year Streamtunes
+                    </div>
+                    @if (!string.IsNullOrEmpty(_appVersion))
+                    {
+                        <div class="copyright-notice">
+                            version: @_appVersion
+                        </div>
+                    }
+                </div>
+            </div>
+        </ChildContent>
+    </SfSidebar>
     </ChildContent>
-</SfSidebar>
+    @* Named so the AuthorizeView below can keep the implicit 'context' for its own. *@
+    <ErrorContent Context="navMenuError">
+        <header class="nav-fallback">
+            <a href="/" class="nav-fallback-brand">StreamTunes</a>
+            <nav class="nav-fallback-links">
+                <a href="/">Home</a>
+                <a href="/music-library">Music Library</a>
+                <AuthorizeView>
+                    <Authorized>
+                        <a href="/my-playlists">My Playlists</a>
+                        <a href="/manage-account">Manage Account</a>
+                        <a href="/logout">Logout</a>
+                    </Authorized>
+                    <NotAuthorized>
+                        <a href="/login">Login</a>
+                        <a href="/register">Register</a>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </nav>
+        </header>
+    </ErrorContent>
+</ErrorBoundary>

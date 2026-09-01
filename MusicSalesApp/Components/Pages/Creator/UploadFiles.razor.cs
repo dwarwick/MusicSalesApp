@@ -4748,7 +4748,19 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 await _leaveGuardModule.InvokeVoidAsync("disarm");
                 await _leaveGuardModule.DisposeAsync();
             }
+            // JSDisconnectedException is only the tidiest way a teardown interop call fails. When
+            // the circuit is going away underneath it the call is cancelled instead, and
+            // JSObjectReference.DisposeAsync surfaces that as TaskCanceledException - which, thrown
+            // from DisposeAsync, is unhandled and takes the circuit with it. Production logged
+            // exactly that on 2026-08-31 09:22. Nothing here is worth failing teardown over, so the
+            // block swallows everything and records it at Debug, matching AbortDirectUploadsAsync.
             catch (JSDisconnectedException) { }
+            catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "Could not disarm the upload page leave guard during teardown.");
+            }
         }
 
         _leaveGuardRef?.Dispose();

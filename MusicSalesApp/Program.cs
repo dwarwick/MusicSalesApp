@@ -73,8 +73,15 @@ try
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents(options =>
         {
-            options.DetailedErrors = true;
-            
+            // Development and Test only. This is what decides whether an unhandled component
+            // exception is sent to the browser in full - type, message and server stack trace - or
+            // replaced with an opaque identifier. In Production that is exception detail about the
+            // server handed to every visitor, and it costs nothing to give up: the full exception
+            // is already written to the log and emailed by AdminErrorNotificationSink either way.
+            // Matches the SignalR EnableDetailedErrors decision made further down this file.
+            options.DetailedErrors = builder.Environment.IsDevelopment()
+                || builder.Environment.IsEnvironment("Test");
+
             // Configure SignalR circuit options to keep connections alive
             // Disconnect timeout: Time to wait before disconnecting an inactive circuit
             options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
