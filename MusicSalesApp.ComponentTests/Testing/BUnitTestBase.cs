@@ -3,6 +3,7 @@ using Bunit.TestDoubles;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -619,6 +620,10 @@ public abstract class BUnitTestBase
         AuthorizationContext = TestContext.AddAuthorization();
 
         // Add Syncfusion Blazor services for component testing
+        // <AntiforgeryToken /> renders nothing without a provider, and renders it silently,
+        // so pages carrying a real antiforgery field would still pass an "is it there" test.
+        TestContext.Services.AddSingleton<AntiforgeryStateProvider, TestAntiforgeryStateProvider>();
+
         TestContext.Services.AddSyncfusionBlazor();
 
         // Set JSInterop to Loose mode to handle Syncfusion component JS calls

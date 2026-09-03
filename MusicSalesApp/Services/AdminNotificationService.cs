@@ -1,4 +1,5 @@
 #nullable enable
+using MusicSalesApp.Helpers;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
@@ -391,6 +392,13 @@ public class AdminNotificationService : IAdminNotificationService
             };
             context.UserHistories.Add(history);
             await context.SaveChangesAsync();
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // Callers fire this from component lifecycle methods and do not await the result, so
+            // it routinely outlives the circuit that started it. Losing one history row for a
+            // visitor who has already left is not worth an admin email.
+            _logger.LogDebug(ex, "Skipped recording user history for {UserEmail}, event {EventType}: the circuit was going away.", userEmail, eventType);
         }
         catch (Exception ex)
         {

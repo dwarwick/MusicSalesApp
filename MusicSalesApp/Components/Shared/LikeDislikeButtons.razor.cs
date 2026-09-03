@@ -1,5 +1,6 @@
-﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor.Popups;
 
@@ -116,6 +117,13 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
             _likeCount = counts.likeCount;
             _dislikeCount = counts.dislikeCount;
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading like counts for song {SongMetadataId}", SongMetadataId);
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading like counts for song {SongMetadataId}", SongMetadataId);
@@ -145,6 +153,13 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
                     }
                 }
             }
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading user like status for song {SongMetadataId}", SongMetadataId);
         }
         catch (Exception ex)
         {

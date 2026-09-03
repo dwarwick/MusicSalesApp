@@ -123,7 +123,7 @@
                                      OnShowRefund="ShowRefundPolicy" />
 
                 <form method="post" action="@GoogleAuthRoutes.WebRegisterPath">
-                    <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                    <AntiforgeryToken />
                     <input type="hidden" name="@ExternalAuthFormFields.PendingRegistrationToken" value="@PendingGoogleRegistrationToken" />
                     <input type="hidden" name="@ExternalAuthFormFields.Email" value="@Email" />
                     <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
@@ -173,7 +173,7 @@
                 <div class="auth-divider"><span>or</span></div>
 
                 <form method="post" action="@GoogleAuthRoutes.WebStartPath">
-                    <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                    <AntiforgeryToken />
                     <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
                     <input type="hidden" name="@ExternalAuthFormFields.AcceptPrivacyPolicy" value="@AcceptPrivacyPolicy.ToString().ToLowerInvariant()" />
                     <input type="hidden" name="@ExternalAuthFormFields.AcceptRefundPolicy" value="@AcceptRefundPolicy.ToString().ToLowerInvariant()" />

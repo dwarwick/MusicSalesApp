@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
@@ -193,6 +193,13 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                     }
                 }
             }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading creator settings data");
+            }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error loading creator settings data");
@@ -299,6 +306,13 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _creatorStreamPayRateDisplay = streamPayRate * 1000;
             }
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading creator status");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading creator status");
@@ -315,6 +329,13 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         try
         {
             _songCount = await CreatorService.GetCreatorSongCountAsync(creatorId);
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading song count for creator {CreatorId}", creatorId);
         }
         catch (Exception ex)
         {
@@ -338,6 +359,13 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                     SongCount = counts.TryGetValue(x.Id, out var n) ? n : 0,
                 })
                 .ToList();
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading personas for creator {CreatorId}", creatorId);
         }
         catch (Exception ex)
         {

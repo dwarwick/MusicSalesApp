@@ -1,4 +1,5 @@
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 
 #nullable enable
@@ -68,6 +69,13 @@ public partial class HomeUserPlaylistsModel : BlazorBase
                 await LoadLikedSongsPlaylistAsync();
             }
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Failed to load personalized home page content.");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load personalized home page content.");
@@ -87,6 +95,13 @@ public partial class HomeUserPlaylistsModel : BlazorBase
         {
             _recommendedPlaylist = await RecommendationService.GetRecommendedPlaylistAsync(_currentUserId);
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Failed to load recommended playlist for user {UserId}", _currentUserId);
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load recommended playlist for user {UserId}", _currentUserId);
@@ -102,6 +117,13 @@ public partial class HomeUserPlaylistsModel : BlazorBase
             _likedSongsPlaylist = await PlaylistService.GetOrCreateLikedSongsPlaylistAsync(_currentUserId);
             var playlistSongs = await PlaylistService.GetPlaylistSongsAsync(_likedSongsPlaylist.Id);
             _likedSongsCount = playlistSongs.Count;
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Failed to load Liked Songs playlist for user {UserId}", _currentUserId);
         }
         catch (Exception ex)
         {

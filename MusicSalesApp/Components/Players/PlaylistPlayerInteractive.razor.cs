@@ -9,6 +9,7 @@ using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Notifications;
 using System.Net.Http.Json;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Players
 {
@@ -596,9 +597,18 @@ namespace MusicSalesApp.Components.Players
                     await _jsModule.DisposeAsync();
                 }
             }
-            catch (JSDisconnectedException ex)
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
             {
-                Logger.LogDebug(ex, "Playlist player JS runtime disconnected during disposal");
+                // Not just a disconnected browser: a circuit being torn down cancels the pending
+                // interop call instead, which surfaces as TaskCanceledException.
+                Logger.LogDebug(ex, "Playlist player JS runtime unavailable during disposal");
+            }
+            catch (Exception ex)
+            {
+                // Nothing may escape DisposeAsync - an exception thrown here is unhandled and
+                // destroys the circuit being torn down. Warning, not Error, so a genuine fault stays
+                // visible in the log without emailing the admin about a page that is already gone.
+                Logger.LogWarning(ex, "Playlist player disposal did not complete cleanly.");
             }
 
             _dotNetRef?.Dispose();
@@ -783,6 +793,13 @@ namespace MusicSalesApp.Components.Players
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
             }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading playlist info for playlist {PlaylistId}", PlaylistId);
+            }
             catch (Exception ex)
             {
                 _error = ex.Message;
@@ -927,6 +944,13 @@ namespace MusicSalesApp.Components.Players
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
             }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading recommended playlist for user {UserId}", RecommendedUserId);
+            }
             catch (Exception ex)
             {
                 _error = ex.Message;
@@ -1050,6 +1074,13 @@ namespace MusicSalesApp.Components.Players
                 // Set up the first track
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
+            }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading artist playlist for artist {ArtistName}", ArtistName);
             }
             catch (Exception ex)
             {
@@ -1176,6 +1207,13 @@ namespace MusicSalesApp.Components.Players
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
             }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading creator playlist for creator {CreatorId}", CreatorId);
+            }
             catch (Exception ex)
             {
                 _error = ex.Message;
@@ -1224,6 +1262,13 @@ namespace MusicSalesApp.Components.Players
                     _loading = false;
                     return;
                 }
+            }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading genre playlist for genre {GenreName}", GenreName);
             }
             catch (Exception ex)
             {
@@ -1296,6 +1341,13 @@ namespace MusicSalesApp.Components.Players
                 }
 
                 _trackPeriodStreamCounts = periodCounts;
+            }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading top-streamed playlist {Window}", Window);
             }
             catch (Exception ex)
             {

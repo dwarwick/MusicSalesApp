@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Popups;
 using System.Globalization;
@@ -135,6 +136,13 @@ public partial class SubscribeCtaDialogModel : BlazorBase
             }
 
             _offerQuote = await PayPalSubscriptionManagementService.GetOfferQuoteAsync(userId);
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Failed to load the PayPal web subscription offer.");
         }
         catch (Exception ex)
         {
