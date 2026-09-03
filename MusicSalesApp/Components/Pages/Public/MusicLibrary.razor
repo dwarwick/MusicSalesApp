@@ -131,7 +131,7 @@ else
 
     <div class="@(ShowHomePageFeatured ? "featured-music-carousel" : "music-cards-grid")"
          data-lottie-grid
-         data-lottie-src="@Assets["animations/streamtunes-loading.lottie"]">
+         data-lottie-src="@Assets.Root("animations/streamtunes-loading.lottie")">
         @* Individual Song Cards *@
         @foreach (var f in GetFilteredFiles())
         {

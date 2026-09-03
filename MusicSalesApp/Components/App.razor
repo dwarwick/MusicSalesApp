@@ -1,4 +1,4 @@
-﻿@using Microsoft.Extensions.Configuration
+@using Microsoft.Extensions.Configuration
 @inject IConfiguration Configuration
 @inject IWebHostEnvironment HostEnvironment
 
@@ -6,34 +6,51 @@
 <html lang="en">
 
 <head>
+    @* These three come first and must stay first.
+
+       <base> only applies to URLs that appear after it, so anything above it is resolved against
+       the document's own directory instead - which on /song/{SongTitle} means /song/. That is not
+       hypothetical: with the manifest link above <base>, production logged
+       GET /song/manifest.x16vm7vd8l.webmanifest 404.
+
+       <meta charset> has to land inside the first 1024 bytes or the browser ignores it. The
+       consent and GTM blocks below are configuration-driven and grow, so leaving charset after
+       them put it at byte 998 - 26 bytes of headroom. *@
+    <meta charset="utf-8" />
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     @((MarkupString)googleConsentDefaultHtml)
     @((MarkupString)googleTagManagerHeadHtml)
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
-    <link rel="manifest" href="@Assets["manifest.webmanifest"]" />
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/" />
-    
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="manifest" href="@Assets.Root("manifest.webmanifest")" />
+
     @((MarkupString)metaHtml)
     @((MarkupString)googleAdsHeadHtml)
     
     <ResourcePreloader />
-    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets.Root("lib/bootstrap/dist/css/bootstrap.min.css")" />
     <!-- Design tokens. Must load before app.css so every later sheet can read them. -->
-    <link rel="stylesheet" href="@Assets["tokens.css"]" />
+    <link rel="stylesheet" href="@Assets.Root("tokens.css")" />
     <!-- Theme CSS is injected dynamically by ThemeProvider component -->
-    <link rel="stylesheet" href="@Assets["app.css"]" />
-    <link rel="stylesheet" href="@Assets["MusicSalesApp.styles.css"]" />
+    <link rel="stylesheet" href="@Assets.Root("app.css")" />
+    <link rel="stylesheet" href="@Assets.Root("MusicSalesApp.styles.css")" />
     <!-- Global breakpoint styles -->
-    <link rel="stylesheet" href="@Assets["xl_app.css"]" />
-    <link rel="stylesheet" href="@Assets["lg_app.css"]" />
-    <link rel="stylesheet" href="@Assets["md_app.css"]" />
-    <link rel="stylesheet" href="@Assets["sm_app.css"]" />
-    <link rel="stylesheet" href="@Assets["xs_app.css"]" />
+    <link rel="stylesheet" href="@Assets.Root("xl_app.css")" />
+    <link rel="stylesheet" href="@Assets.Root("lg_app.css")" />
+    <link rel="stylesheet" href="@Assets.Root("md_app.css")" />
+    <link rel="stylesheet" href="@Assets.Root("sm_app.css")" />
+    <link rel="stylesheet" href="@Assets.Root("xs_app.css")" />
 
-    <environment include="Production">
-        <link rel="stylesheet" href="seo-hide-framework-ui.css" />
-    </environment>
+    @* <environment> is an MVC/Razor Pages tag helper. Tag helpers do not run in .razor
+       components, so the previous <environment include="Production"> wrapper was emitted to the
+       browser as literal markup - the stylesheet loaded in every environment, and because
+       <environment> is an unknown element in <head> the parser treated it as the start of <body>
+       and pushed <ImportMap> and <HeadOutlet> out of the head with it. *@
+    @if (HostEnvironment.IsProduction())
+    {
+        <link rel="stylesheet" href="@Assets.Root("seo-hide-framework-ui.css")" />
+    }
 
     <ImportMap />    
     <HeadOutlet @rendermode="InteractiveServer" />
@@ -52,7 +69,7 @@
     <!-- autostart="false" so the circuit can be started with an explicit SignalR log level.
          If this script tag ever loses its companion Blazor.start() call below, the app does not
          boot at all - there is no partial failure mode here. -->
-    <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+    <script src="@Assets.Root("_framework/blazor.web.js")" autostart="false"></script>
     <script>
         // SignalR's browser client logs its negotiation and socket lifecycle at Information -
         // "Normalizing '_blazor' to ...", "WebSocket connected to wss://...". Useful while
@@ -67,8 +84,22 @@
             }
         });
     </script>
-    <script src="_content/Syncfusion.Blazor/scripts/syncfusion-blazor.min.js" type="text/javascript"></script>
-    <script src="https://kit.fontawesome.com/40e6b04585.js" crossorigin="anonymous"></script>
+    @* Through @Assets so this lands on the fingerprinted, immutable route. On the plain route
+       MapStaticAssets sends no-cache, and the browser revalidates all 5.4 MB of it on every full
+       page load. *@
+    <script src="@Assets.Root("_content/Syncfusion.Blazor/scripts/syncfusion-blazor.min.js")" type="text/javascript"></script>
+    @* Syncfusion renders its own <script src="_content/.../sf-utils.js"> next to the first
+       component that needs it, document-relative, and there is no option in 33.1.44 to turn that
+       off - so on /song/{SongTitle} it is fetched from /song/ and 404s along with everything else.
+       Loading it here from a rooted URL means it is already in place by the time that tag appears;
+       the file opens with `if (window.SfStyleWatcher) return;`, so the duplicate is a no-op by the
+       vendor's own design. Revisit if a later Syncfusion release roots its injected scripts. *@
+    <script src="/_content/Syncfusion.Blazor/scripts/sf-utils.js"></script>
+    @* async because nothing here calls into FontAwesome - it finds its own icons and rewrites
+       them. Left parser-blocking, a slow or blocked kit.fontawesome.com response holds up
+       DOMContentLoaded, and Blazor.start() waits on that, so the page renders but stays dead
+       until the CDN answers. *@
+    <script src="https://kit.fontawesome.com/40e6b04585.js" crossorigin="anonymous" async></script>
     <!-- hls.js, self-hosted from wwwroot/lib/hls. Loaded on every page because the players are
          reached from several of them and the file is cached after the first hit.
 
@@ -88,10 +119,10 @@
         // behind a token that lives about a minute, which is what the design actually relies on.
         window.__stVerbosePlayback = @((!HostEnvironment.IsProduction()).ToString().ToLowerInvariant());
     </script>
-    <script src="@Assets["lib/hls/hls.min.js"]"></script>
-    <script src="@Assets["js/passkey-helper.js"]"></script>    
-    <script src="@Assets["js/dashboard-helper.js"]"></script>
-    <script src="@Assets["js/google-ads-tracking.js"]"></script>
+    <script src="@Assets.Root("lib/hls/hls.min.js")"></script>
+    <script src="@Assets.Root("js/passkey-helper.js")"></script>    
+    <script src="@Assets.Root("js/dashboard-helper.js")"></script>
+    <script src="@Assets.Root("js/google-ads-tracking.js")"></script>
     <!-- DotLottie web component (registers <dotlottie-wc>), self-hosted from
          wwwroot/lib/dotlottie. The init module points the player's WASM renderer at
          our copy before registering the element - see wwwroot/js/dotlottie-init.js. -->
@@ -100,9 +131,9 @@
         // the one dotlottie asset we can point at its fingerprinted (immutable) route.
         // Without this it lands on the plain route, which MapStaticAssets marks no-cache
         // and the browser therefore revalidates on every page load.
-        window.__stDotLottieWasmUrl = "@Assets["lib/dotlottie/dotlottie-player.wasm"]";
+        window.__stDotLottieWasmUrl = "@Assets.Root("lib/dotlottie/dotlottie-player.wasm")";
     </script>
-    <script type="module" src="@Assets["js/dotlottie-init.js"]"></script>
+    <script type="module" src="@Assets.Root("js/dotlottie-init.js")"></script>
 </body>
 
 </html>

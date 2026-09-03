@@ -128,3 +128,61 @@
 .sidebar-nav .nav-item span:not(.e-icons) {
     font-size: 0.95rem;
 }
+
+/* Fallback nav, shown by the ErrorBoundary in NavMenu.razor when the Syncfusion components
+   cannot initialise (see the comment there). Deliberately self-contained: no Syncfusion classes
+   and no design tokens, because the theme stylesheet may be one of the things that failed to
+   load. Literal colours with a prefers-color-scheme variant, so it reads correctly either way. */
+.nav-fallback {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.25rem;
+    padding: 0.75rem 1rem;
+    background: #f4f4f5;
+    border-bottom: 1px solid #d4d4d8;
+}
+
+.nav-fallback-brand {
+    font-weight: 700;
+    font-size: 1.1rem;
+    text-decoration: none;
+    color: #18181b;
+}
+
+.nav-fallback-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+}
+
+.nav-fallback-links a {
+    text-decoration: none;
+    color: #3f3f46;
+}
+
+.nav-fallback-links a:hover,
+.nav-fallback-links a:focus {
+    text-decoration: underline;
+    color: #18181b;
+}
+
+@media (prefers-color-scheme: dark) {
+    .nav-fallback {
+        background: #1f1f23;
+        border-bottom-color: #3f3f46;
+    }
+
+    .nav-fallback-brand {
+        color: #fafafa;
+    }
+
+    .nav-fallback-links a {
+        color: #d4d4d8;
+    }
+
+    .nav-fallback-links a:hover,
+    .nav-fallback-links a:focus {
+        color: #fafafa;
+    }
+}

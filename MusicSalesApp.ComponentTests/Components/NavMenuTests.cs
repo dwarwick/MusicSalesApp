@@ -1,4 +1,4 @@
-using Bunit;
+﻿using Bunit;
 using Moq;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
@@ -382,5 +382,28 @@ public class NavMenuTests : BUnitTestBase
 
         // Banner is still shown even though no client-side expiry timer was scheduled
         Assert.That(cut.Markup, Does.Contain("maintenance-banner"));
+    }
+
+    /// <summary>
+    /// Half of the ErrorBoundary contract: the fallback must stay out of the way while interop is
+    /// working, or it would quietly replace the real navigation.
+    ///
+    /// <para>
+    /// The other half - that the fallback appears when a Syncfusion interop call throws - has no
+    /// test here, deliberately. Forcing it with <c>JSRuntimeMode.Strict</c> renders nothing at all:
+    /// bUnit routes an exception from <c>OnAfterRenderAsync</c> to the renderer rather than to the
+    /// nearest error boundary, so the boundary never sees it. Real Blazor does the opposite, which
+    /// is visible in the production stack trace of 2026-08-31 - it ends at
+    /// <c>Renderer.GetErrorHandledTask</c>, the method that walks up to an <c>IErrorBoundary</c>
+    /// and only tears down the circuit when it fails to find one. Verify the fallback in a browser
+    /// by blocking syncfusion-blazor.min.js in DevTools.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void NavMenu_DoesNotRenderTheFallback_WhenInteropSucceeds()
+    {
+        var cut = TestContext.Render<NavMenu>();
+
+        Assert.That(cut.Markup, Does.Not.Contain("nav-fallback"));
     }
 }
