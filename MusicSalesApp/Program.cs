@@ -1,4 +1,4 @@
-﻿using Fido2NetLib;
+using Fido2NetLib;
 using Fido2NetLib.Serialization;
 using Hangfire;
 using Hangfire.Dashboard;
@@ -55,6 +55,17 @@ try
     builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
+        // Every AuthorizeView that does not apply to the current user logs its failed requirement
+        // at Information, three lines at a time. NavMenu alone carries seven of them, so an
+        // ordinary page load for a signed-in non-Creator writes ~24 lines saying nothing except
+        // that the menu correctly hid the creator section. That buries the request and 404 lines
+        // that are actually worth reading. Warning keeps a genuine authorization fault visible.
+        //
+        // Scoped to Authorization on purpose: the bootstrap logger above overrides all of
+        // "Microsoft" to Warning, but doing that here would also silence the request logging and
+        // the EF command logging, both of which have earned their keep - the /song/ asset 404s
+        // that explained the 2026-08-31 outage were Information-level request lines.
+        .MinimumLevel.Override("Microsoft.AspNetCore.Authorization", LogEventLevel.Warning)
         .Enrich.FromLogContext()
         .WriteTo.Console()
         .WriteTo.File(
