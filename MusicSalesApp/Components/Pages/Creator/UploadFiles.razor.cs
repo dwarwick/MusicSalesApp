@@ -6,6 +6,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Imaging;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -721,6 +722,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 Logger.LogWarning("UploadFiles: User is not authenticated");
             }
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "UploadFiles: Failed to determine creator status");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "UploadFiles: Failed to determine creator status");
@@ -744,6 +752,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _maxImageUploadSizeMBDisplay = imageSizeMB;
 
             await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "UploadFiles: Failed to load max upload size settings. Using defaults.");
         }
         catch (Exception ex)
         {
@@ -1916,6 +1931,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             _genres = await GenreService.GetActiveGenresAsync() ?? new();
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "UploadFiles: Failed to load genres.");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "UploadFiles: Failed to load genres.");
@@ -1935,6 +1957,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // a choice about what to publish under, and a disabled persona is not publishable.
             _personas = personas.Where(p => p.IsEnabled).OrderBy(p => p.Name).ToList();
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "UploadFiles: Failed to load personas.");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "UploadFiles: Failed to load personas.");
@@ -1945,6 +1974,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             var creator = await CreatorService.GetCreatorByIdAsync(_currentCreatorId.Value);
             _creatorDisplayName = creator?.DisplayName ?? string.Empty;
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "UploadFiles: Failed to load creator display name.");
         }
         catch (Exception ex)
         {

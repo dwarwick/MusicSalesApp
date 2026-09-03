@@ -15,7 +15,6 @@ public partial class LoginModel : BlazorBase
     public string ReturnUrl { get; set; } = AppPageRoutes.Home;
 
     protected string errorMessage = string.Empty;
-    protected string antiForgeryToken = string.Empty;
     protected bool isDevelopment = false;
     protected string usernameValue = string.Empty;
     protected bool reactivateAccount = false;
@@ -29,16 +28,6 @@ public partial class LoginModel : BlazorBase
 
     protected override async Task OnInitializedAsync()
     {
-        // HttpContext is only available during SSR/prerender, not during interactive rendering.
-        var httpContext = HttpContextAccessor.HttpContext;
-
-        // Get antiforgery token (SSR only)
-        if (httpContext != null)
-        {
-            var tokens = Antiforgery.GetAndStoreTokens(httpContext);
-            antiForgeryToken = tokens.RequestToken;
-        }
-
         // Check if in development environment
         isDevelopment = Environment.IsDevelopment();
 

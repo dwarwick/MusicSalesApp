@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Json;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
@@ -10,6 +10,7 @@ using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Notifications;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Pages.Public;
 
@@ -244,6 +245,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 await LoadFiles();
                 await LoadStreamedSongIdsAsync();
             }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading MusicLibrary data");
+            }
             catch (Exception ex)
             {
                 _error = $"Error loading data: {ex.Message}";
@@ -402,9 +410,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 _jsModule = null;
             }
         }
-        catch (JSDisconnectedException ex)
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
         {
-            Logger.LogDebug(ex, "Music library JS runtime disconnected during disposal");
+            // Not just a disconnected browser: a circuit being torn down cancels the pending
+            // interop call instead, which surfaces as TaskCanceledException.
+            Logger.LogDebug(ex, "Music library JS runtime unavailable during disposal");
+        }
+        catch (Exception ex)
+        {
+            // Nothing may escape DisposeAsync - an exception thrown here is unhandled and
+            // destroys the circuit being torn down. Warning, not Error, so a genuine fault stays
+            // visible in the log without emailing the admin about a page that is already gone.
+            Logger.LogWarning(ex, "Music library disposal did not complete cleanly.");
         }
         _dotNetRef?.Dispose();
         _dotNetRef = null;
@@ -615,6 +632,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _creatorIdMap[audioFile.Name] = songMeta.CreatorId;
                 }
             }
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading files for music library");
         }
         catch (Exception ex)
         {
@@ -1068,6 +1092,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _streamedSongIds = await StreamCountService.GetUserStreamedSongIdsAsync(
                 _currentUserId.Value, _songMetadataIds.Values);
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading streamed-song eligibility for user {UserId}", _currentUserId);
         }
         catch (Exception ex)
         {

@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -58,11 +58,25 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
         if (firstRender && !_hasLoadedData)
         {
             _hasLoadedData = true;
-            await MaintenanceHubClient.StartAsync();
-            await InitializeTheme();
-            await LoadMaintenanceNoticeAsync();
-            _appVersion = await AppSettingsService.GetAppVersionAsync();
-            await InvokeAsync(StateHasChanged);
+
+            try
+            {
+                await MaintenanceHubClient.StartAsync();
+                await InitializeTheme();
+                await LoadMaintenanceNoticeAsync();
+                _appVersion = await AppSettingsService.GetAppVersionAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // Four awaits in a row, on every page of the site, immediately after the first
+                // render - the window in which a visitor clicking straight through is most likely
+                // to leave. Note the ErrorBoundary in NavMenu.razor cannot catch this: the runtime
+                // looks for a boundary among the throwing component's *ancestors*, and that
+                // boundary is this component's child. Unguarded, this reached CircuitHost and
+                // destroyed the circuit on 2026-09-02 21:42.
+                Logger.LogDebug(ex, "Nav menu initialisation stopped because the circuit was going away.");
+            }
         }
     }
 

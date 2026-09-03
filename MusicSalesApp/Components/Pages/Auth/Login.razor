@@ -44,8 +44,12 @@
             }
 
             <form method="post" action="/account/login">
-                @* AntiForgery token *@
-                <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                @* Renders the __RequestVerificationToken field. Not hand-rolled, because these
+                   pages are @rendermode InteractiveServer: OnInitialized runs again over the
+                   circuit, where GetAndStoreTokens cannot write a cookie to a response that has
+                   already been sent. AntiforgeryStateProvider carries the token across that
+                   boundary instead. *@
+                <AntiforgeryToken />
 
                 @* The field is named "username" because that is what /account/login binds and
                    what FindByEmailOrUsernameAsync takes. It is labelled Email because a username

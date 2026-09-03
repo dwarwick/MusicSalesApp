@@ -152,6 +152,13 @@ public partial class ManageAccountModel : BlazorBase
                                         _errorMessage = activation.Error ?? "Failed to activate subscription. Please contact support.";
                                     }
                                 }
+                                catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+                                {
+                                    // The visitor left, or the circuit dropped, while this was still awaiting.
+                                    // Nothing is wrong and there is nobody to tell, so it must not reach the
+                                    // Error sink - that is what emailed the admin five times on 2026-09-02.
+                                    Logger.LogDebug(ex, "Error activating subscription");
+                                }
                                 catch (Exception ex)
                                 {
                                     Logger.LogError(ex, "Error activating subscription");
@@ -168,6 +175,13 @@ public partial class ManageAccountModel : BlazorBase
                                         : "PayPal checkout was cancelled, but we could not finish cleaning up the pending subscription. Please try again.";
                                     await LoadSubscriptionStatus();
                                 }
+                                catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+                                {
+                                    // The visitor left, or the circuit dropped, while this was still awaiting.
+                                    // Nothing is wrong and there is nobody to tell, so it must not reach the
+                                    // Error sink - that is what emailed the admin five times on 2026-09-02.
+                                    Logger.LogDebug(ex, "Error deleting pending subscription");
+                                }
                                 catch (Exception ex)
                                 {
                                     Logger.LogError(ex, "Error deleting pending subscription");
@@ -177,6 +191,13 @@ public partial class ManageAccountModel : BlazorBase
                         }
                     }
                 }
+            }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // The visitor left, or the circuit dropped, while this was still awaiting.
+                // Nothing is wrong and there is nobody to tell, so it must not reach the
+                // Error sink - that is what emailed the admin five times on 2026-09-02.
+                Logger.LogDebug(ex, "Error loading account data");
             }
             catch (Exception ex)
             {
@@ -197,6 +218,13 @@ public partial class ManageAccountModel : BlazorBase
         try
         {
             _passkeys = await PasskeyService.GetUserPasskeysAsync(_currentUser.Id);
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading passkeys");
         }
         catch (Exception ex)
         {
@@ -778,6 +806,13 @@ public partial class ManageAccountModel : BlazorBase
                     : string.Empty;
             }
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading subscription status");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading subscription status");
@@ -790,6 +825,13 @@ public partial class ManageAccountModel : BlazorBase
         {
             _payPalOfferQuote = await PayPalSubscriptionManagementService.GetOfferQuoteAsync(_currentUser.Id);
             _agreeToTerms = false;
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading the PayPal web subscription offer");
         }
         catch (Exception ex)
         {
@@ -972,6 +1014,13 @@ public partial class ManageAccountModel : BlazorBase
                     break;
             }
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error refreshing PayPal subscription mismatch");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error refreshing PayPal subscription mismatch");
@@ -1105,6 +1154,13 @@ public partial class ManageAccountModel : BlazorBase
         try
         {
             _isActiveCreator = _currentUser != null && await CreatorService.IsActiveCreatorAsync(_currentUser.Id);
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading creator account deletion guard");
         }
         catch (Exception ex)
         {

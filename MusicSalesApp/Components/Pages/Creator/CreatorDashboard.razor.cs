@@ -1,4 +1,5 @@
-﻿using MusicSalesApp.Components.Base;
+using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Services;
 using Microsoft.JSInterop;
 using Syncfusion.Blazor.Grids;
@@ -415,6 +416,13 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 PayPalTransactionId = p.PayPalTransactionId ?? string.Empty
             }).ToList();
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading payout history for creator {CreatorId}", _creatorId);
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading payout history for creator {CreatorId}", _creatorId);
@@ -452,6 +460,13 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 Status = t.Status.ToString(),
                 PaidDate = t.PaidAt.HasValue ? ConvertUtcToUserLocal(t.PaidAt.Value) : null
             }).ToList();
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading tip history for creator {CreatorId}", _creatorId);
         }
         catch (Exception ex)
         {

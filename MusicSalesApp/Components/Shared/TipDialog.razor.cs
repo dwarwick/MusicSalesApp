@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using Syncfusion.Blazor.Popups;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Shared;
 
@@ -148,13 +149,22 @@ public partial class TipDialogModel : BlazorBase, IAsyncDisposable
             {
                 await _jsModule.DisposeAsync();
             }
-            catch (JSDisconnectedException)
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
             {
-                // Circuit already disconnected, safe to ignore
+                // Not just a disconnected browser: a circuit being torn down cancels the pending
+                // interop call instead, which surfaces as TaskCanceledException.
+                Logger.LogDebug(ex, "Tip dialog module was already gone at teardown.");
             }
             catch (ObjectDisposedException)
             {
-                // Module already disposed, safe to ignore
+                // Module already disposed, safe to ignore. Deliberately kept separate from the guard
+                // above, which recognises a disposed DI scope only - this one is the module itself.
+            }
+            catch (Exception ex)
+            {
+                // Nothing may escape DisposeAsync - an exception thrown here is unhandled and
+                // destroys the circuit being torn down.
+                Logger.LogWarning(ex, "Tip dialog disposal did not complete cleanly.");
             }
         }
     }

@@ -57,7 +57,6 @@ public partial class RegisterModel : BlazorBase, IDisposable
     protected string errorMessage = string.Empty;
     protected string successMessage = string.Empty;
     protected string infoMessage = string.Empty;
-    protected string antiForgeryToken = string.Empty;
     protected bool isSubmitting = false;
     protected bool showVerificationSection = false;
     protected bool canResendEmail = false;
@@ -66,16 +65,6 @@ public partial class RegisterModel : BlazorBase, IDisposable
     private bool disposed = false;
     private bool _hasLoadedData = false;
     private bool _creatorAccountRegisteredTracked = false;
-
-    protected override void OnInitialized()
-    {
-        var httpContext = HttpContextAccessor.HttpContext;
-        if (httpContext != null)
-        {
-            var tokens = Antiforgery.GetAndStoreTokens(httpContext);
-            antiForgeryToken = tokens.RequestToken ?? string.Empty;
-        }
-    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

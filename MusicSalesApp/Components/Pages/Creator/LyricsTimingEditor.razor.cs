@@ -9,6 +9,7 @@ using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Pages.Creator;
 
@@ -1158,9 +1159,18 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
                 await _module.InvokeVoidAsync("dispose", _audioElement);
                 await _module.DisposeAsync();
             }
-            catch (JSDisconnectedException)
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
             {
-                // Circuit already gone.
+                // Not just a disconnected browser: a circuit being torn down cancels the pending
+                // interop call instead, which surfaces as TaskCanceledException.
+                Logger.LogDebug(ex, "Lyrics timing editor audio module did not tear down cleanly.");
+            }
+            catch (Exception ex)
+            {
+                // Nothing may escape DisposeAsync - an exception thrown here is unhandled and
+                // destroys the circuit being torn down. Warning, not Error, so a genuine fault stays
+                // visible in the log without emailing the admin about a page that is already gone.
+                Logger.LogWarning(ex, "Lyrics timing editor audio module did not tear down cleanly.");
             }
         }
 
@@ -1173,9 +1183,18 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
                 await _leaveGuard.InvokeVoidAsync("disarm");
                 await _leaveGuard.DisposeAsync();
             }
-            catch (JSDisconnectedException)
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
             {
-                // Circuit already gone, and so is the page the listener was on.
+                // Not just a disconnected browser: a circuit being torn down cancels the pending
+                // interop call instead, which surfaces as TaskCanceledException.
+                Logger.LogDebug(ex, "Lyrics timing editor leave guard could not be disarmed at teardown.");
+            }
+            catch (Exception ex)
+            {
+                // Nothing may escape DisposeAsync - an exception thrown here is unhandled and
+                // destroys the circuit being torn down. Warning, not Error, so a genuine fault stays
+                // visible in the log without emailing the admin about a page that is already gone.
+                Logger.LogWarning(ex, "Lyrics timing editor leave guard could not be disarmed at teardown.");
             }
         }
 

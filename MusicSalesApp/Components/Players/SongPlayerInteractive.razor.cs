@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
@@ -8,6 +8,7 @@ using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Notifications;
 using System.Net.Http.Json;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Players;
 
@@ -246,9 +247,18 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 await _jsModule.DisposeAsync();
             }
         }
-        catch (JSDisconnectedException ex)
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
         {
-            Logger.LogDebug(ex, "Song player JS runtime disconnected during disposal");
+            // Not just a disconnected browser: a circuit being torn down cancels the pending
+            // interop call instead, which surfaces as TaskCanceledException.
+            Logger.LogDebug(ex, "Song player JS runtime unavailable during disposal");
+        }
+        catch (Exception ex)
+        {
+            // Nothing may escape DisposeAsync - an exception thrown here is unhandled and
+            // destroys the circuit being torn down. Warning, not Error, so a genuine fault stays
+            // visible in the log without emailing the admin about a page that is already gone.
+            Logger.LogWarning(ex, "Song player disposal did not complete cleanly.");
         }
         _dotNetRef?.Dispose();
     }
@@ -366,6 +376,13 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             // _isAdmin and _isCreatorOfSong are known - building it earlier would stamp "preview
             // only" onto every request, including a subscriber's.
             await LoadStreamUrl();
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Error loading song info for {SongTitle}", SongTitle);
         }
         catch (Exception ex)
         {

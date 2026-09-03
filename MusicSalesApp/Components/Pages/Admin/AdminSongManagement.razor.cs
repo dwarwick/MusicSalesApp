@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
@@ -258,6 +259,13 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     song.LyricsDisabledAt = songLyrics.DisabledAt;
                 }
             }
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left, or the circuit dropped, while this was still awaiting.
+            // Nothing is wrong and there is nobody to tell, so it must not reach the
+            // Error sink - that is what emailed the admin five times on 2026-09-02.
+            Logger.LogDebug(ex, "Could not load lyric state for the admin song grid.");
         }
         catch (Exception ex)
         {

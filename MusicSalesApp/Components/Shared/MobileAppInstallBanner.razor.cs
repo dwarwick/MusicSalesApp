@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Routing;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Components.Shared;
 
@@ -111,8 +112,18 @@ public partial class MobileAppInstallBannerModel : BlazorBase, IAsyncDisposable
         {
             await _jsModule.DisposeAsync();
         }
-        catch (JSDisconnectedException)
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
         {
+            // Not just a disconnected browser: a circuit being torn down cancels the pending
+            // interop call instead, which surfaces as TaskCanceledException.
+            Logger.LogDebug(ex, "Mobile app install banner module was already gone at teardown.");
+        }
+        catch (Exception ex)
+        {
+            // Nothing may escape DisposeAsync - an exception thrown here is unhandled and
+            // destroys the circuit being torn down. Warning, not Error, so a genuine fault stays
+            // visible in the log without emailing the admin about a page that is already gone.
+            Logger.LogWarning(ex, "Mobile app install banner disposal did not complete cleanly.");
         }
     }
 
