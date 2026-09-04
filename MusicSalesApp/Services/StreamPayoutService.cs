@@ -27,6 +27,15 @@ public class StreamPayoutService : IStreamPayoutService
     // Minimum days between payouts (weekly = 7 days)
     private const int MinimumDaysBetweenPayouts = 7;
 
+    // How many times the hourly retry job will re-submit a payout to TaxBandits before giving up.
+    // 24 = one day of hourly attempts. Without a cap a permanently rejected batch retries forever
+    // and emails the admin on every single attempt.
+    private const int MaxTaxBanditsRetryAttempts = 24;
+
+    // Terminal status for a payout that exhausted MaxTaxBanditsRetryAttempts. Excluded from the
+    // retry query, so it needs manual attention (visible on /admin/payouts).
+    private const string TaxBanditsFailedStatus = "Failed";
+
     public StreamPayoutService(
         IDbContextFactory<AppDbContext> contextFactory,
         IEmailService emailService,
@@ -178,6 +187,11 @@ public class StreamPayoutService : IStreamPayoutService
                         foreach (var payout in payoutsToUpdate)
                         {
                             payout.TaxBandits1099TransactionId = form1099Response.TransactionId;
+
+                            // Record the SequenceId we just sent. It is the row's own PayPal batch
+                            // id, so later retries reuse the identical key and stay idempotent.
+                            payout.TaxBanditsSequenceId ??= payout.PayPalTransactionId;
+
                             if (form1099Response.Success)
                             {
                                 payout.TaxBanditsStatus = "Success";
@@ -630,6 +644,44 @@ public class StreamPayoutService : IStreamPayoutService
             </ul>";
 
         await _emailService.SendEmailAsync(adminEmail, subject, body);
+    }
+
+    /// <summary>
+    /// Notifies the admin that TaxBandits reported a payout batch as already on file, so the retry
+    /// job marked it reported without resubmitting. This is not silent because the earlier
+    /// submission could have been filed for a different amount than the one we now expect.
+    /// </summary>
+    private async Task SendAlreadyFiled1099EmailAsync(string? payPalTransactionId, decimal expectedTotal, int recipientCount)
+    {
+        try
+        {
+            var adminEmail = _configuration[AppSettingKeys.EmailAdminEmail] ?? AdminNotificationService.AdminEmail;
+            var logoUrl = _emailService.GetLogoUrl();
+            var encodedLogoUrl = HtmlEncoder.Default.Encode(logoUrl);
+            var encodedTransactionId = HtmlEncoder.Default.Encode(payPalTransactionId ?? "Unknown");
+
+            var subject = "StreamTunes Admin - Form 1099 Batch Already On File (Verify Amount)";
+            var body = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{encodedLogoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                </div>
+                <h2>Form 1099 Batch Already On File</h2>
+                <p>TaxBandits rejected a retry with a duplicate SequenceId, which means this batch was accepted by an earlier submission that we failed to record. The payout records have been marked as reported and will not be retried again.</p>
+                <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                    <p><strong>SequenceId (PayPal batch):</strong> {encodedTransactionId}</p>
+                    <p><strong>Recipients in batch:</strong> {recipientCount}</p>
+                    <p><strong>Expected reported total:</strong> ${expectedTotal:F2} USD</p>
+                    <p><strong>Date/Time (UTC):</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
+                </div>
+                <p><strong>Action required:</strong> confirm in the TaxBandits portal that the amount on file for this SequenceId matches the expected total above. If it is lower, the creator is under-reported and the difference must be filed manually.</p>";
+
+            await _emailService.SendEmailAsync(adminEmail, subject, body);
+        }
+        catch (Exception ex)
+        {
+            // Log but don't throw - email failure shouldn't affect the retry flow
+            _logger.LogError(ex, "Failed to send Form 1099 already-on-file notification email to admin");
+        }
     }
 
     /// <summary>
@@ -1119,10 +1171,14 @@ public class StreamPayoutService : IStreamPayoutService
 
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        // Get all pending payouts for US creators grouped by PayPal transaction ID
+        // Get all pending payouts for US creators grouped by PayPal transaction ID.
+        // Rows that exhausted their attempts are excluded so a permanently rejected batch stops
+        // retrying (and stops emailing the admin) instead of looping forever.
         var pendingPayouts = await context.StreamPayouts
             .Include(sp => sp.Creator)
-            .Where(sp => sp.TaxBanditsStatus == "Pending" && sp.Creator.TaxResidencyType == TaxResidencyType.US)
+            .Where(sp => sp.TaxBanditsStatus == "Pending"
+                && sp.Creator.TaxResidencyType == TaxResidencyType.US
+                && sp.TaxBanditsRetryCount < MaxTaxBanditsRetryAttempts)
             .ToListAsync();
 
         if (pendingPayouts.Count == 0)
@@ -1142,25 +1198,54 @@ public class StreamPayoutService : IStreamPayoutService
 
         foreach (var group in groupedByTransaction)
         {
-            var transactions = new List<Form1099Transaction>();
-            var payoutIds = group.Select(sp => sp.Id).ToList();
-
-            foreach (var payout in group)
-            {
-                if (string.IsNullOrWhiteSpace(payout.Creator.TaxBanditsPayeeRef))
-                    continue;
-
-                // Include tip amounts stored on the payout record (GrossAmount + TipAmount = total reportable)
-                var totalReportableAmount = payout.GrossAmount + payout.TipAmount;
-                transactions.Add(new Form1099Transaction
+            // A payout row is written per song, and every row of a creator's payout carries the
+            // same PayPal batch id, which is also the SequenceId. Emitting one transaction per row
+            // therefore sent TaxBandits the same SequenceId N times and it rejected the whole batch
+            // with "Duplicate Sequence Id exists. The Sequence Id is repeated more than once."
+            // Aggregate to one transaction per recipient instead, which is exactly the shape the
+            // weekly path in ProcessPendingPayoutsAsync sends.
+            var reportable = group
+                .Where(sp => !string.IsNullOrWhiteSpace(sp.Creator.TaxBanditsPayeeRef))
+                // A null PayPal batch id cannot happen on a saved row (ProcessCreatorPayoutAsync
+                // returns before saving when PayPal gave us no id). Skip rather than invent a key:
+                // a made-up SequenceId would not match what the weekly path already submitted and
+                // would double-report the income.
+                .Where(sp => !string.IsNullOrWhiteSpace(sp.PayPalTransactionId))
+                .GroupBy(sp => sp.Creator.TaxBanditsPayeeRef!)
+                .Select(recipient => new
                 {
-                    PayeeRef = payout.Creator.TaxBanditsPayeeRef,
-                    SequenceId = payout.PayPalTransactionId ?? $"RETRY-{payout.Id}",
-                    TransactionDate = payout.PaymentDate,
-                    GrossAmount = totalReportableAmount,
-                    WithheldAmount = payout.WithheldAmount
-                });
-            }
+                    Payouts = recipient.ToList(),
+                    Transaction = new Form1099Transaction
+                    {
+                        PayeeRef = recipient.Key,
+                        // Reuse the key already sent for this batch when we have one, so a
+                        // resubmission stays idempotent even if this derivation changes later.
+                        SequenceId = recipient
+                            .Select(sp => sp.TaxBanditsSequenceId)
+                            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
+                            ?? recipient.First().PayPalTransactionId!,
+                        TransactionDate = recipient.Min(sp => sp.PaymentDate),
+                        // Tips are a batch-level amount stored on the FIRST row only (see
+                        // ProcessCreatorPayoutAsync), so summing GrossAmount + TipAmount across the
+                        // group reproduces the weekly path's total without double-counting.
+                        GrossAmount = recipient.Sum(sp => sp.GrossAmount + sp.TipAmount),
+                        WithheldAmount = recipient.Sum(sp => sp.WithheldAmount)
+                    }
+                })
+                // TaxBandits rejects $0 transactions, same guard the weekly path applies.
+                .Where(r => r.Transaction.GrossAmount > 0)
+                .ToList();
+
+            var transactions = reportable.Select(r => r.Transaction).ToList();
+
+            // Only rows we actually submit may be marked Success. The previous code took every row
+            // in the group, so rows skipped for a missing PayeeRef were marked as reported.
+            var payoutIds = reportable.SelectMany(r => r.Payouts).Select(sp => sp.Id).ToList();
+
+            // Map each submitted row to the SequenceId sent for it, so it can be recorded below.
+            var sequenceIdByPayoutId = reportable
+                .SelectMany(r => r.Payouts.Select(sp => new { sp.Id, r.Transaction.SequenceId }))
+                .ToDictionary(x => x.Id, x => x.SequenceId);
 
             if (transactions.Count == 0)
                 continue;
@@ -1169,6 +1254,24 @@ public class StreamPayoutService : IStreamPayoutService
             {
                 var response = await _taxBanditsService.ReportForm1099TransactionsBatchAsync(transactions);
 
+                // Every SequenceId in the request we just sent was unique, so a duplicate complaint
+                // can only be about an EARLIER submission TaxBandits accepted and we failed to
+                // record (a 2xx whose body did not parse, or an unexpected StatusMsg, is recorded
+                // as a failure by design). The income is already on file and retrying can never
+                // succeed, so stop. The uniqueness check keeps this sound: if a future change ever
+                // reintroduced a self-duplicating batch, its duplicate error must NOT be read as
+                // "already filed" or unreported income would be silently marked as reported.
+                var sentUniqueSequenceIds = transactions
+                    .Select(t => (t.PayeeRef, t.SequenceId))
+                    .Distinct()
+                    .Count() == transactions.Count;
+
+                var alreadyFiled = !response.Success
+                    && sentUniqueSequenceIds
+                    && response.ErrorMessage?.Contains("Duplicate Sequence Id", StringComparison.OrdinalIgnoreCase) == true;
+
+                var reported = response.Success || alreadyFiled;
+
                 await using var updateContext = await _contextFactory.CreateDbContextAsync();
                 var payoutsToUpdate = await updateContext.StreamPayouts
                     .Where(sp => payoutIds.Contains(sp.Id))
@@ -1176,8 +1279,33 @@ public class StreamPayoutService : IStreamPayoutService
 
                 foreach (var payout in payoutsToUpdate)
                 {
-                    payout.TaxBandits1099TransactionId = response.TransactionId;
-                    payout.TaxBanditsStatus = response.Success ? "Success" : "Pending";
+                    // Only overwrite when TaxBandits actually gave us a submission id. A failed
+                    // attempt usually returns none, and blanking the field would erase the id from
+                    // an earlier attempt — the one piece of evidence tying this payout to a
+                    // TaxBandits submission, now surfaced on /admin/payouts.
+                    if (!string.IsNullOrWhiteSpace(response.TransactionId))
+                    {
+                        payout.TaxBandits1099TransactionId = response.TransactionId;
+                    }
+
+                    // Record the key we sent so later retries reuse it verbatim.
+                    if (string.IsNullOrWhiteSpace(payout.TaxBanditsSequenceId)
+                        && sequenceIdByPayoutId.TryGetValue(payout.Id, out var sentSequenceId))
+                    {
+                        payout.TaxBanditsSequenceId = sentSequenceId;
+                    }
+
+                    if (reported)
+                    {
+                        payout.TaxBanditsStatus = "Success";
+                    }
+                    else
+                    {
+                        payout.TaxBanditsRetryCount++;
+                        payout.TaxBanditsStatus = payout.TaxBanditsRetryCount >= MaxTaxBanditsRetryAttempts
+                            ? TaxBanditsFailedStatus
+                            : "Pending";
+                    }
                 }
 
                 await updateContext.SaveChangesAsync();
@@ -1187,6 +1315,22 @@ public class StreamPayoutService : IStreamPayoutService
                     totalUpdated += payoutsToUpdate.Count;
                     _logger.LogInformation("Successfully retried {Count} pending 1099 transactions for PayPal transaction {TransactionId}",
                         payoutsToUpdate.Count, group.Key);
+                }
+                else if (alreadyFiled)
+                {
+                    totalUpdated += payoutsToUpdate.Count;
+                    var reportedTotal = transactions.Sum(t => t.GrossAmount);
+                    _logger.LogWarning(
+                        "TaxBandits reports PayPal transaction {TransactionId} is already on file, so {Count} payout records were marked Success without resubmitting. Expected reported total: {Total:C2}. Verify the amount on file matches.",
+                        group.Key, payoutsToUpdate.Count, reportedTotal);
+
+                    await SendAlreadyFiled1099EmailAsync(group.Key, reportedTotal, transactions.Count);
+                }
+                else if (payoutsToUpdate.Any(p => p.TaxBanditsStatus == TaxBanditsFailedStatus))
+                {
+                    _logger.LogError(
+                        "Giving up on 1099 transactions for PayPal transaction {TransactionId} after {Attempts} attempts. Error: {Error}. {Count} payout records marked {Status} and will no longer be retried.",
+                        group.Key, MaxTaxBanditsRetryAttempts, response.ErrorMessage, payoutsToUpdate.Count, TaxBanditsFailedStatus);
                 }
                 else
                 {

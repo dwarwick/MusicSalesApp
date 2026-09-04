@@ -40,6 +40,10 @@ public class StreamPayoutViewModel
     public decimal WithheldAmount { get; set; }
     public string? PayPalTransactionId { get; set; }
     public DateTime PaymentDate { get; set; }
+    public string? TaxBanditsStatus { get; set; }
+    public string? TaxBandits1099TransactionId { get; set; }
+    public string? TaxBanditsSequenceId { get; set; }
+    public int TaxBanditsRetryCount { get; set; }
 }
 
 public class AdminPayoutsModel : BlazorBase
@@ -105,7 +109,11 @@ public class AdminPayoutsModel : BlazorBase
             PayoutAmount = p.NetAmount,
             WithheldAmount = p.WithheldAmount,
             PayPalTransactionId = p.PayPalTransactionId,
-            PaymentDate = p.PaymentDate
+            PaymentDate = p.PaymentDate,
+            TaxBanditsStatus = p.TaxBanditsStatus,
+            TaxBandits1099TransactionId = p.TaxBandits1099TransactionId,
+            TaxBanditsSequenceId = p.TaxBanditsSequenceId,
+            TaxBanditsRetryCount = p.TaxBanditsRetryCount
         }).ToList();
     }
 

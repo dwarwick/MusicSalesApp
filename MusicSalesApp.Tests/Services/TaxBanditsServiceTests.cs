@@ -739,6 +739,109 @@ public class TaxBanditsServiceTests
     }
 
     [Test]
+    public async Task ReportForm1099TransactionsBatchAsync_RejectsRepeatedSequenceIds_WithoutHttpCall()
+    {
+        // A batch that repeats a SequenceId is refused locally. TaxBandits answers such a request
+        // with the same "Duplicate Sequence Id exists" message it uses for an already-filed batch,
+        // and callers act on that distinction — so this must never reach the API.
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns("test-business-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
+        _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        var transactions = new List<Form1099Transaction>
+        {
+            new() { PayeeRef = "test@example.com", SequenceId = "DUP-001", TransactionDate = DateTime.UtcNow, GrossAmount = 10m, WithheldAmount = 0m },
+            new() { PayeeRef = "test@example.com", SequenceId = "DUP-001", TransactionDate = DateTime.UtcNow, GrossAmount = 20m, WithheldAmount = 0m }
+        };
+
+        var result = await _service.ReportForm1099TransactionsBatchAsync(transactions);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("DUP-001"));
+            // Must not carry TaxBandits' already-on-file wording, or callers would read this local
+            // rejection as "the income is already reported".
+            Assert.That(result.ErrorMessage, Does.Not.Contain("Duplicate Sequence Id"));
+        });
+
+        // Not even the auth call should happen.
+        _mockHttpMessageHandler
+            .Protected()
+            .Verify(
+                "SendAsync",
+                Times.Never(),
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ReportForm1099TransactionsBatchAsync_ReportsEveryError_NotJustTheFirst()
+    {
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns("test-business-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
+        _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        var authResponseJson = JsonSerializer.Serialize(new TaxBanditsAuthResponse
+        {
+            StatusCode = 200,
+            AccessToken = "test-access-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600
+        });
+
+        const string errorBody = """
+            {
+              "StatusCode": 400,
+              "Errors": [
+                { "Code": "F1099.Txns.01", "Message": "First problem" },
+                { "Code": "F1099.Txns.02", "Message": "Second problem" }
+              ]
+            }
+            """;
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                return callCount == 1
+                    ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(authResponseJson) }
+                    : new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent(errorBody) };
+            });
+
+        var transactions = new List<Form1099Transaction>
+        {
+            new() { PayeeRef = "test@example.com", SequenceId = "TXN-001", TransactionDate = DateTime.UtcNow, GrossAmount = 100m, WithheldAmount = 0m }
+        };
+
+        var result = await _service.ReportForm1099TransactionsBatchAsync(transactions);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            // Reporting only Errors[0] meant a multi-error response was diagnosed one deploy at a time.
+            Assert.That(result.ErrorMessage, Does.Contain("First problem"));
+            Assert.That(result.ErrorMessage, Does.Contain("Second problem"));
+        });
+    }
+
+    [Test]
     public async Task ReportForm1099TransactionsBatchAsync_ReturnsEmptySuccess_WhenNoTransactions()
     {
         // Arrange - empty transaction list

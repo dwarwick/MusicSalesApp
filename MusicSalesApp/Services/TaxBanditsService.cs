@@ -285,6 +285,31 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
         try
         {
+            // Refuse a self-duplicating batch before doing any network work. TaxBandits answers a
+            // request that repeats a SequenceId with the same "Duplicate Sequence Id exists" message
+            // it uses for a batch that is already on file, so letting one through would make "we
+            // sent a malformed request" indistinguishable from "this income is already reported" —
+            // and callers act on that distinction. Rejecting rather than merging is deliberate:
+            // merging would have to guess whether repeated entries are separate payments or one.
+            var duplicateSequenceIds = transactions
+                .GroupBy(t => (t.PayeeRef, t.SequenceId))
+                .Where(g => g.Count() > 1)
+                .Select(g => $"{g.Key.PayeeRef}/{g.Key.SequenceId} x{g.Count()}")
+                .ToList();
+
+            if (duplicateSequenceIds.Count > 0)
+            {
+                // Wording deliberately avoids the phrase "Duplicate Sequence Id" so callers matching
+                // on TaxBandits' already-on-file message cannot match this local rejection.
+                var duplicateError = $"Refusing to submit batch: repeated SequenceIds for {string.Join(", ", duplicateSequenceIds)}";
+                _logger.LogError("Form 1099 transactions batch rejected locally. {ErrorMessage}", duplicateError);
+                response.Success = false;
+                response.ErrorMessage = duplicateError;
+                response.StatusMessage = "Repeated SequenceId";
+                await SendForm1099FailureEmailAsync("Form1099Transactions", null, duplicateError);
+                return response;
+            }
+
             // Get configuration values
             var clientId = _configuration["TaxBandits:ClientId"];
             var clientSecret = _configuration["TaxBandits:ClientSecret"];
@@ -393,10 +418,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                         errors.ValueKind == JsonValueKind.Array &&
                         errors.GetArrayLength() > 0)
                     {
-                        var firstError = errors[0];
-                        var errorMsg = firstError.TryGetProperty("Message", out var msgElement)
-                            ? msgElement.GetString() ?? "Unknown error"
-                            : "Unknown error";
+                        var errorMsg = FormatErrors(errors);
 
                         response.Success = false;
                         response.ErrorMessage = errorMsg;
@@ -461,11 +483,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                         errors.ValueKind == JsonValueKind.Array &&
                         errors.GetArrayLength() > 0)
                     {
-                        var firstError = errors[0];
-                        if (firstError.TryGetProperty("Message", out var msgElement))
-                        {
-                            errorMsg = msgElement.GetString() ?? errorMsg;
-                        }
+                        errorMsg = FormatErrors(errors);
                     }
                     else if (root.TryGetProperty("StatusMessage", out var statusMessageElement))
                     {
@@ -497,6 +515,43 @@ public sealed class TaxBanditsService : ITaxBanditsService
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Joins every entry in a TaxBandits <c>Errors</c> array into one message.
+    /// </summary>
+    /// <remarks>
+    /// Reporting only <c>Errors[0]</c> meant a response listing several problems was diagnosed one
+    /// deploy at a time, since fixing the first error just revealed the second.
+    /// </remarks>
+    private static string FormatErrors(JsonElement errors)
+    {
+        var messages = new List<string>();
+
+        foreach (var error in errors.EnumerateArray())
+        {
+            var message = error.TryGetProperty("Message", out var msgElement)
+                ? msgElement.GetString()
+                : null;
+
+            // Code/Name are not always present; include whichever identifies the error.
+            var code = error.TryGetProperty("Code", out var codeElement)
+                ? codeElement.ToString()
+                : error.TryGetProperty("Name", out var nameElement)
+                    ? nameElement.GetString()
+                    : null;
+
+            if (string.IsNullOrWhiteSpace(message) && string.IsNullOrWhiteSpace(code))
+                continue;
+
+            messages.Add(string.IsNullOrWhiteSpace(code)
+                ? message!
+                : $"[{code}] {message ?? "Unknown error"}");
+        }
+
+        return messages.Count > 0
+            ? string.Join(" | ", messages)
+            : "Unknown error";
     }
 
     /// <summary>

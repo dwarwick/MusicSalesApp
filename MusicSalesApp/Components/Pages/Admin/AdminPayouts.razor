@@ -209,6 +209,61 @@
                             }
                         </Template>
                     </GridColumn>
+                    <GridColumn Field="@nameof(StreamPayoutViewModel.TaxBanditsStatus)" HeaderText="1099 Status" Width="150">
+                        <Template>
+                            @{
+                                var item = (context as StreamPayoutViewModel);
+                                var status = item?.TaxBanditsStatus;
+                                if (string.IsNullOrEmpty(status))
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                                else if (status == "Success")
+                                {
+                                    <span style="color: #198754;">@status</span>
+                                }
+                                else if (status == "Failed")
+                                {
+                                    @* Terminal: the retry job has given up and will not resubmit. *@
+                                    <span style="color: #dc3545;">@status (@item!.TaxBanditsRetryCount tries)</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">@status @(item!.TaxBanditsRetryCount > 0 ? $"({item.TaxBanditsRetryCount} tries)" : "")</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(StreamPayoutViewModel.TaxBanditsSequenceId)" HeaderText="1099 SequenceId" Width="180">
+                        <Template>
+                            @{
+                                var item = (context as StreamPayoutViewModel);
+                                if (!string.IsNullOrEmpty(item?.TaxBanditsSequenceId))
+                                {
+                                    <small class="text-break">@item.TaxBanditsSequenceId</small>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(StreamPayoutViewModel.TaxBandits1099TransactionId)" HeaderText="1099 Submission" Width="200">
+                        <Template>
+                            @{
+                                var item = (context as StreamPayoutViewModel);
+                                if (!string.IsNullOrEmpty(item?.TaxBandits1099TransactionId))
+                                {
+                                    <small class="text-break">@item.TaxBandits1099TransactionId</small>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
                 </GridColumns>
             </SfGrid>
             <div class="mt-2">

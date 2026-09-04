@@ -184,6 +184,74 @@ public class StreamPayoutServiceTests
         await _context.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Seeds one US creator whose payout covers <paramref name="songCount"/> songs, i.e. that many
+    /// StreamPayout rows all sharing a single PayPal batch id — the real shape of a payout, and the
+    /// one the single-row seed above never produced.
+    /// </summary>
+    /// <remarks>
+    /// Tips are a batch-level amount, so production stores the whole tip on the FIRST row only
+    /// (ProcessCreatorPayoutAsync). This mirrors that, otherwise the expected total would be wrong.
+    /// </remarks>
+    private async Task SeedCreatorWithMultiSongPayout(
+        int songCount,
+        decimal grossPerSong = 0.10m,
+        decimal tipAmount = 0m,
+        string payPalTransactionId = "PAYOUT-TXN-MULTI",
+        string? taxBanditsSequenceId = null,
+        int retryCount = 0,
+        string? payeeRef = "creator@test.com")
+    {
+        var creatorUser = new ApplicationUser
+        {
+            Id = 1, UserName = "creator@test.com", Email = "creator@test.com",
+            NormalizedEmail = "CREATOR@TEST.COM", NormalizedUserName = "CREATOR@TEST.COM"
+        };
+        _context.Users.Add(creatorUser);
+
+        _context.Creators.Add(new Creator
+        {
+            Id = 1, UserId = 1, IsActive = true,
+            DisplayName = "Test Creator",
+            PayPalEmail = "creator@test.com",
+            TaxResidencyType = TaxResidencyType.US,
+            TaxBanditsPayeeRef = payeeRef
+        });
+
+        for (var i = 1; i <= songCount; i++)
+        {
+            _context.SongMetadata.Add(new SongMetadata
+            {
+                Id = i, Mp3BlobPath = $"test{i}.mp3", SongTitle = $"Test Song {i}", CreatorId = 1
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        for (var i = 1; i <= songCount; i++)
+        {
+            _context.StreamPayouts.Add(new StreamPayout
+            {
+                CreatorId = 1,
+                SongMetadataId = i,
+                NumberOfStreams = 20,
+                RatePerStream = 0.005m,
+                GrossAmount = grossPerSong,
+                WithholdingRate = 0m,
+                WithheldAmount = 0m,
+                NetAmount = grossPerSong,
+                TipAmount = i == 1 ? tipAmount : 0m,
+                PayPalTransactionId = payPalTransactionId,
+                TaxBanditsSequenceId = taxBanditsSequenceId,
+                TaxBanditsRetryCount = retryCount,
+                TaxBanditsStatus = "Pending",
+                PaymentDate = DateTime.UtcNow.AddDays(-1)
+            });
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
     // ==================== RetryPending1099TransactionsAsync Tests ====================
 
     [Test]
@@ -406,6 +474,181 @@ public class StreamPayoutServiceTests
         using var verifyContext = new AppDbContext(_contextOptions);
         var payout = await verifyContext.StreamPayouts.FirstAsync();
         Assert.That(payout.TaxBanditsStatus, Is.EqualTo("Pending"));
+    }
+
+    [Test]
+    public async Task RetryPending1099_MultipleSongs_SendsSingleAggregatedTransaction()
+    {
+        // Regression test for the production 400 "Duplicate Sequence Id exists. The Sequence Id is
+        // repeated more than once." A creator's payout writes one row per song, all sharing one
+        // PayPal batch id, and that id is the SequenceId — so one transaction per row meant N
+        // transactions with an identical SequenceId and TaxBandits rejected the whole batch.
+        await SeedCreatorWithMultiSongPayout(songCount: 92, grossPerSong: 0.10m, tipAmount: 0.45m);
+
+        _mockAppSettingsService.Setup(x => x.IsTaxBanditsMaintenanceActiveAsync())
+            .ReturnsAsync(false);
+
+        List<Form1099Transaction>? capturedTransactions = null;
+        _mockTaxBanditsService
+            .Setup(x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default))
+            .Callback<List<Form1099Transaction>, CancellationToken>((txns, _) => capturedTransactions = txns.ToList())
+            .ReturnsAsync(new Form1099TransactionResponse { Success = true, TransactionId = "TXN-AGG" });
+
+        var updated = await _service.RetryPending1099TransactionsAsync();
+
+        Assert.That(capturedTransactions, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            // One transaction for the recipient, not one per song.
+            Assert.That(capturedTransactions!, Has.Count.EqualTo(1));
+            Assert.That(capturedTransactions![0].SequenceId, Is.EqualTo("PAYOUT-TXN-MULTI"));
+            // 92 * 0.10 + 0.45 tip on the first row only.
+            Assert.That(capturedTransactions![0].GrossAmount, Is.EqualTo(9.65m));
+            Assert.That(capturedTransactions![0].PayeeRef, Is.EqualTo("creator@test.com"));
+            Assert.That(updated, Is.EqualTo(92));
+        });
+
+        // And the SequenceId sent is recorded so later retries reuse it verbatim.
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var payouts = await verifyContext.StreamPayouts.ToListAsync();
+        Assert.That(payouts.All(p => p.TaxBanditsSequenceId == "PAYOUT-TXN-MULTI"), Is.True);
+        Assert.That(payouts.All(p => p.TaxBanditsStatus == "Success"), Is.True);
+    }
+
+    [Test]
+    public async Task RetryPending1099_ReusesPersistedSequenceId()
+    {
+        // A retry must resubmit under the key already sent, never a freshly derived one. A drifting
+        // key would look like a new transaction to TaxBandits and double-report the creator.
+        await SeedCreatorWithMultiSongPayout(
+            songCount: 3,
+            payPalTransactionId: "PAYOUT-TXN-NEW",
+            taxBanditsSequenceId: "PAYOUT-TXN-ORIGINAL");
+
+        _mockAppSettingsService.Setup(x => x.IsTaxBanditsMaintenanceActiveAsync())
+            .ReturnsAsync(false);
+
+        List<Form1099Transaction>? capturedTransactions = null;
+        _mockTaxBanditsService
+            .Setup(x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default))
+            .Callback<List<Form1099Transaction>, CancellationToken>((txns, _) => capturedTransactions = txns.ToList())
+            .ReturnsAsync(new Form1099TransactionResponse { Success = true, TransactionId = "TXN-REUSE" });
+
+        await _service.RetryPending1099TransactionsAsync();
+
+        Assert.That(capturedTransactions, Is.Not.Null);
+        Assert.That(capturedTransactions!, Has.Count.EqualTo(1));
+        Assert.That(capturedTransactions![0].SequenceId, Is.EqualTo("PAYOUT-TXN-ORIGINAL"));
+    }
+
+    [Test]
+    public async Task RetryPending1099_DuplicateSequenceIdError_MarksSuccess()
+    {
+        // We sent a duplicate-free batch, so a duplicate complaint can only mean TaxBandits already
+        // accepted this batch earlier. The income is filed and retrying can never succeed.
+        await SeedCreatorWithMultiSongPayout(songCount: 4);
+
+        _mockAppSettingsService.Setup(x => x.IsTaxBanditsMaintenanceActiveAsync())
+            .ReturnsAsync(false);
+
+        _mockTaxBanditsService
+            .Setup(x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default))
+            .ReturnsAsync(new Form1099TransactionResponse
+            {
+                Success = false,
+                ErrorMessage = "Duplicate Sequence Id exists. The Sequence Id is repeated more than once."
+            });
+
+        var updated = await _service.RetryPending1099TransactionsAsync();
+
+        Assert.That(updated, Is.EqualTo(4));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var payouts = await verifyContext.StreamPayouts.ToListAsync();
+        Assert.That(payouts.All(p => p.TaxBanditsStatus == "Success"), Is.True);
+
+        // It must not pass silently: an earlier submission could have filed a different amount.
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                It.IsAny<string>(),
+                It.Is<string>(subject => subject.Contains("Already On File")),
+                It.IsAny<string>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task RetryPending1099_ExhaustedRetries_MarksFailedAndStopsRetrying()
+    {
+        // One attempt short of the cap, so this run is the last one.
+        await SeedCreatorWithMultiSongPayout(songCount: 2, retryCount: 23);
+
+        _mockAppSettingsService.Setup(x => x.IsTaxBanditsMaintenanceActiveAsync())
+            .ReturnsAsync(false);
+
+        _mockTaxBanditsService
+            .Setup(x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default))
+            .ReturnsAsync(new Form1099TransactionResponse { Success = false, ErrorMessage = "Service unavailable" });
+
+        var updated = await _service.RetryPending1099TransactionsAsync();
+        Assert.That(updated, Is.EqualTo(0));
+
+        using (var verifyContext = new AppDbContext(_contextOptions))
+        {
+            var payouts = await verifyContext.StreamPayouts.ToListAsync();
+            Assert.That(payouts.All(p => p.TaxBanditsStatus == "Failed"), Is.True);
+            Assert.That(payouts.All(p => p.TaxBanditsRetryCount == 24), Is.True);
+        }
+
+        // A subsequent run must not pick them up again — this is what breaks the hourly loop.
+        _mockTaxBanditsService.Invocations.Clear();
+        var secondRun = await _service.RetryPending1099TransactionsAsync();
+
+        Assert.That(secondRun, Is.EqualTo(0));
+        _mockTaxBanditsService.Verify(
+            x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task RetryPending1099_FailureBelowCap_IncrementsCountAndStaysPending()
+    {
+        await SeedCreatorWithMultiSongPayout(songCount: 2);
+
+        _mockAppSettingsService.Setup(x => x.IsTaxBanditsMaintenanceActiveAsync())
+            .ReturnsAsync(false);
+
+        _mockTaxBanditsService
+            .Setup(x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default))
+            .ReturnsAsync(new Form1099TransactionResponse { Success = false, ErrorMessage = "Service unavailable" });
+
+        await _service.RetryPending1099TransactionsAsync();
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var payouts = await verifyContext.StreamPayouts.ToListAsync();
+        Assert.That(payouts.All(p => p.TaxBanditsStatus == "Pending"), Is.True);
+        Assert.That(payouts.All(p => p.TaxBanditsRetryCount == 1), Is.True);
+    }
+
+    [Test]
+    public async Task RetryPending1099_SkipsRowsWithoutPayeeRef_DoesNotMarkThemSuccess()
+    {
+        // Previously payoutIds took every row in the group, so rows skipped for a missing PayeeRef
+        // were marked as reported without ever being sent.
+        await SeedCreatorWithMultiSongPayout(songCount: 3, payeeRef: null);
+
+        _mockAppSettingsService.Setup(x => x.IsTaxBanditsMaintenanceActiveAsync())
+            .ReturnsAsync(false);
+
+        var updated = await _service.RetryPending1099TransactionsAsync();
+
+        Assert.That(updated, Is.EqualTo(0));
+        _mockTaxBanditsService.Verify(
+            x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default),
+            Times.Never);
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var payouts = await verifyContext.StreamPayouts.ToListAsync();
+        Assert.That(payouts.All(p => p.TaxBanditsStatus == "Pending"), Is.True);
     }
 
     // ==================== GetAllPayoutsAsync Tests ====================
