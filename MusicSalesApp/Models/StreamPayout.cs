@@ -115,6 +115,20 @@ public class StreamPayout
     public string? TaxBanditsStatus { get; set; }
 
     /// <summary>
+    /// The SequenceId sent to TaxBandits for this payout (the PayPal payout batch id).
+    /// Recorded at submission time so every retry reuses the same key and stays idempotent.
+    /// Null until a submission has actually been attempted.
+    /// </summary>
+    [MaxLength(100)]
+    public string? TaxBanditsSequenceId { get; set; }
+
+    /// <summary>
+    /// How many times the hourly retry job has attempted to report this payout to TaxBandits.
+    /// Caps the retry so a permanently rejected batch cannot loop (and email the admin) forever.
+    /// </summary>
+    public int TaxBanditsRetryCount { get; set; }
+
+    /// <summary>
     /// When this record was created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
