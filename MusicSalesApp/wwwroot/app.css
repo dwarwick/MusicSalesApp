@@ -4902,8 +4902,19 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
     flex-wrap: wrap;
 }
 
+/* A ranking of song -> follow count. It borrowed .terms-list to get the column layout and
+   inherited that list's checkmark ::before with it, positioned at left: 0 - which landed on top
+   of the song title as soon as the padding-left making room for it was overwritten by this file's
+   own `padding: 6px 0` shorthand. It carries its own layout now.
+
+   No marker: the row already ends in a number, and a rank numeral beside a follow count reads as
+   two figures with no way to tell which is which. The <ol> still says the order is meaningful. */
 .follower-source-list {
-    list-style: decimal inside;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .follower-source-list li {

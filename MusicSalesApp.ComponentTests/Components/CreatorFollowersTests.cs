@@ -104,6 +104,33 @@ public class CreatorFollowersTests : BUnitTestBase
         });
     }
 
+    [Test]
+    public void CreatorFollowers_DoesNotBorrowTheChecklistStyleForTheSongRanking()
+    {
+        // .terms-list draws a checkmark ::before at left: 0 and relies on the li's padding-left to
+        // make room for it. This list overrides that padding with its own shorthand, so the
+        // checkmark landed on top of the song title. It is the wrong list anyway: a ranking of
+        // songs is not a list of things you get.
+        SetupCreator();
+
+        MockArtistFollowerAnalyticsService
+            .Setup(x => x.GetAnalyticsAsync(PersonaId, CreatorId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ArtistFollowerAnalyticsDto(
+                TotalFollowers: 3,
+                NewFollowersThisMonth: 1,
+                TopSongsGeneratingFollows: [new FollowSourceSongDto(99, "Midnight Highway", 31)]));
+
+        var cut = TestContext.Render<CreatorFollowers>();
+        cut.WaitForState(() => cut.Markup.Contains("Midnight Highway"), TimeSpan.FromSeconds(5));
+
+        var list = cut.Find(".follower-source-list");
+
+        Assert.That(
+            list.ClassList,
+            Does.Not.Contain("terms-list"),
+            "the checkmark bullet comes with that class and overlaps the song title");
+    }
+
     private void SetupCreator(params ArtistFollowerSummaryDto[] followers)
     {
         SetupAuthorizedUser(UserId, "creator@test.com");

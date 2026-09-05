@@ -107,7 +107,9 @@
                         @if (_analytics?.TopSongsGeneratingFollows.Count > 0)
                         {
                             <h3 class="settings-label">Top songs generating follows</h3>
-                            <ol class="terms-list follower-source-list">
+                            @* Not a terms-list: that one draws a checkmark bullet, which belongs
+                               on a list of things you get and not on a ranking. *@
+                            <ol class="follower-source-list">
                                 @foreach (var source in _analytics.TopSongsGeneratingFollows)
                                 {
                                     <li>

@@ -1672,6 +1672,9 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .settings-hero-icon { background-color: var(--st-accent-fill); color: var(--st-on-accent); }
 
 .settings-count, .settings-optional { color: var(--st-text-3); }
+
+/* Was inherited from .terms-list before this list stopped borrowing it. */
+.follower-source-list li { color: var(--st-text-2); }
 .settings-link { color: var(--st-accent); }
 
 .status-tile { background-color: var(--st-surface-hover); border-color: var(--st-line); }
