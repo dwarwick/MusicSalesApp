@@ -146,6 +146,40 @@ public sealed class ArtistFollowTestHarness : IDisposable
     /// Adds another song for the seeded persona, optionally already stamped as published.
     /// </summary>
     /// <summary>
+    /// Makes the listener a creator too, with one persona, and returns that persona's id.
+    /// </summary>
+    /// <remarks>
+    /// For the cases where both parties are artists - following back, and the consent rules about
+    /// naming a fellow artist.
+    /// </remarks>
+    public async Task<int> AddPersonaForListenerAsync(string personaName)
+    {
+        await using var context = NewContext();
+
+        var creator = new Creator
+        {
+            UserId = ListenerUserId,
+            DisplayName = personaName,
+            IsActive = true,
+        };
+
+        context.Creators.Add(creator);
+        await context.SaveChangesAsync();
+
+        var persona = new CreatorPersona
+        {
+            CreatorId = creator.Id,
+            Name = personaName,
+            IsEnabled = true,
+        };
+
+        context.CreatorPersonas.Add(persona);
+        await context.SaveChangesAsync();
+
+        return persona.Id;
+    }
+
+    /// <summary>
     /// Turns the listener's two follow-feature email preferences on.
     /// </summary>
     /// <remarks>

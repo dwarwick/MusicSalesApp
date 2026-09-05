@@ -476,6 +476,25 @@ Listeners can mute per artist, block (which also unfollows, and survives a re-fo
 and report. Reports land at `/admin/artist-messages`, the first moderation queue this app has for
 creator-authored free text.
 
+> **Blocking sets `IsActive = false`, so `GetFollowedArtistsAsync` must include blocked rows
+> explicitly** (`IsActive || IsBlockedByListener`). That list is the only place on the web a block
+> can be undone, so an `IsActive`-only filter drops the row, takes the Unblock button with it and
+> strands the block permanently — which is exactly how it shipped once. Every service test passed:
+> none of them asserted the row stayed *listed*.
+> `GetFollowedArtists_KeepsABlockedArtistSoTheBlockCanBeUndone` and its unfollow counterpart pin
+> both halves now.
+
+**Blocking is one-directional, and the UI does not claim otherwise.** It governs what reaches the
+listener — messages, release notifications, follower-list membership. It does *not* stop the creator
+following that listener's own persona back, and it does not touch the catalogue: a blocked artist's
+music still plays, likes and adds to playlists. If reciprocal blocking is ever wanted it is a new
+guard in `SetFollowStateAsync`, not a change to this one.
+
+`FollowedArtistsSection` carries a plain-English `<details>` explainer, because three of blocking's
+consequences cannot be guessed from the word: it also unfollows, the artist is never told, and the
+music is deliberately left alone. A blocked row hides Unfollow — blocking already unfollowed, so the
+button would answer "you are not following this artist" to someone looking straight at the row.
+
 ### Version 1 is deliberately one-way
 
 A listener **cannot reply**. `ArtistFollowerMessage.MessageKind` exists so that adding replies later

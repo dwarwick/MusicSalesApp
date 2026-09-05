@@ -332,10 +332,15 @@ public class ArtistFollowService : IArtistFollowService
 
         // Blocked artists are included here on purpose - this list is also where a listener goes
         // to undo a block, so hiding them would make the action unreachable.
+        //
+        // That needs saying twice, because blocking sets IsActive to false: an IsActive-only filter
+        // reads as correct, passes every service test, and silently strands the block. The Unblock
+        // button existed for a release without a row it could ever render on.
         var follows = await context.ArtistFollowers
             .AsNoTracking()
             .Include(follow => follow.CreatorPersona)
-            .Where(follow => follow.ListenerUserId == listenerUserId && follow.IsActive)
+            .Where(follow => follow.ListenerUserId == listenerUserId
+                             && (follow.IsActive || follow.IsBlockedByListener))
             .OrderByDescending(follow => follow.FollowedDateUtc)
             .ToListAsync(cancellationToken);
 

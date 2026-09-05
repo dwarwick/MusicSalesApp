@@ -241,6 +241,51 @@ public class ArtistFollowServiceTests
     }
 
     [Test]
+    public async Task GetFollowedArtists_KeepsABlockedArtistSoTheBlockCanBeUndone()
+    {
+        // This list is the only place a listener can unblock on the web, and blocking sets
+        // IsActive to false - so a filter on IsActive alone drops the row, taking the Unblock
+        // button with it and stranding the block permanently. It shipped that way once.
+        await _service.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+        await _service.SetBlockedAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var listed = await _service.GetFollowedArtistsAsync(_harness.ListenerUserId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(listed, Has.Count.EqualTo(1));
+            Assert.That(listed[0].IsBlocked, Is.True, "and it has to render AS blocked, not as a follow");
+        });
+    }
+
+    [Test]
+    public async Task GetFollowedArtists_DropsAPlainUnfollowWhichHasNothingLeftToUndo()
+    {
+        // The counterpart to the test above, and the reason the filter is not simply removed:
+        // unfollowing without blocking leaves nothing to act on, so the row must not linger.
+        await _service.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+        await _service.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, false);
+
+        Assert.That(await _service.GetFollowedArtistsAsync(_harness.ListenerUserId), Is.Empty);
+    }
+
+    [Test]
+    public async Task SetBlocked_DoesNotStopTheArtistFollowingTheListenerBack()
+    {
+        // Blocking is one-directional by design: it governs what reaches the listener, not what
+        // the creator may do elsewhere. Pinning it down because the reverse is easy to assume.
+        await _service.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+        await _service.SetBlockedAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var listenerPersonaId = await _harness.AddPersonaForListenerAsync("Blocked Listener");
+
+        var followBack = await _service.SetFollowStateAsync(
+            listenerPersonaId, _harness.CreatorUserId, true);
+
+        Assert.That(followBack, Is.EqualTo(ArtistFollowOutcome.Followed));
+    }
+
+    [Test]
     public async Task SetBlocked_UnblockingDoesNotSilentlyRestoreTheFollow()
     {
         await _service.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);

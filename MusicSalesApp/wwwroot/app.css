@@ -4478,6 +4478,14 @@ main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 .settings-hint { margin: 0; }
 .settings-working { margin: 0; font-weight: 600; }
 
+/* A collapsed explainer for an action whose consequences cannot be guessed from its name.
+   Collapsed rather than always-on so the card stays scannable, but inline rather than a link,
+   because someone deciding whether to block should not have to leave the page to find out. */
+.settings-explainer { margin: 0.75rem 0 0; font-size: 0.875rem; }
+.settings-explainer > summary { cursor: pointer; font-weight: 600; }
+.settings-explainer > ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+.settings-explainer > ul > li + li { margin-top: 0.35rem; }
+
 /* Status is a pill with a dot, never a bare coloured word - the state has to survive being
    read in greyscale. */
 .status-pill {

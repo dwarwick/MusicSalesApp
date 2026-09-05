@@ -178,6 +178,50 @@ public class ManageAccountFollowSectionsTests : BUnitTestBase
             x => x.HideAsync(7, UserId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Test]
+    public void FollowedArtists_OffersUnblockAndNotUnfollowOnABlockedArtist()
+    {
+        // Blocking already unfollowed, so an Unfollow button here reports "you are not following
+        // this artist" at someone looking straight at the row. Unblock is the only action left,
+        // and this list is the only place on the web it exists.
+        MockArtistFollowService
+            .Setup(x => x.GetFollowedArtistsAsync(UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([BuildArtist(isBlocked: true)]);
+
+        var cut = TestContext.Render<FollowedArtistsSection>(p => p.Add(c => c.UserId, UserId));
+        cut.WaitForState(() => cut.Markup.Contains("Alex Rivers"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Unblock"));
+            Assert.That(cut.Markup, Does.Not.Contain("Unfollow"));
+            Assert.That(cut.Markup, Does.Not.Contain("Following since"));
+            Assert.That(cut.Markup, Does.Contain("Their music still plays normally"));
+        });
+    }
+
+    [Test]
+    public void FollowedArtists_ExplainsWhatBlockingDoesWithoutLeavingThePage()
+    {
+        // Every consequence of blocking is one someone would want to know BEFORE clicking it, and
+        // three of them are not guessable from the word: it also unfollows, the artist is never
+        // told, and their music is deliberately untouched.
+        MockArtistFollowService
+            .Setup(x => x.GetFollowedArtistsAsync(UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([BuildArtist()]);
+
+        var cut = TestContext.Render<FollowedArtistsSection>(p => p.Add(c => c.UserId, UserId));
+        cut.WaitForState(() => cut.Markup.Contains("Alex Rivers"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("What happens when you block an artist?"));
+            Assert.That(cut.Markup, Does.Contain("also unfollows them"));
+            Assert.That(cut.Markup, Does.Contain("They are not told"));
+            Assert.That(cut.Markup, Does.Contain("Their music is not affected"));
+        });
+    }
+
     private static FollowedArtistDto BuildArtist(int unreadMessageCount = 0, bool isBlocked = false) =>
         new(
             ArtistFollowerId: 1,

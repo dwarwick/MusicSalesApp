@@ -1551,6 +1551,8 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .settings-tz { color: var(--st-text-3); }
 .settings-subhead { color: var(--st-text); }
 .settings-hint { color: var(--st-text-3); }
+.settings-explainer { color: var(--st-text-3); }
+.settings-explainer > summary { color: var(--st-text-2); }
 .settings-working { color: var(--st-text-2); }
 
 .status-pill {
