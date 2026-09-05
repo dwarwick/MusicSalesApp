@@ -603,6 +603,18 @@ public class CreatorService : ICreatorService
         creator.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();
 
+        // Standing down as a creator is a stronger statement than merely withdrawing the reveal
+        // consent, so it has to do at least as much. Clearing it here rotates this user's
+        // anonymous listener numbers, which matters for the same reason it does on withdrawal:
+        // without it, an artist who saw a persona name in that row yesterday reads today's
+        // "Listener #4817" as the same person, because the Following-since date and source song
+        // have not moved.
+        //
+        // Note the display would already have fallen back to a pseudonym on its own - the personas
+        // are gone and IsActive is false, either of which is enough. This is about the number, not
+        // the name.
+        await SetRevealPersonaToFollowedArtistsAsync(creator.Id, false);
+
         // Remove Creator role from the user
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user != null && await _userManager.IsInRoleAsync(user, Roles.Creator))

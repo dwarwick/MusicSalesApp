@@ -285,6 +285,104 @@ public class ArtistFollowConsentTests
     /// rest are bare mocks. UserManager needs a store to construct at all - the same shape
     /// CreatorServiceTests uses.
     /// </summary>
+
+    // ------------------------------------------------- standing down, and account deletion
+
+    [Test]
+    public async Task StoppingBeingACreator_MakesThemAnonymousAgain()
+    {
+        // Two independent reasons the name disappears: StopBeingCreatorAsync deletes the personas,
+        // and it sets IsActive false. The persona service is mocked here, so the personas survive
+        // and this isolates the second one - inactivity alone is enough.
+        await SetConsentAsync(true);
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, _personaOneId);
+
+        Assert.That(await FollowerNameAsync(), Is.EqualTo("Jane Echo"));
+
+        await CreateCreatorService().StopBeingCreatorAsync(_harness.ListenerUserId);
+
+        Assert.That(await FollowerNameAsync(), Does.StartWith("Listener #"));
+    }
+
+    [Test]
+    public async Task StoppingBeingACreator_AlsoRotatesThePseudonym()
+    {
+        // Standing down is a stronger statement than withdrawing consent, so it must do at least as
+        // much. Hiding the name alone would leave the row's date and source song intact, and an
+        // artist who saw "Jane Echo" there yesterday would read the new number as the same person.
+        await SetConsentAsync(true);
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, _personaOneId);
+
+        int before;
+        await using (var context = _harness.NewContext())
+        {
+            before = (await context.ArtistFollowers.SingleAsync()).AnonymousListenerNumber;
+        }
+
+        await CreateCreatorService().StopBeingCreatorAsync(_harness.ListenerUserId);
+
+        await using var verify = _harness.NewContext();
+        var follow = await verify.ArtistFollowers.SingleAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(follow.AnonymousListenerNumber, Is.Not.EqualTo(before));
+            Assert.That(follow.FollowAsPersonaId, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task StoppingBeingACreator_LeavesTheirOwnFollowsInPlace()
+    {
+        // They stop being an artist; they do not stop being a listener. The follow survives, it is
+        // simply anonymous again - and they keep getting release notifications.
+        await SetConsentAsync(true);
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, _personaOneId);
+
+        await CreateCreatorService().StopBeingCreatorAsync(_harness.ListenerUserId);
+
+        await using var context = _harness.NewContext();
+        var follow = await context.ArtistFollowers.SingleAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(follow.IsActive, Is.True);
+            Assert.That(follow.ReleaseNotificationsEnabled, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task DeletingTheirFollowRows_RemovesThemFromTheArtistsListEntirely()
+    {
+        // Account deletion hard-deletes ArtistFollower rows - see
+        // AccountDeletionServiceTests.DeleteAccountAsync_RemovesEveryFollowFeatureRowForTheUser,
+        // which owns that path. This asserts the consequence the artist actually sees: not an
+        // anonymised row, but no row at all, and a follower count that drops.
+        await SetConsentAsync(true);
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, _personaOneId);
+
+        Assert.That(await _followService.GetFollowerCountAsync(_harness.PersonaId), Is.EqualTo(1));
+
+        await using (var context = _harness.NewContext())
+        {
+            await context.ArtistFollowers
+                .Where(follow => follow.ListenerUserId == _harness.ListenerUserId)
+                .ExecuteDeleteAsync();
+        }
+
+        var followers = await _directory.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(followers, Is.Empty);
+            Assert.That(await _followService.GetFollowerCountAsync(_harness.PersonaId), Is.Zero);
+        });
+    }
+
     private CreatorService CreateCreatorService()
     {
         var store = new Mock<IUserStore<ApplicationUser>>();
