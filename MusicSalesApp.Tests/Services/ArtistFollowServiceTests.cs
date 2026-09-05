@@ -138,6 +138,40 @@ public class ArtistFollowServiceTests
     }
 
     [Test]
+    public async Task SetFollowState_RefusesToLetSomeoneFollowTheirOwnPersona()
+    {
+        // The UI leaves the bell off your own songs, but the mobile API takes a persona id from the
+        // client, so the refusal has to live here. Following yourself would put a creator in their
+        // own follower list, follower count and "new this month" figure.
+        var outcome = await _service.SetFollowStateAsync(
+            _harness.PersonaId, _harness.CreatorUserId, true);
+
+        await using var context = _harness.NewContext();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(outcome, Is.EqualTo(ArtistFollowOutcome.CannotFollowSelf));
+            Assert.That(await context.ArtistFollowers.AnyAsync(), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task SetFollowState_SelfFollowIsRefusedDistinctlyFromAnUnavailableArtist()
+    {
+        // Separate outcomes because they mean different things to a client: one is "that is you",
+        // the other is "that artist is gone". Both are permanent, so both answer 400, but the
+        // message a listener sees should not be wrong.
+        var self = await _service.SetFollowStateAsync(_harness.PersonaId, _harness.CreatorUserId, true);
+        var missing = await _service.SetFollowStateAsync(999999, _harness.ListenerUserId, true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(self, Is.EqualTo(ArtistFollowOutcome.CannotFollowSelf));
+            Assert.That(missing, Is.EqualTo(ArtistFollowOutcome.ArtistUnavailable));
+        });
+    }
+
+    [Test]
     public async Task SetFollowState_RefusesADisabledPersona()
     {
         await using (var context = _harness.NewContext())

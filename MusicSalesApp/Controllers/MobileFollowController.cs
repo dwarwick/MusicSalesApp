@@ -82,6 +82,9 @@ public class MobileFollowController : ControllerBase
             ArtistFollowOutcome.Blocked =>
                 BadRequest(new { error = "You have blocked this artist.", outcome = outcome.ToString() }),
 
+            ArtistFollowOutcome.CannotFollowSelf =>
+                BadRequest(new { error = "You cannot follow yourself.", outcome = outcome.ToString() }),
+
             _ => BadRequest(new { error = "The follow could not be updated.", outcome = outcome.ToString() }),
         };
     }

@@ -740,6 +740,27 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// Whether this visitor already follows the given persona, from the set resolved in bulk at
     /// load. Null when there is no persona, which is what keeps the card's Follow button off.
     /// </summary>
+    /// <summary>
+    /// Whether this song is the signed-in user's own, so the Follow bell can be left off it.
+    /// </summary>
+    /// <remarks>
+    /// Reuses the creator-user-id map the stream guard already builds, rather than asking again.
+    /// Anonymous visitors own nothing, so this is false for them and the bell shows as normal.
+    /// </remarks>
+    protected bool IsOwnSong(string fileName)
+    {
+        if (_currentUserId is not int userId)
+        {
+            return false;
+        }
+
+        var songMetadataId = GetSongMetadataId(fileName);
+
+        return songMetadataId > 0
+               && _creatorUserIdMap.TryGetValue(songMetadataId, out var creatorUserId)
+               && creatorUserId == userId;
+    }
+
     protected bool? IsFollowingArtist(int? personaId) =>
         personaId.HasValue ? _followedPersonaIds.Contains(personaId.Value) : null;
 

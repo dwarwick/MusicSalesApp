@@ -258,11 +258,13 @@ else
                     @{
                         var cardArtist = GetArtistInfo(f.Name);
                     }
+                    @* No Follow bell on your own songs. The service refuses a self-follow anyway,
+                       so this is about not offering something that cannot work. *@
                     @* Following is artist-level, but the control belongs with the other icons
                        rather than beside the artist name - it is the same kind of thing as like
                        and report. KnownIsFollowing is what keeps it to ONE query for the whole
                        page instead of one per card. Renders nothing when the song has no persona. *@
-                    <FollowArtistButton CreatorPersonaId="@(cardArtist.PersonaId ?? 0)"
+                    <FollowArtistButton CreatorPersonaId="@(IsOwnSong(f.Name) ? 0 : cardArtist.PersonaId ?? 0)"
                                         PersonaName="@cardArtist.DisplayName"
                                         SourceSongMetadataId="GetSongMetadataId(f.Name)"
                                         KnownIsFollowing="IsFollowingArtist(cardArtist.PersonaId)"

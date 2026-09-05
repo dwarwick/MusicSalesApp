@@ -150,6 +150,27 @@ public class FollowArtistButtonTests : BUnitTestBase
         });
     }
 
+    [Test]
+    public void FollowArtistButton_RendersNothingForYourOwnSong()
+    {
+        // The hosting pages express "this is mine" by passing persona id 0, which is the same
+        // path a song with no persona takes - one rule in the component, two reasons to use it.
+        SetupFollowState(isFollowing: false);
+
+        var cut = TestContext.Render<FollowArtistButton>(parameters => parameters
+            .Add(p => p.CreatorPersonaId, 0)
+            .Add(p => p.PersonaName, "Alex Rivers"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup.Trim(), Is.Empty);
+            MockArtistFollowService.Verify(
+                x => x.IsFollowingAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+                Times.Never,
+                "A hidden bell must not cost a query either.");
+        });
+    }
+
     private void SetupFollowState(bool isFollowing, int followerCount = 0)
     {
         SetupAuthorizedUser(UserId);

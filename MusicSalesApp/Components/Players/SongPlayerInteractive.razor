@@ -134,8 +134,10 @@ else
                     <div class="song-action-cluster">
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId()" />
                         @* Beside like and report rather than down in the artist panel: it is an
-                           icon action on this song's artist, and this is where icon actions live. *@
-                        <FollowArtistButton CreatorPersonaId="@(GetPersona()?.Id ?? 0)"
+                           icon action on this song's artist, and this is where icon actions live.
+                           Left off your own song - _isCreatorOfSong is the same flag the tip
+                           button uses to avoid offering you a tip to yourself. *@
+                        <FollowArtistButton CreatorPersonaId="@(_isCreatorOfSong ? 0 : GetPersona()?.Id ?? 0)"
                                             PersonaName="@GetArtistDisplayName()"
                                             SourceSongMetadataId="GetSongMetadataId()" />
                         <ReportButton SongMetadataId="GetSongMetadataId()" />

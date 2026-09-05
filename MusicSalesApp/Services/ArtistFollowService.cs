@@ -70,6 +70,20 @@ public class ArtistFollowService : IArtistFollowService
             return ArtistFollowOutcome.ArtistUnavailable;
         }
 
+        // Following your own persona is meaningless, and it would show up in the creator's own
+        // follower list, follower count and "new this month" figure. The UI hides the control on
+        // your own songs, but this is the guard that matters: the mobile API takes a persona id
+        // from the client, so the check has to live where the decision is made.
+        var isOwnPersona = await context.CreatorPersonas
+            .AnyAsync(
+                persona => persona.Id == creatorPersonaId && persona.Creator.UserId == listenerUserId,
+                cancellationToken);
+
+        if (isOwnPersona)
+        {
+            return ArtistFollowOutcome.CannotFollowSelf;
+        }
+
         var sourceSongId = await ResolveSourceSongAsync(context, creatorPersonaId, sourceSongMetadataId, cancellationToken);
         var followAsId = await ResolveFollowAsPersonaAsync(context, listenerUserId, followAsPersonaId, cancellationToken);
 

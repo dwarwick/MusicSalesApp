@@ -152,6 +152,12 @@ public enum ArtistFollowOutcome
 
     /// <summary>The listener has blocked this artist and must unblock before following again.</summary>
     Blocked,
+
+    /// <summary>
+    /// The persona belongs to the caller. Following yourself is meaningless, and it would put the
+    /// creator in their own follower list and their own analytics.
+    /// </summary>
+    CannotFollowSelf,
 }
 
 /// <summary>

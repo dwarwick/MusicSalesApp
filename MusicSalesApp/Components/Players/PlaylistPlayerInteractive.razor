@@ -98,7 +98,8 @@ else
                             has, so this hero is where Follow belongs. It renders nothing when the
                             page's tracks carry no persona - there is no artist entity to follow.
                         *@
-                        <FollowArtistButton CreatorPersonaId="@(persona?.Id ?? 0)"
+                        @* Nothing to follow on your own artist page. *@
+                        <FollowArtistButton CreatorPersonaId="@(IsOwnArtistPage() ? 0 : persona?.Id ?? 0)"
                                             PersonaName="@artistName"
                                             SourceSongMetadataId="@GetCurrentTrackMetadata()?.Id"
                                             ShowFollowerCount="true" />
