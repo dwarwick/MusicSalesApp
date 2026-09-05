@@ -245,19 +245,75 @@ the account behind it. Both halves are structural rather than remembered:
 > visible "Following Since" column. It is assigned once and stored, so it survives an
 > unfollow/re-follow cycle: that is the whole point of unfollow being a **soft delete**.
 
+### Consent: letting a fellow artist see who you are
+
+A listener who is *also* a creator can choose to be named to the artists they follow, so those
+artists can follow back. It is off by default and lives on `Creator.RevealPersonaToFollowedArtists`,
+set from Creator Settings.
+
+The mechanics are three pieces, and the shape of each is load-bearing:
+
+- **`ArtistFollower.FollowAsPersonaId`** records which persona they chose to appear as. A creator
+  with several personas gets a "Follow as" dialog; one with a single persona is not asked; one who
+  has not consented never sees the dialog and follows anonymously.
+- **Resolution happens at display time**, in two correlated subqueries inside
+  `ArtistFollowerDirectoryService`, gated on the persona still matching, being enabled, its creator
+  being active, unsuspended, and *still consenting*. Nothing is denormalised onto the follower row.
+  That is what makes withdrawal immediate and retroactive: untick the box and every artist they ever
+  followed goes back to seeing a pseudonym, including on follows made while consent was given.
+- **Withdrawing rotates the pseudonyms.** `CreatorService.RotateAnonymousNumbersAsync` reassigns
+  every `AnonymousListenerNumber` belonging to that user. Without it the artist has already seen that
+  `Listener #4817` is a particular persona, and the number staying put after withdrawal keeps the
+  association alive in their own notes. `StopBeingCreatorAsync` clears consent for the same reason,
+  so an ex-creator reverts to a pseudonym everywhere.
+
+> `ResolveFollowerArtistName` deliberately stops short of the last step of
+> `SongMetadata.GetEffectiveArtistName()`. That fallback chain ends at a creator display name
+> derived from the account, which is exactly the identity this feature exists to withhold. A name is
+> shown only when a persona resolves.
+
+`FollowAsPersonaId` is **deliberately not a foreign key**. `ArtistFollower` already cascades from
+`CreatorPersona` through `CreatorPersonaId`, and a second relationship to the same table is a second
+cascade path, which SQL Server refuses.
+
+**Following yourself is refused** — `ArtistFollowOutcome.CannotFollowSelf`, and `FollowArtistButton`
+renders nothing on your own songs. The button was reachable there because a creator browsing the
+library sees their own catalogue like anyone else.
+
+> **The mobile API is half-wired for this.** `PUT api/mobile/follows/{personaId}` accepts
+> `followAsPersonaId`, but nothing exposes `GetFollowAsOptionsAsync`, so a client has no way to ask
+> what the choices are. Adding that endpoint is a prerequisite for the picker on mobile; a client
+> that sends nothing follows anonymously, which fails in the safe direction.
+
 ### Notifications: in-app, email and push
 
 Three channels. In-app is the row itself — an `ArtistReleaseNotification` or
 `ArtistFollowerMessage` — and has no on/off switch, because the per-artist mute on
 `ArtistFollower` already silences it and a switch that suppressed the row would let a listener mute
 an artist so thoroughly they could never discover they had. Email and push each have two
-account-level flags on `ApplicationUser`, per notification kind, all four defaulting **true** where
-`ReceiveNewSongEmails` defaults false: following *is* the opt-in.
+account-level flags on `ApplicationUser`, per notification kind, **all four defaulting off**, the
+same posture as `ReceiveNewSongEmails` beside them.
 
-> None of the four is declared `HasDefaultValue(true)` in the model, on purpose. EF's sentinel for a
-> `bool` is `false`, so a model-level default of true makes EF skip writing an explicit `false` —
-> and a listener unchecking the box would silently keep receiving. The migrations set the column
-> default instead.
+> They shipped defaulting *on*, and `DefaultFollowNotificationsOff` reversed it. Following an artist
+> is consent to the in-app record — which is the row itself, and has no switch — not consent to be
+> mailed or to have a phone buzz. Those are separate asks and now have to be made separately.
+
+Two things about that migration are worth knowing before writing another like it:
+
+> **EF only scaffolded the two seeded users.** The column defaults were set by hand in
+> `AddArtistFollowFeature`/`AddPushNotifications` rather than through the model, so the model diff
+> cannot see them and generates nothing for them. The eight `AlterColumn<bool>` calls are hand-added,
+> both directions.
+
+> It also `UPDATE`s the rows that already exist, which is only safe because these columns arrived on
+> the same unshipped branch — no listener had expressed a preference for it to overwrite. **Had the
+> feature shipped, only the default should change**, because clearing the rows would silently
+> unsubscribe people who had asked to be notified.
+
+None of the four is declared `HasDefaultValue` in the model, and that stays true now the default is
+off. EF's sentinel for a `bool` is `false`, so a model-level default of `true` makes EF skip writing
+an explicit `false` — a listener unchecking the box would silently keep receiving. If one of these is
+ever defaulted on again, set the column default in a migration, not in the model.
 
 **Push is Firebase Cloud Messaging for BOTH platforms.** The server never talks to APNs; FCM
 relays to it, and the APNs auth key is uploaded to the Firebase console rather than living on this
@@ -280,6 +336,32 @@ production device. Each environment names its own service-account file
 starts, the feature runs, push is skipped. What it must *not* do is consume the notification —
 `DispatchPendingAsync` treats "unconfigured" as a transport failure, so configuring credentials
 later delivers the backlog rather than silently having dropped it.
+
+#### The admin kill switch
+
+`AppSettingsService.PushNotificationsEnabledKey` ("Phone Notifications" on `/admin/settings`) is
+**off by default**, and an absent *or unparseable* row reads as off. It gates two things at once:
+
+- `ArtistPushDispatchService.DispatchPendingAsync` returns 0 before it looks at anything else;
+- the two phone checkboxes **and their hint label** disappear from `/manage-account`.
+
+The label goes with the checkboxes deliberately. "Phone notifications need the StreamTunes app"
+sitting above nothing at all reads worse than either state on its own.
+
+It exists because the apps carrying the registration code are not in the stores yet, so nothing can
+arrive on a phone regardless — and a preference that quietly does nothing is worse than no
+preference. Two rules follow:
+
+> **Off leaves every row unstamped**, exactly like an unconfigured transport. Turning push on later
+> delivers what is still pending rather than having silently consumed it while the flag was off.
+
+> **Device registration keeps working while it is off.** That is not an oversight — registering is
+> how you prove the round trip before switching delivery on.
+
+Tests that expect a delivery therefore have to say so twice: the flag on *and* the listener opted
+in. Both used to be inherited from defaults and are now stated explicitly, via
+`ArtistFollowTestHarness.OptListenerIntoEmailsAsync` and the equivalent inside
+`ArtistPushDispatchServiceTests`.
 
 #### The three delivery outcomes are the whole design
 
@@ -415,6 +497,24 @@ own moderation and abuse handling on both ends, which is a larger feature than a
 the same reason: the music library renders one per card, and self-resolving instances would mean one
 database round trip per card on every load. `MusicLibrary` resolves the whole set in a single
 `GetFollowedPersonaIdsAsync` call.
+
+**Cross-card agreement is a parent callback, not SignalR.** One artist can own many cards on screen,
+so following from one has to move all of them. `OnFollowStateChanged` updates the parent's
+`_followedPersonaIds`, and returning from an `EventCallback` re-renders the parent on its own — every
+button reads `KnownIsFollowing` again and agrees. Likes never needed this because a like is
+per-*song*, i.e. one card. SignalR would be the wrong tool twice over: this is one circuit's own
+state, and `LikeCountHub` broadcasts public counts, never a viewer's own follow state.
+
+> **The bell has no CSS of its own.** `.follow-artist-bell` is added to *every* existing
+> `.like-button` selector group across `app.css`, `light.css`, `dark.css`, `sm_app.css` and
+> `xs_app.css` (with `.active` becoming `.is-following`). Bespoke rules were tried first and produced
+> a visible square, because `.card-ai-actions-row` overrides in those sheets applied to the
+> like buttons and not to the newcomer. `FollowBellCssTests` reads the stylesheets as text and fails
+> if a group is missed.
+
+`FollowArtistButton` renders its two `SfDialog`s only once `_dialogsRequested` is set. The library
+puts one button on every card, and a dialog pair per card is hundreds of hidden component trees for
+an interaction almost nobody performs on that page.
 
 There is deliberately **no** `DeactivateFollowsForPersona`/`ForCreator` service method. A persona
 being *deleted* already takes its follows with it by cascade, and a persona being *disabled* (or its
