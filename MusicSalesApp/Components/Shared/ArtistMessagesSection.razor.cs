@@ -12,6 +12,18 @@ namespace MusicSalesApp.Components.Shared;
 public partial class ArtistMessagesSectionModel : BlazorBase
 {
     /// <summary>The signed-in listener, resolved once by the host page.</summary>
+    /// <summary>
+    /// Raised after anything that changes what is unread here.
+    /// </summary>
+    /// <remarks>
+    /// The Following section a few hundred pixels up prints an unread count per artist, and it
+    /// reads it once on first render. Marking a message read - or hiding or reporting one, which
+    /// also drop out of the count - left that badge saying "1 unread" beside a message the reader
+    /// had just cleared. The two sections are siblings, so the host page relays it.
+    /// </remarks>
+    [Parameter]
+    public EventCallback OnMessagesChanged { get; set; }
+
     [Parameter]
     public int? UserId { get; set; }
 
@@ -129,5 +141,10 @@ public partial class ArtistMessagesSectionModel : BlazorBase
         }
 
         await ReloadAsync();
+
+        if (OnMessagesChanged.HasDelegate)
+        {
+            await OnMessagesChanged.InvokeAsync();
+        }
     }
 }

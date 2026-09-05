@@ -40,6 +40,12 @@ public partial class FollowedArtistsSectionModel : BlazorBase
         await ReloadAsync();
     }
 
+    /// <summary>
+    /// Re-reads the list. Called by the host page when the Artist messages section below changes
+    /// something this one displays - the per-artist unread count.
+    /// </summary>
+    public Task RefreshAsync() => ReloadAsync();
+
     private async Task ReloadAsync()
     {
         if (UserId is null)

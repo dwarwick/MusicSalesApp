@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -108,6 +109,26 @@ public partial class ManageAccountModel : BlazorBase
     /// somewhere it was never meant to be.
     /// </remarks>
     protected int? CurrentUserId => _currentUser?.Id;
+
+    /// <summary>
+    /// The Following section, held so the Artist messages section can refresh its unread counts.
+    /// </summary>
+    protected FollowedArtistsSectionModel _followedArtistsSection;
+
+    /// <summary>
+    /// Relays "a message changed" from the lower section to the upper one.
+    /// </summary>
+    /// <remarks>
+    /// Null until the section has rendered, which is why this is guarded rather than assumed: the
+    /// callback cannot fire before then, but the reference is still the page's to hold safely.
+    /// </remarks>
+    protected async Task RefreshFollowedArtistsAsync()
+    {
+        if (_followedArtistsSection is not null)
+        {
+            await _followedArtistsSection.RefreshAsync();
+        }
+    }
 
     [Inject]
     private IAccountDeletionService AccountDeletionService { get; set; }

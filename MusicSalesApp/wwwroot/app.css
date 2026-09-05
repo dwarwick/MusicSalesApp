@@ -4927,6 +4927,9 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
 .follow-row-main {
     display: flex;
     flex-direction: column;
+    /* Without this the column stretches every child to its full width, which is invisible on the
+       plain text lines and very visible on the unread pill - it became a full-width bar. */
+    align-items: flex-start;
 }
 
 .follow-row-actions {

@@ -289,9 +289,12 @@
                     </div>
                 </section>
 
-                <FollowedArtistsSection UserId="@CurrentUserId" />
+                @* The unread counts in Following are produced by the section below it, so the
+                   two are wired together here rather than either reaching for the other. *@
+                <FollowedArtistsSection @ref="_followedArtistsSection" UserId="@CurrentUserId" />
 
-                <ArtistMessagesSection UserId="@CurrentUserId" />
+                <ArtistMessagesSection UserId="@CurrentUserId"
+                                       OnMessagesChanged="RefreshFollowedArtistsAsync" />
 
                 <section class="settings-card" id="passkeys">
                     <div class="settings-section-head">

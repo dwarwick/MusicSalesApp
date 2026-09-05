@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Moq;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Shared;
@@ -176,6 +177,52 @@ public class ManageAccountFollowSectionsTests : BUnitTestBase
 
         MockArtistFollowerMessageService.Verify(
             x => x.HideAsync(7, UserId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public void ArtistMessages_TellsThePageWhenSomethingItDisplaysElsewhereChanged()
+    {
+        // The Following section above prints a per-artist unread count and reads it once, on first
+        // render. Without this callback, marking a message read left "1 unread" sitting above a
+        // message the reader had just cleared - which is what was reported. Hide and Report count
+        // too: both drop a message out of that same total.
+        MockArtistFollowerMessageService
+            .Setup(x => x.GetMessagesForListenerAsync(UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([BuildMessage()]);
+
+        MockArtistFollowerMessageService
+            .Setup(x => x.MarkReadAsync(7, UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var raised = 0;
+
+        var cut = TestContext.Render<ArtistMessagesSection>(p => p
+            .Add(c => c.UserId, UserId)
+            .Add(c => c.OnMessagesChanged, EventCallback.Factory.Create(this, () => raised++)));
+
+        cut.WaitForState(() => cut.Markup.Contains("Mark read"), TimeSpan.FromSeconds(5));
+        cut.FindAll("button").First(button => button.TextContent.Contains("Mark read")).Click();
+
+        Assert.That(raised, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void FollowedArtists_RefreshesItsUnreadCountsOnDemand()
+    {
+        // The other half of the same wire: the host page calls this when the messages section
+        // below reports a change, and the count has to come from a fresh read.
+        MockArtistFollowService
+            .SetupSequence(x => x.GetFollowedArtistsAsync(UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([BuildArtist(unreadMessageCount: 1)])
+            .ReturnsAsync([BuildArtist(unreadMessageCount: 0)]);
+
+        var cut = TestContext.Render<FollowedArtistsSection>(p => p.Add(c => c.UserId, UserId));
+        cut.WaitForState(() => cut.Markup.Contains("1 unread"), TimeSpan.FromSeconds(5));
+
+        cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+
+        cut.WaitForState(() => !cut.Markup.Contains("1 unread"), TimeSpan.FromSeconds(5));
+        Assert.That(cut.Markup, Does.Not.Contain("unread"));
     }
 
     [Test]
