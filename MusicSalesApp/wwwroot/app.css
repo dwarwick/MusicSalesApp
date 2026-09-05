@@ -1353,6 +1353,79 @@ h1:focus {
     height: 12px;
 }
 
+/* =========================================================================
+   ACTION BUTTONS INSIDE THE PLAYERS — colour lives HERE, not in the theme sheets
+   =========================================================================
+   The players are dark in BOTH site themes (see the note at the top of light.css),
+   so the generic .like-button / .dislike-button / .follow-artist-bell colours are
+   the wrong family entirely: those are page-content colours, defined twice and
+   flipped by the toggle. In light mode they paint a white box with black glyphs
+   onto a near-black hero, which is what the follow bell was reported for - and
+   like, dislike and report had it too, less visibly.
+
+   Defined once, from the --st-player-* family, and scoped to the two player
+   containers so page content is untouched. The scoped selector also outranks the
+   generic one, so this does not depend on stylesheet load order.
+   ========================================================================= */
+.song-player-container .like-button,
+.song-player-container .dislike-button,
+.song-player-container .follow-artist-bell,
+.playlist-player-container .like-button,
+.playlist-player-container .dislike-button,
+.playlist-player-container .follow-artist-bell {
+    background-color: var(--st-player-surface-2);
+    color: var(--st-player-text-3);
+    border-radius: var(--st-radius-sm);
+}
+
+.song-player-container .like-button:hover,
+.song-player-container .dislike-button:hover,
+.song-player-container .follow-artist-bell:hover,
+.playlist-player-container .like-button:hover,
+.playlist-player-container .dislike-button:hover,
+.playlist-player-container .follow-artist-bell:hover {
+    background-color: var(--st-player-surface);
+    color: var(--st-player-text-2);
+}
+
+.song-player-container .like-button.active,
+.song-player-container .dislike-button.active,
+.song-player-container .follow-artist-bell.is-following,
+.playlist-player-container .like-button.active,
+.playlist-player-container .dislike-button.active,
+.playlist-player-container .follow-artist-bell.is-following {
+    color: var(--st-blue-bright);
+}
+
+/* The follower count sits in the hero's text line, so it takes the player's own
+   muted text rather than --st-text-2, which is a dark ink measured on white. */
+.song-player-container .follow-artist-count,
+.playlist-player-container .follow-artist-count {
+    color: var(--st-player-text-3);
+}
+
+/* The artist hero's meta row is a line of plain text - track count, streams,
+   followers, preview notice - and a 40px filled button lands in it like a brick.
+   Same treatment the song card gets: bare icon, no chrome, sized to the text it
+   sits among. The song player's cluster keeps its box, because there the bell is
+   one icon button among several. */
+.playlist-player-container .playlist-meta-row .follow-artist-bell {
+    background-color: transparent;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+}
+
+.playlist-player-container .playlist-meta-row .follow-artist-bell:hover {
+    background-color: transparent;
+    color: var(--st-player-text-2);
+}
+
+.playlist-player-container .playlist-meta-row .action-icon {
+    width: 16px;
+    height: 16px;
+}
+
 .card-ai-actions-row .count-text {
     font-size: 0.75rem;
 }

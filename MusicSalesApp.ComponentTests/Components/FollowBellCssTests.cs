@@ -43,6 +43,49 @@ public class FollowBellCssTests
         File.ReadAllText(Path.Combine(WwwRoot, fileName));
 
     /// <summary>
+    /// Inside the players the bell takes player colours, never page-content colours.
+    /// </summary>
+    /// <remarks>
+    /// The players are dark in BOTH site themes, so the generic like/dislike colours - which are
+    /// page content, defined twice and flipped by the toggle - paint a white box with black glyphs
+    /// onto a near-black hero in light mode. That is what the bell was reported for. The scoped
+    /// rules live in app.css precisely because there is nothing theme-dependent about them; putting
+    /// a light variant in light.css is the mistake this guards against.
+    /// </remarks>
+    [Test]
+    public void ThePlayersStyleTheBellFromThePlayerPalette()
+    {
+        var app = Read("app.css");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                app,
+                Does.Contain(".playlist-player-container .follow-artist-bell"),
+                "the playlist player must override the page-content colours");
+
+            Assert.That(
+                app,
+                Does.Contain(".song-player-container .follow-artist-bell"),
+                "and so must the song player");
+
+            Assert.That(
+                app,
+                Does.Contain(".playlist-player-container .playlist-meta-row .follow-artist-bell"),
+                "the hero meta row is text, so the bell is bare there");
+        });
+
+        foreach (var themeSheet in new[] { "light.css", "dark.css" })
+        {
+            Assert.That(
+                Read(themeSheet),
+                Does.Not.Contain("-player-container .follow-artist-bell"),
+                $"{themeSheet} must not carry a theme variant of a player rule - the players do not "
+                + "change with the site theme, and a second copy is what drifts");
+        }
+    }
+
+    /// <summary>
     /// Every selector group that styles a like button must style the bell too.
     /// </summary>
     [TestCase("app.css")]
@@ -74,6 +117,12 @@ public class FollowBellCssTests
     /// <summary>
     /// And the bell must not acquire rules of its own, which is how it drifted out of step before.
     /// </summary>
+    /// <remarks>
+    /// One context is exempt, and only one: the artist hero's meta row renders no like button, so
+    /// there is no group for the bell to join there. It is a line of plain text - track count,
+    /// streams, followers - and the bell is bare inside it. Everywhere the two appear together the
+    /// rule stands.
+    /// </remarks>
     [TestCase("app.css")]
     [TestCase("light.css")]
     [TestCase("dark.css")]
@@ -86,7 +135,8 @@ public class FollowBellCssTests
         var soloGroups = Regex.Matches(css, @"(?:^|\})([^{}]*)\{", RegexOptions.Singleline)
             .Select(match => match.Groups[1].Value)
             .Where(selector => selector.Contains(".follow-artist-bell")
-                               && !selector.Contains(".like-button"))
+                               && !selector.Contains(".like-button")
+                               && !selector.Contains(".playlist-meta-row"))
             .ToList();
 
         Assert.That(
