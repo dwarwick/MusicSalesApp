@@ -183,13 +183,21 @@ public partial class FollowArtistButtonModel : BlazorBase
         }
     }
 
-    protected string GetButtonClass() =>
-        _isFollowing
-            ? "e-btn cta-outline follow-artist-button is-following"
-            : "e-btn cta-primary follow-artist-button";
+    /// <summary>
+    /// The bell. Filled when following, outline when not - the class carries the colour, the
+    /// markup swaps the glyph.
+    /// </summary>
+    protected string GetBellClass() =>
+        _isFollowing ? "follow-artist-bell is-following" : "follow-artist-bell";
 
+    /// <summary>
+    /// Doubles as the title and the aria-label. A bell with no text is meaningless to a screen
+    /// reader and ambiguous on hover, so this is not decoration.
+    /// </summary>
     protected string GetButtonTitle() =>
-        _isFollowing ? $"Stop following {PersonaName}" : $"Follow {PersonaName}";
+        _isFollowing
+            ? $"Following {PersonaName} - click to stop"
+            : $"Follow {PersonaName} for new releases";
 
     protected async Task ShowLoginDialogAsync()
     {

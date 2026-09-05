@@ -1,29 +1,54 @@
 @inherits FollowArtistButtonModel
 
 @*
-    Renders nothing at all when there is no persona to follow. That is not a defensive check - a
-    song whose artist name came from free text or a creator display name has no artist entity, so
-    there is genuinely nothing to follow, and an inert or misleading button would be worse than
-    its absence.
+    A bell rather than a labelled button: this now sits in the same cluster as like, dislike and
+    report, which are all icons, and a word among them would read as the odd one out.
+
+    Filled means following. That is the whole state - there is no third value - so it needs no
+    label, but it does need a title and an aria-label, because a bell with no text is meaningless
+    to a screen reader and ambiguous on hover.
+
+    Renders nothing at all when there is no persona to follow. A song whose artist name came from
+    free text has no artist entity, so an inert bell would invite a click that can never work.
 *@
 @if (CreatorPersonaId > 0)
 {
     <div class="follow-artist">
         <AuthorizeView>
             <Authorized>
-                <SfButton CssClass="@GetButtonClass()"
-                          OnClick="HandleToggleAsync"
-                          Disabled="_isProcessing"
-                          title="@GetButtonTitle()">
-                    @(_isFollowing ? "Following ✓" : "Follow")
-                </SfButton>
+                <button type="button"
+                        class="@GetBellClass()"
+                        @onclick="HandleToggleAsync"
+                        @onclick:stopPropagation="true"
+                        disabled="@_isProcessing"
+                        title="@GetButtonTitle()"
+                        aria-pressed="@(_isFollowing ? "true" : "false")"
+                        aria-label="@GetButtonTitle()">
+                    @if (_isFollowing)
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
+                        </svg>
+                    }
+                </button>
             </Authorized>
             <NotAuthorized>
-                <SfButton CssClass="e-btn cta-outline follow-artist-button"
-                          OnClick="ShowLoginDialogAsync"
-                          title="@($"Follow {PersonaName}")">
-                    Follow
-                </SfButton>
+                <button type="button"
+                        class="follow-artist-bell"
+                        @onclick="ShowLoginDialogAsync"
+                        @onclick:stopPropagation="true"
+                        title="@($"Follow {PersonaName}")"
+                        aria-label="@($"Follow {PersonaName}")">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
+                    </svg>
+                </button>
             </NotAuthorized>
         </AuthorizeView>
 

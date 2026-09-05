@@ -10,11 +10,20 @@ namespace MusicSalesApp.Models;
 // it has nowhere to put the sending creator's account.
 
 /// <summary>
-/// One follower as their artist sees them. Carries a pseudonym and nothing else about the person.
+/// One follower as their artist sees them.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="DisplayName"/> is a pseudonym ("Listener #4817") for an ordinary listener, and the
+/// follower's own public artist name when the follower is themselves an active creator - see
+/// <see cref="IsIdentifiedArtist"/>. Either way it is the ONLY thing about the person this record
+/// can carry: there is still no field able to hold an email, a username or a listener id.
+/// </para>
+/// </remarks>
 public sealed record ArtistFollowerSummaryDto(
     int ArtistFollowerId,
-    string AnonymousDisplayName,
+    string DisplayName,
+    bool IsIdentifiedArtist,
     DateTime FollowedDateUtc,
     int? SourceSongMetadataId,
     string? SourceSongTitle,

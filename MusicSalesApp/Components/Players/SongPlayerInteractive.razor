@@ -133,6 +133,11 @@ else
                 {
                     <div class="song-action-cluster">
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId()" />
+                        @* Beside like and report rather than down in the artist panel: it is an
+                           icon action on this song's artist, and this is where icon actions live. *@
+                        <FollowArtistButton CreatorPersonaId="@(GetPersona()?.Id ?? 0)"
+                                            PersonaName="@GetArtistDisplayName()"
+                                            SourceSongMetadataId="GetSongMetadataId()" />
                         <ReportButton SongMetadataId="GetSongMetadataId()" />
                         @if (CanShowTipButton())
                         {
@@ -247,15 +252,6 @@ else
                         <span class="artist-name-info">
                             <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
                         </span>
-                        @*
-                            Following is artist-level, never song-level, so this sits with the
-                            artist's name rather than in the row of song actions above. The count
-                            is left off here - the artist page carries it, and this panel is
-                            already dense.
-                        *@
-                        <FollowArtistButton CreatorPersonaId="@(persona?.Id ?? 0)"
-                                            PersonaName="@GetArtistDisplayName()"
-                                            SourceSongMetadataId="@GetSongMetadataId()" />
                     </div>
                 </div>
 

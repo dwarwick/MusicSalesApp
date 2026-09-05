@@ -37,12 +37,13 @@ public class FollowArtistButtonTests : BUnitTestBase
             .Add(p => p.CreatorPersonaId, PersonaId)
             .Add(p => p.PersonaName, "Alex Rivers"));
 
-        cut.WaitForState(() => cut.Markup.Contains("Follow"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("follow-artist-bell"), TimeSpan.FromSeconds(5));
 
         Assert.Multiple(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("Follow"));
-            Assert.That(cut.Markup, Does.Not.Contain("Following ✓"));
+            // Outline bell, and the title is what carries the meaning for hover and screen readers.
+            Assert.That(cut.Markup, Does.Not.Contain("is-following"));
+            Assert.That(cut.Markup, Does.Contain("Follow Alex Rivers"));
         });
     }
 
@@ -55,9 +56,14 @@ public class FollowArtistButtonTests : BUnitTestBase
             .Add(p => p.CreatorPersonaId, PersonaId)
             .Add(p => p.PersonaName, "Alex Rivers"));
 
-        cut.WaitForState(() => cut.Markup.Contains("Following"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("is-following"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("Following ✓"));
+        // Filled bell. The class is the state; aria-pressed says the same thing to assistive tech.
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("is-following"));
+            Assert.That(cut.Markup, Does.Contain("aria-pressed=\"true\""));
+        });
     }
 
     [Test]
@@ -91,10 +97,10 @@ public class FollowArtistButtonTests : BUnitTestBase
             .Add(p => p.CreatorPersonaId, PersonaId)
             .Add(p => p.PersonaName, "Alex Rivers"));
 
-        cut.WaitForState(() => cut.Markup.Contains("Follow"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("follow-artist-bell"), TimeSpan.FromSeconds(5));
         cut.Find("button").Click();
 
-        Assert.That(cut.Markup, Does.Not.Contain("Following ✓"));
+        Assert.That(cut.Markup, Does.Not.Contain("is-following"));
     }
 
     [Test]
@@ -112,7 +118,7 @@ public class FollowArtistButtonTests : BUnitTestBase
             .Add(p => p.PersonaName, "Alex Rivers")
             .Add(p => p.SourceSongMetadataId, 99));
 
-        cut.WaitForState(() => cut.Markup.Contains("Follow"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("follow-artist-bell"), TimeSpan.FromSeconds(5));
         cut.Find("button").Click();
 
         MockArtistFollowService.Verify(
@@ -133,11 +139,11 @@ public class FollowArtistButtonTests : BUnitTestBase
             .Add(p => p.PersonaName, "Alex Rivers")
             .Add(p => p.KnownIsFollowing, true));
 
-        cut.WaitForState(() => cut.Markup.Contains("Following"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("is-following"), TimeSpan.FromSeconds(5));
 
         Assert.Multiple(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("Following ✓"), "The supplied state is authoritative.");
+            Assert.That(cut.Markup, Does.Contain("is-following"), "The supplied state is authoritative.");
             MockArtistFollowService.Verify(
                 x => x.IsFollowingAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
                 Times.Never);

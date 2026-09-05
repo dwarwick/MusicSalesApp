@@ -59,7 +59,7 @@ public class ArtistFollowerDirectoryServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(followers[0].AnonymousDisplayName, Does.StartWith("Listener #"));
+            Assert.That(followers[0].DisplayName, Does.StartWith("Listener #"));
             Assert.That(followers[0].SourceSongTitle, Is.EqualTo("Midnight Highway"));
 
             Assert.That(serialised, Does.Not.Contain("listener@test.com"));
@@ -86,7 +86,7 @@ public class ArtistFollowerDirectoryServiceTests
             Assert.That(propertyNames, Has.None.Contains("Email"));
             Assert.That(propertyNames, Has.None.Contains("UserName"));
             Assert.That(propertyNames, Has.None.Contains("ListenerUserId"));
-            Assert.That(propertyNames, Does.Contain("AnonymousDisplayName"));
+            Assert.That(propertyNames, Does.Contain("DisplayName"));
         });
     }
 
@@ -167,7 +167,7 @@ public class ArtistFollowerDirectoryServiceTests
 
         var after = (await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId))![0];
 
-        Assert.That(after.AnonymousDisplayName, Is.EqualTo(before.AnonymousDisplayName));
+        Assert.That(after.DisplayName, Is.EqualTo(before.DisplayName));
     }
 
     [Test]
@@ -220,6 +220,148 @@ public class ArtistFollowerDirectoryServiceTests
         {
             Assert.That(await _service.OwnsPersonaAsync(_harness.PersonaId, _harness.CreatorId), Is.True);
             Assert.That(await _service.OwnsPersonaAsync(_harness.PersonaId, _harness.CreatorId + 999), Is.False);
+        });
+    }
+
+    // ------------------------------------------------------ followers who are artists themselves
+
+    /// <summary>
+    /// Turns the seeded listener into an active creator, optionally with an enabled persona, and
+    /// returns nothing - the point is the state it leaves behind.
+    /// </summary>
+    private async Task MakeListenerAnArtistAsync(string personaName, string creatorDisplayName)
+    {
+        await using var context = _harness.NewContext();
+
+        var creator = new Creator
+        {
+            UserId = _harness.ListenerUserId,
+            DisplayName = creatorDisplayName,
+            IsActive = true,
+        };
+
+        context.Creators.Add(creator);
+        await context.SaveChangesAsync();
+
+        if (!string.IsNullOrEmpty(personaName))
+        {
+            context.CreatorPersonas.Add(new CreatorPersona
+            {
+                CreatorId = creator.Id,
+                Name = personaName,
+                IsEnabled = true,
+            });
+
+            await context.SaveChangesAsync();
+        }
+    }
+
+    [Test]
+    public async Task GetFollowers_NamesAFollowerWhoIsThemselvesAnArtist()
+    {
+        // Artist-to-artist discovery: the creator can see who it is and go and hear their music.
+        // The persona name is already public on every song card, so nothing new about the ACCOUNT
+        // is disclosed - what is new is the association with following.
+        await MakeListenerAnArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(followers![0].DisplayName, Is.EqualTo("Jane Echo"));
+            Assert.That(followers[0].IsIdentifiedArtist, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task GetFollowers_FallsBackToTheCreatorDisplayNameWhenThereIsNoPersona()
+    {
+        // The same chain a song credit uses: persona first, then the creator display name.
+        await MakeListenerAnArtistAsync(personaName: null, creatorDisplayName: "Jane");
+        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(followers![0].DisplayName, Is.EqualTo("Jane"));
+            Assert.That(followers[0].IsIdentifiedArtist, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task GetFollowers_NeverFallsBackToTheEmailTheWayASongCreditWould()
+    {
+        // GetEffectiveArtistName has a third link - the email with the domain stripped - which is
+        // fine for a credit the account holder chose to publish under and completely wrong here.
+        // A creator with no persona and no display name stays a pseudonym.
+        await MakeListenerAnArtistAsync(personaName: null, creatorDisplayName: null);
+        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+        var serialised = JsonSerializer.Serialize(followers);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(followers![0].DisplayName, Does.StartWith("Listener #"));
+            Assert.That(followers[0].IsIdentifiedArtist, Is.False);
+            Assert.That(serialised, Does.Not.Contain("listener"), "No fragment of the address may appear.");
+        });
+    }
+
+    [Test]
+    public async Task GetFollowers_KeepsAnInactiveCreatorAnonymous()
+    {
+        // Only identities that are publicly live right now are named. Somebody who has stopped
+        // being a creator is not publishing under that name any more.
+        await MakeListenerAnArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+
+        await using (var context = _harness.NewContext())
+        {
+            var creator = await context.Creators.SingleAsync(c => c.UserId == _harness.ListenerUserId);
+            creator.IsActive = false;
+            await context.SaveChangesAsync();
+        }
+
+        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+
+        Assert.That(followers![0].DisplayName, Does.StartWith("Listener #"));
+    }
+
+    [Test]
+    public async Task GetFollowers_KeepsASuspendedArtistAnonymous()
+    {
+        await MakeListenerAnArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+
+        await using (var context = _harness.NewContext())
+        {
+            var user = await context.Users.SingleAsync(u => u.Id == _harness.ListenerUserId);
+            user.IsSuspended = true;
+            await context.SaveChangesAsync();
+        }
+
+        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+
+        Assert.That(followers![0].DisplayName, Does.StartWith("Listener #"));
+    }
+
+    [Test]
+    public async Task GetFollowers_KeepsAnOrdinaryListenerAnonymous()
+    {
+        // The common case, and the one the whole feature is built around.
+        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(followers![0].DisplayName, Does.StartWith("Listener #"));
+            Assert.That(followers[0].IsIdentifiedArtist, Is.False);
         });
     }
 }

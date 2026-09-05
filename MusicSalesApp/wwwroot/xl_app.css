@@ -947,9 +947,3 @@
     font-size: 16px;
     font-weight: 600;
 }
-
-/* Follow button on a library card — smaller than the page-level one, which is sized for a hero. */
-.card-follow-artist .follow-artist-button {
-    font-size: 12px;
-    padding: 2px 10px;
-}

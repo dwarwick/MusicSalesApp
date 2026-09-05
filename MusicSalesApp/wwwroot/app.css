@@ -4847,3 +4847,26 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
 .follow-row-actions {
     flex-wrap: wrap;
 }
+
+/* Follow bell. Shaped exactly like .like-button so it sits in the same icon cluster without
+   needing its own metrics - colour lives in the theme sheets. */
+.follow-artist-bell {
+    border: none;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+}
+
+.follow-artist-bell:hover {
+    transform: scale(1.05);
+}
+
+.follow-artist-bell:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

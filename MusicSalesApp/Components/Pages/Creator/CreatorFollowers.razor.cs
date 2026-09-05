@@ -113,6 +113,16 @@ public partial class CreatorFollowersModel : BlazorBase
         _followers = followers?.ToList() ?? [];
     }
 
+    /// <summary>
+    /// The artist page for a follower who is themselves a creator, so the two can find each other.
+    /// </summary>
+    /// <remarks>
+    /// Name-keyed because that is what /artist/{ArtistName} takes - the same URL the song cards
+    /// build. Only ever reached for a follower the service already identified as an active artist.
+    /// </remarks>
+    protected static string ArtistUrl(string artistName) =>
+        $"/artist/{Uri.EscapeDataString(artistName ?? string.Empty)}";
+
     protected string GetPersonaButtonClass(int personaId) =>
         personaId == _selectedPersonaId
             ? "e-btn settings-btn settings-btn-violet"

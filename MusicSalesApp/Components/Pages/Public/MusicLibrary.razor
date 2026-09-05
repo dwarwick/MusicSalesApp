@@ -255,6 +255,18 @@ else
                                       CssClass="card-ai-content-badges" />
                     <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false"
                                         KnownHasStreamed="HasUserStreamedSong(f.Name)" />
+                    @{
+                        var cardArtist = GetArtistInfo(f.Name);
+                    }
+                    @* Following is artist-level, but the control belongs with the other icons
+                       rather than beside the artist name - it is the same kind of thing as like
+                       and report. KnownIsFollowing is what keeps it to ONE query for the whole
+                       page instead of one per card. Renders nothing when the song has no persona. *@
+                    <FollowArtistButton CreatorPersonaId="@(cardArtist.PersonaId ?? 0)"
+                                        PersonaName="@cardArtist.DisplayName"
+                                        SourceSongMetadataId="GetSongMetadataId(f.Name)"
+                                        KnownIsFollowing="IsFollowingArtist(cardArtist.PersonaId)"
+                                        OnFollowStateChanged="@(following => OnArtistFollowStateChanged(cardArtist.PersonaId, following))" />
                 </div>
 
                 <!-- Song Title -->
@@ -282,17 +294,6 @@ else
                                  loading="lazy" decoding="async" />
                         }
                         <a href="@artistInfo.LinkUrl" @onclick:stopPropagation="true" title="View all songs by @artistInfo.DisplayName">@artistInfo.DisplayName</a>
-                    </div>
-                    @* Following is artist-level, so this sits with the artist's name rather than in
-                       the song action row above. KnownIsFollowing is what keeps it to ONE query for
-                       the whole page instead of one per card - see the parameter's own note. It
-                       renders nothing at all when the song has no persona. *@
-                    <div class="card-follow-artist" @onclick:stopPropagation="true">
-                        <FollowArtistButton CreatorPersonaId="@(artistInfo.PersonaId ?? 0)"
-                                            PersonaName="@artistInfo.DisplayName"
-                                            SourceSongMetadataId="GetSongMetadataId(f.Name)"
-                                            KnownIsFollowing="IsFollowingArtist(artistInfo.PersonaId)"
-                                            OnFollowStateChanged="@(following => OnArtistFollowStateChanged(artistInfo.PersonaId, following))" />
                     </div>
                 }
                 <!-- Genre (clickable link) -->

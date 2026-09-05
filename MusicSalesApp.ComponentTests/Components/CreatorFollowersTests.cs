@@ -24,7 +24,8 @@ public class CreatorFollowersTests : BUnitTestBase
         SetupCreator(
             new ArtistFollowerSummaryDto(
                 ArtistFollowerId: 1,
-                AnonymousDisplayName: "Listener #4817",
+                DisplayName: "Listener #4817",
+                IsIdentifiedArtist: false,
                 FollowedDateUtc: new DateTime(2026, 9, 3, 0, 0, 0, DateTimeKind.Utc),
                 SourceSongMetadataId: 99,
                 SourceSongTitle: "Midnight Highway",
@@ -53,8 +54,8 @@ public class CreatorFollowersTests : BUnitTestBase
     public void CreatorFollowers_OffersAThankYouOnlyToSomeoneNotYetThanked()
     {
         SetupCreator(
-            new ArtistFollowerSummaryDto(1, "Listener #4817", DateTime.UtcNow, null, null, false, null, null),
-            new ArtistFollowerSummaryDto(2, "Listener #3012", DateTime.UtcNow, null, null, true, DateTime.UtcNow, "Thanks!"));
+            new ArtistFollowerSummaryDto(1, "Listener #4817", false, DateTime.UtcNow, null, null, false, null, null),
+            new ArtistFollowerSummaryDto(2, "Listener #3012", false, DateTime.UtcNow, null, null, true, DateTime.UtcNow, "Thanks!"));
 
         var cut = TestContext.Render<CreatorFollowers>();
         cut.WaitForState(() => cut.Markup.Contains("Listener #4817"), TimeSpan.FromSeconds(5));

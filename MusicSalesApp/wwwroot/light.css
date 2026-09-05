@@ -1781,3 +1781,16 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .follow-row.is-unread {
     border-left: 3px solid var(--st-accent);
 }
+
+/* Follow bell. Matches .like-button so the cluster reads as one control group. The FILLED glyph
+   is what signals following - the tinted background only echoes what like/dislike do when active,
+   so the state does not rest on colour alone. */
+.follow-artist-bell {
+    color: black;
+    background-color: white;
+}
+
+.follow-artist-bell:hover,
+.follow-artist-bell.is-following {
+    background-color: rgba(179, 179, 179, 0.2);
+}
