@@ -4,21 +4,28 @@ using MusicSalesApp.Models;
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Delivers a push message to devices on one platform.
+/// Delivers a push message to devices.
 /// </summary>
 /// <remarks>
-/// One implementation per transport, registered as a set and selected by
-/// <see cref="Platform"/>. Android goes through Firebase Cloud Messaging and iOS goes straight to
-/// APNs - deliberately not routing iOS through FCM as well, which would mean putting the Firebase
-/// SDK into the iOS app head. That head already carries documented App Store launch-crash
-/// workarounds around static registration and LLVM AOT, and a large native SDK is the kind of
-/// change that reopens them. Direct APNs is a JWT and an HTTP/2 request with no SDK at all.
+/// <para>
+/// <b>One transport serves both platforms:</b> Firebase Cloud Messaging relays to APNs for iOS, so
+/// the server never speaks to Apple directly. The APNs auth key is uploaded to the Firebase console
+/// rather than living on this server.
+/// </para>
+/// <para>
+/// That is what removes the sandbox/production token split, the nastiest failure mode in push: FCM
+/// records the APNs environment against each token at registration, so a development-signed build
+/// and a TestFlight build can both be delivered to without the server knowing - or needing to know
+/// - which is which. Talking to APNs directly means owning that distinction forever, and getting it
+/// wrong produces an unhelpful BadDeviceToken in both directions.
+/// </para>
+/// <para>
+/// This stays an interface rather than collapsing into the dispatcher so a second transport can be
+/// added later without the dispatcher learning about transports.
+/// </para>
 /// </remarks>
 public interface IPushNotificationSender
 {
-    /// <summary>One of <c>PushPlatforms</c>.</summary>
-    string Platform { get; }
-
     /// <summary>
     /// False when the credentials are absent. The whole feature is inert rather than broken in that
     /// state, matching how Sign in with Apple revocation behaves without its key.

@@ -16,10 +16,16 @@ public static class PushNotificationChannels
     /// a listener who mutes it in Android settings mutes the feature rather than half of it -
     /// per-artist and per-kind control already exists inside the app, where it can be explained.
     /// </summary>
-    public const string ArtistUpdates = "artist_updates";
+    /// <remarks>
+    /// The value is prefixed because a channel id is scoped to the app, not to a feature, and sits
+    /// alongside the playback channel - an unprefixed "artist_updates" reads as ambiguous next to
+    /// it. Changing this string orphans the channel on every device that already created one, so
+    /// treat it as fixed.
+    /// </remarks>
+    public const string ArtistUpdates = "streamtunes_artist_updates";
 
     /// <summary>Human-readable channel name, shown in Android's notification settings.</summary>
-    public const string ArtistUpdatesName = "Artists you follow";
+    public const string ArtistUpdatesName = "Artist updates";
 
     public const string ArtistUpdatesDescription =
         "New music and messages from artists you follow on StreamTunes.";

@@ -438,13 +438,10 @@ try
     builder.Services.AddScoped<IArtistMessageModerationService, ArtistMessageModerationService>();
     builder.Services.AddScoped<IArtistNotificationPreferenceService, ArtistNotificationPreferenceService>();
 
-    // Push. The two senders are registered against the SAME interface on purpose - the dispatcher
-    // takes IEnumerable<IPushNotificationSender> and selects by platform, so adding a transport
-    // later is a registration rather than a change to the dispatcher. Both are singletons: each
-    // caches a credential (an OAuth token, an APNs provider token) whose whole value is being
-    // reused across sends.
+    // Push. One transport for both platforms - FCM relays to APNs for iOS, so nothing here talks
+    // to Apple directly. A singleton because it caches the OAuth access token, which is the whole
+    // point of not minting one per send.
     builder.Services.AddSingleton<IPushNotificationSender, FirebasePushNotificationSender>();
-    builder.Services.AddSingleton<IPushNotificationSender, ApplePushNotificationSender>();
     builder.Services.AddScoped<IPushDeviceTokenService, PushDeviceTokenService>();
     builder.Services.AddScoped<IArtistPushDispatchService, ArtistPushDispatchService>();
     builder.Services.AddScoped<IContactRequestEmailService, ContactRequestEmailService>();

@@ -17,30 +17,25 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
 
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly IPushDeviceTokenService _deviceTokenService;
-    private readonly IReadOnlyDictionary<string, IPushNotificationSender> _senders;
+    private readonly IPushNotificationSender _sender;
     private readonly ILogger<ArtistPushDispatchService> _logger;
 
     public ArtistPushDispatchService(
         IDbContextFactory<AppDbContext> dbContextFactory,
         IPushDeviceTokenService deviceTokenService,
-        IEnumerable<IPushNotificationSender> senders,
+        IPushNotificationSender sender,
         ILogger<ArtistPushDispatchService> logger)
     {
         _dbContextFactory = dbContextFactory;
         _deviceTokenService = deviceTokenService;
+        _sender = sender;
         _logger = logger;
-
-        // Last registration per platform wins, which keeps a test's fake sender able to replace
-        // the real one without unregistering it first.
-        _senders = senders
-            .GroupBy(sender => sender.Platform)
-            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc />
     public async Task<int> DispatchPendingAsync()
     {
-        if (!_senders.Values.Any(sender => sender.IsConfigured))
+        if (!_sender.IsConfigured)
         {
             // Nothing configured. Leave every row unstamped so that configuring credentials later
             // delivers the backlog rather than silently skipping it, and say so once per run
@@ -181,35 +176,26 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
             var message = BuildMessage(item);
             var anyDeferred = false;
 
-            foreach (var group in devices.GroupBy(device => device.Platform))
+            // Not grouped by platform: FCM delivers to Android and iOS tokens alike, so
+            // PushDeviceToken.Platform is kept for diagnostics rather than for routing.
+            var results = await _sender.SendAsync(
+                message, devices.Select(device => device.Token).ToList());
+
+            foreach (var result in results)
             {
-                if (!_senders.TryGetValue(group.Key, out var sender) || !sender.IsConfigured)
+                switch (result.Outcome)
                 {
-                    // A platform we cannot currently reach. Deferred rather than settled, so an
-                    // Android-only outage does not silently drop every Android listener's push.
-                    anyDeferred = true;
-                    continue;
-                }
+                    case PushDeliveryOutcome.Delivered:
+                        delivered++;
+                        break;
 
-                var results = await sender.SendAsync(
-                    message, group.Select(device => device.Token).ToList());
+                    case PushDeliveryOutcome.TokenRejected:
+                        rejectedTokens.Add(result.Token);
+                        break;
 
-                foreach (var result in results)
-                {
-                    switch (result.Outcome)
-                    {
-                        case PushDeliveryOutcome.Delivered:
-                            delivered++;
-                            break;
-
-                        case PushDeliveryOutcome.TokenRejected:
-                            rejectedTokens.Add(result.Token);
-                            break;
-
-                        case PushDeliveryOutcome.TransportFailure:
-                            anyDeferred = true;
-                            break;
-                    }
+                    case PushDeliveryOutcome.TransportFailure:
+                        anyDeferred = true;
+                        break;
                 }
             }
 

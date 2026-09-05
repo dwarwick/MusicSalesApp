@@ -15,7 +15,7 @@ namespace MusicSalesApp.Tests.Services;
 public class ArtistPushDispatchServiceTests
 {
     private ArtistFollowTestHarness _harness;
-    private FakePushSender _android;
+    private FakePushSender _sender;
     private ArtistFollowService _followService;
     private ArtistFollowerMessageService _messageService;
     private ArtistReleaseNotificationService _releaseService;
@@ -26,7 +26,7 @@ public class ArtistPushDispatchServiceTests
     public void SetUp()
     {
         _harness = new ArtistFollowTestHarness();
-        _android = new FakePushSender(PushPlatforms.Android);
+        _sender = new FakePushSender();
 
         var email = new Mock<IEmailService>();
         email.Setup(x => x.GetAppBaseUrl()).Returns("https://streamtunes.net");
@@ -51,7 +51,7 @@ public class ArtistPushDispatchServiceTests
         _service = new ArtistPushDispatchService(
             _harness.ContextFactory.Object,
             _deviceTokenService,
-            [_android],
+            _sender,
             Mock.Of<ILogger<ArtistPushDispatchService>>());
     }
 
@@ -85,9 +85,9 @@ public class ArtistPushDispatchServiceTests
         {
             Assert.That(delivered, Is.EqualTo(1));
             Assert.That(notification.PushSentDateUtc, Is.Not.Null);
-            Assert.That(_android.Sent, Has.Count.EqualTo(1));
-            Assert.That(_android.Sent[0].Message.Title, Is.EqualTo("New music from Alex Rivers"));
-            Assert.That(_android.Sent[0].Message.Body, Does.Contain("Ocean Road"));
+            Assert.That(_sender.Sent, Has.Count.EqualTo(1));
+            Assert.That(_sender.Sent[0].Message.Title, Is.EqualTo("New music from Alex Rivers"));
+            Assert.That(_sender.Sent[0].Message.Body, Does.Contain("Ocean Road"));
         });
     }
 
@@ -100,7 +100,7 @@ public class ArtistPushDispatchServiceTests
 
         await _service.DispatchPendingAsync();
 
-        var data = _android.Sent[0].Message.Data;
+        var data = _sender.Sent[0].Message.Data;
 
         Assert.Multiple(() =>
         {
@@ -124,7 +124,7 @@ public class ArtistPushDispatchServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(second, Is.Zero);
-            Assert.That(_android.Sent, Has.Count.EqualTo(1));
+            Assert.That(_sender.Sent, Has.Count.EqualTo(1));
         });
     }
 
@@ -151,7 +151,7 @@ public class ArtistPushDispatchServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(delivered, Is.Zero);
-            Assert.That(_android.Sent, Is.Empty);
+            Assert.That(_sender.Sent, Is.Empty);
 
             // Stamped anyway, or the job re-examines this row every five minutes forever.
             Assert.That(notification.PushSentDateUtc, Is.Not.Null);
@@ -192,7 +192,7 @@ public class ArtistPushDispatchServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(delivered, Is.Zero);
-            Assert.That(_android.Sent, Is.Empty);
+            Assert.That(_sender.Sent, Is.Empty);
         });
     }
 
@@ -207,7 +207,7 @@ public class ArtistPushDispatchServiceTests
         _harness.AddSong("Ocean Road");
         await _releaseService.CreatePendingNotificationsAsync();
 
-        _android.NextOutcome = PushDeliveryOutcome.TransportFailure;
+        _sender.NextOutcome = PushDeliveryOutcome.TransportFailure;
         await _service.DispatchPendingAsync();
 
         await using (var context = _harness.NewContext())
@@ -218,7 +218,7 @@ public class ArtistPushDispatchServiceTests
                 "A transport failure must not settle the row.");
         }
 
-        _android.NextOutcome = PushDeliveryOutcome.Delivered;
+        _sender.NextOutcome = PushDeliveryOutcome.Delivered;
         var delivered = await _service.DispatchPendingAsync();
 
         await using var verify = _harness.NewContext();
@@ -240,7 +240,7 @@ public class ArtistPushDispatchServiceTests
         _harness.AddSong("Ocean Road");
         await _releaseService.CreatePendingNotificationsAsync();
 
-        _android.NextOutcome = PushDeliveryOutcome.TokenRejected;
+        _sender.NextOutcome = PushDeliveryOutcome.TokenRejected;
         await _service.DispatchPendingAsync();
 
         await using var context = _harness.NewContext();
@@ -260,7 +260,7 @@ public class ArtistPushDispatchServiceTests
     {
         // Unconfigured must behave like a transport failure, not like a delivery. Otherwise
         // deploying push before its credentials silently consumes the first days of notifications.
-        _android.Configured = false;
+        _sender.Configured = false;
 
         await FollowWithDeviceAsync();
         _harness.AddSong("Ocean Road");
@@ -295,8 +295,8 @@ public class ArtistPushDispatchServiceTests
         {
             Assert.That(delivered, Is.EqualTo(1));
             Assert.That(message.PushSentDateUtc, Is.Not.Null);
-            Assert.That(_android.Sent[0].Message.Title, Is.EqualTo("Alex Rivers sent you a message"));
-            Assert.That(_android.Sent[0].Message.Body, Is.EqualTo("Thanks for the support!"));
+            Assert.That(_sender.Sent[0].Message.Title, Is.EqualTo("Alex Rivers sent you a message"));
+            Assert.That(_sender.Sent[0].Message.Body, Is.EqualTo("Thanks for the support!"));
         });
     }
 
@@ -314,7 +314,7 @@ public class ArtistPushDispatchServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(delivered, Is.Zero);
-            Assert.That(_android.Sent, Is.Empty);
+            Assert.That(_sender.Sent, Is.Empty);
         });
     }
 
@@ -334,19 +334,16 @@ public class ArtistPushDispatchServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(refused.Outcome, Is.EqualTo(ArtistThankYouOutcome.ContentRejected));
-            Assert.That(_android.Sent, Is.Empty, "Nothing was ever stored, so nothing can be pushed.");
+            Assert.That(_sender.Sent, Is.Empty, "Nothing was ever stored, so nothing can be pushed.");
         });
     }
 
     /// <summary>
     /// A sender that records what it was asked to deliver and answers with a configurable outcome.
+    /// One instance covers both platforms, matching the single-transport design.
     /// </summary>
     private sealed class FakePushSender : IPushNotificationSender
     {
-        public FakePushSender(string platform) => Platform = platform;
-
-        public string Platform { get; }
-
         public bool Configured { get; set; } = true;
 
         public bool IsConfigured => Configured;

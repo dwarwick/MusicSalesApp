@@ -1,10 +1,10 @@
 #nullable enable
+using MusicSalesApp.Common.Helpers;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Google.Apis.Auth.OAuth2;
-using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -36,8 +36,6 @@ public sealed class FirebasePushNotificationSender : IPushNotificationSender
     private readonly ILogger<FirebasePushNotificationSender> _logger;
     private readonly GoogleCredential? _credential;
     private readonly string _projectId;
-
-    public string Platform => PushPlatforms.Android;
 
     public bool IsConfigured => _credential is not null && !string.IsNullOrWhiteSpace(_projectId);
 
