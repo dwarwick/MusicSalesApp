@@ -291,7 +291,8 @@ else
                         <FollowArtistButton CreatorPersonaId="@(artistInfo.PersonaId ?? 0)"
                                             PersonaName="@artistInfo.DisplayName"
                                             SourceSongMetadataId="GetSongMetadataId(f.Name)"
-                                            KnownIsFollowing="IsFollowingArtist(artistInfo.PersonaId)" />
+                                            KnownIsFollowing="IsFollowingArtist(artistInfo.PersonaId)"
+                                            OnFollowStateChanged="@(following => OnArtistFollowStateChanged(artistInfo.PersonaId, following))" />
                     </div>
                 }
                 <!-- Genre (clickable link) -->

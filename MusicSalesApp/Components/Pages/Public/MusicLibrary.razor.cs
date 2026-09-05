@@ -744,6 +744,44 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         personaId.HasValue ? _followedPersonaIds.Contains(personaId.Value) : null;
 
     /// <summary>
+    /// One card changed its follow state, so bring every other card by the same artist with it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Following is artist-level while a card is song-level, so a library page routinely shows a
+    /// dozen buttons for one artist. Without this they disagree until the page is reloaded - the
+    /// clicked card says Following and the rest still say Follow.
+    /// </para>
+    /// <para>
+    /// Deliberately local, and deliberately not SignalR. Every card that needs to know is in this
+    /// circuit, so a broadcast would be a round trip to learn something the page already knows -
+    /// and follow state is per-user, where a like COUNT is public. LikeDislikeButtons draws the
+    /// same line: LikeCountHub carries counts, and _userLikeStatus never leaves the circuit.
+    /// </para>
+    /// <para>
+    /// Updating the shared set is the whole mechanism. Each button reads KnownIsFollowing on every
+    /// render, so re-rendering the parent - which returning from an EventCallback does on its own -
+    /// is what makes the others agree.
+    /// </para>
+    /// </remarks>
+    protected void OnArtistFollowStateChanged(int? personaId, bool isFollowing)
+    {
+        if (personaId is not int id)
+        {
+            return;
+        }
+
+        if (isFollowing)
+        {
+            _followedPersonaIds.Add(id);
+        }
+        else
+        {
+            _followedPersonaIds.Remove(id);
+        }
+    }
+
+    /// <summary>
     /// Gets the display genre for a song. Returns "Unknown Genre" if genre is null or whitespace.
     /// </summary>
     protected string GetSongGenre(string fileName)
