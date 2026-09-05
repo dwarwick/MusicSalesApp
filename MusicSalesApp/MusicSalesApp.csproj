@@ -70,12 +70,18 @@
     <!-- ffmpeg.exe no longer ships here. Audio processing moved to the MusicSalesApp.Functions
          Azure Functions app, which owns the binary; this host does header-level container sniffing
          only. -->
-    <!-- Credentials the server loads at runtime by path (Apple .p8 signing keys, Firebase service
-         accounts). The whole App_Data\Secrets\ folder is gitignored, so these reach a deployment
-         only by riding along with publish. Every environment's files are published to every
-         environment - each appsettings names the one file it reads, which is why the Firebase
-         accounts are suffixed .test/.production rather than sharing a name. -->
-    <Content Include="App_Data\Secrets\*.p8;App_Data\Secrets\*.json">
+    <!-- Credentials the server loads at runtime by path. The whole App_Data\Secrets\ folder is
+         gitignored, so these reach a deployment only by riding along with publish.
+
+         Only .p8 needs a rule: the Web SDK's default globs already include **\*.json as Content
+         with CopyToPublishDirectory=PreserveNewest, so the Firebase service accounts publish on
+         their own. Adding them here duplicates the default item and fails with NETSDK1022 - use
+         Content Update, never Include, if their metadata ever needs changing.
+
+         Every environment's files publish to every environment, which is why the Firebase accounts
+         are suffixed .test/.production rather than sharing a name: each appsettings names the one
+         file its own server reads. -->
+    <Content Include="App_Data\Secrets\*.p8">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
