@@ -70,7 +70,12 @@
     <!-- ffmpeg.exe no longer ships here. Audio processing moved to the MusicSalesApp.Functions
          Azure Functions app, which owns the binary; this host does header-level container sniffing
          only. -->
-    <Content Include="App_Data\Secrets\*.p8">
+    <!-- Credentials the server loads at runtime by path (Apple .p8 signing keys, Firebase service
+         accounts). The whole App_Data\Secrets\ folder is gitignored, so these reach a deployment
+         only by riding along with publish. Every environment's files are published to every
+         environment - each appsettings names the one file it reads, which is why the Firebase
+         accounts are suffixed .test/.production rather than sharing a name. -->
+    <Content Include="App_Data\Secrets\*.p8;App_Data\Secrets\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
