@@ -89,6 +89,38 @@ public sealed record ArtistFollowerAnalyticsDto(
     IReadOnlyList<FollowSourceSongDto> TopSongsGeneratingFollows);
 
 /// <summary>
+/// The identities a listener may follow as, and whether they have consented to being named at all.
+/// </summary>
+/// <param name="RevealsPersona">
+/// The creator's standing consent. False for anyone who is not a creator, and false by default for
+/// those who are - in which case the follow is anonymous and no choice is offered.
+/// </param>
+/// <param name="Personas">
+/// The follower's own enabled personas, for the "Follow as" dialog. Only meaningful when
+/// <paramref name="RevealsPersona"/> is true.
+/// </param>
+public sealed record FollowAsOptionsDto(
+    bool RevealsPersona,
+    IReadOnlyList<FollowAsPersonaDto> Personas)
+{
+    /// <summary>
+    /// True when the listener has a genuine choice to make. One persona needs no dialog, and
+    /// neither does no consent.
+    /// </summary>
+    public bool NeedsChoice => RevealsPersona && Personas.Count > 1;
+
+    /// <summary>
+    /// The identity to use without asking: the only persona when there is exactly one, otherwise
+    /// null for anonymous.
+    /// </summary>
+    public int? DefaultPersonaId =>
+        RevealsPersona && Personas.Count == 1 ? Personas[0].Id : null;
+}
+
+/// <summary>One of the follower's own personas, as offered in the "Follow as" dialog.</summary>
+public sealed record FollowAsPersonaDto(int Id, string Name);
+
+/// <summary>
 /// How many follows one song is credited with starting.
 /// </summary>
 public sealed record FollowSourceSongDto(int SongMetadataId, string SongTitle, int FollowCount);

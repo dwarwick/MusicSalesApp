@@ -60,7 +60,7 @@ public class MobileFollowControllerTests
     public async Task SetFollowState_ReturnsFollowingTrueWhenTheFollowIsCreated()
     {
         _followService
-            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, true, 7, It.IsAny<CancellationToken>()))
+            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, true, 7, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ArtistFollowOutcome.Followed);
 
         var result = await _controller.SetFollowState(
@@ -83,7 +83,7 @@ public class MobileFollowControllerTests
         // The replayed-intent case. It must read as "your request is satisfied", not as an error,
         // or the client drops an intent that actually took effect on an earlier attempt.
         _followService
-            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, true, null, It.IsAny<CancellationToken>()))
+            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, true, null, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ArtistFollowOutcome.AlreadyFollowing);
 
         var result = await _controller.SetFollowState(TestPersonaId, new SetFollowStateRequest { Following = true });
@@ -97,7 +97,7 @@ public class MobileFollowControllerTests
     public async Task SetFollowState_TreatsNotFollowingAsSuccessWhenUnfollowing()
     {
         _followService
-            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, false, null, It.IsAny<CancellationToken>()))
+            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, false, null, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ArtistFollowOutcome.NotFollowing);
 
         var result = await _controller.SetFollowState(TestPersonaId, new SetFollowStateRequest { Following = false });
@@ -114,7 +114,7 @@ public class MobileFollowControllerTests
         // Not 404, and above all not a 5xx: the client retries 5xx forever and stops flushing at
         // the first failure, so a permanent condition dressed as transient blocks the whole queue.
         _followService
-            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, true, null, It.IsAny<CancellationToken>()))
+            .Setup(s => s.SetFollowStateAsync(TestPersonaId, TestUserId, true, null, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
 
         var result = await _controller.SetFollowState(TestPersonaId, new SetFollowStateRequest { Following = true });
@@ -142,7 +142,7 @@ public class MobileFollowControllerTests
             Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
             _followService.Verify(
                 s => s.SetFollowStateAsync(
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()),
                 Times.Never);
         });
     }

@@ -108,4 +108,32 @@ public class ArtistFollower
     /// </remarks>
     [Required]
     public int AnonymousListenerNumber { get; set; }
+
+    /// <summary>
+    /// Which of the follower's own personas they chose to be seen as for THIS follow, or null to
+    /// follow anonymously.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set only when the follower is a creator who has switched
+    /// <see cref="Creator.RevealPersonaToFollowedArtists"/> on. It records a choice, not a
+    /// permission: the name is shown only if that consent is STILL on when the list is read, so
+    /// this value alone never reveals anything.
+    /// </para>
+    /// <para>
+    /// A stored choice is what makes the two directions asymmetric, on purpose. Switching consent
+    /// off hides every follow immediately; switching it on names nothing retroactively, because
+    /// follows made anonymously carry no choice here. Hiding should be automatic, revealing should
+    /// take a deliberate act.
+    /// </para>
+    /// <para>
+    /// <b>Deliberately not a foreign key.</b> ArtistFollower already cascades from CreatorPersona
+    /// through <see cref="CreatorPersonaId"/>, and a second relationship to the same table would be
+    /// a second cascade path, which SQL Server refuses - leaving NoAction, which would make
+    /// deleting a persona fail unless every one of these were cleared first. A plain id degrades
+    /// the right way instead: the display query only names a persona that still exists and is
+    /// still enabled, so a deleted one silently reverts the follow to anonymous.
+    /// </para>
+    /// </remarks>
+    public int? FollowAsPersonaId { get; set; }
 }

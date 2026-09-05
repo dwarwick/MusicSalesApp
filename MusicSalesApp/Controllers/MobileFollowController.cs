@@ -65,7 +65,7 @@ public class MobileFollowController : ControllerBase
         }
 
         var outcome = await _followService.SetFollowStateAsync(
-            creatorPersonaId, userId, request.Following, request.SourceSongId);
+            creatorPersonaId, userId, request.Following, request.SourceSongId, request.FollowAsPersonaId);
 
         return outcome switch
         {
@@ -292,6 +292,15 @@ public sealed class SetFollowStateRequest
     /// to this persona.
     /// </summary>
     public int? SourceSongId { get; set; }
+
+    /// <summary>
+    /// Which of the caller's OWN personas to be seen as, or null to follow anonymously.
+    /// </summary>
+    /// <remarks>
+    /// Ignored unless the caller has switched on the reveal consent AND the persona is genuinely
+    /// theirs - the service revalidates both, so a client cannot attribute its follow to a stranger.
+    /// </remarks>
+    public int? FollowAsPersonaId { get; set; }
 }
 
 public sealed class FollowStatesRequest

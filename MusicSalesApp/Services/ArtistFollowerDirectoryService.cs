@@ -110,19 +110,33 @@ public class ArtistFollowerDirectoryService : IArtistFollowerDirectoryService
                 // Both are gated on the identity being publicly live RIGHT NOW: an inactive
                 // creator or a suspended account is not publishing under that name any more, and
                 // falls back to the pseudonym.
+                // Every clause is required for a name to appear, and each one is a different way
+                // for the answer to be "stay anonymous":
+                //   - the follower picked this identity for THIS follow (FollowAsPersonaId)
+                //   - their consent is still on RIGHT NOW - which is what makes withdrawal
+                //     immediate and total, including for artists followed while it was on
+                //   - the persona still exists and is still enabled
+                //   - the creator is active and not suspended
                 FollowerPersonaName = context.CreatorPersonas
-                    .Where(persona => persona.Creator.UserId == follow.ListenerUserId
+                    .Where(persona => persona.Id == follow.FollowAsPersonaId
                                       && persona.IsEnabled
+                                      && persona.Creator.UserId == follow.ListenerUserId
                                       && persona.Creator.IsActive
+                                      && persona.Creator.RevealPersonaToFollowedArtists
                                       && (persona.Creator.User == null || !persona.Creator.User.IsSuspended))
-                    .OrderBy(persona => persona.Id)
                     .Select(persona => persona.Name)
                     .FirstOrDefault(),
 
+                // The no-persona case: a consenting creator who publishes under their display
+                // name. Guarded on having no personas at all, so a creator WITH personas who
+                // simply followed anonymously is not named by this back door.
                 FollowerCreatorDisplayName = context.Creators
                     .Where(creator => creator.UserId == follow.ListenerUserId
                                       && creator.IsActive
-                                      && (creator.User == null || !creator.User.IsSuspended))
+                                      && creator.RevealPersonaToFollowedArtists
+                                      && (creator.User == null || !creator.User.IsSuspended)
+                                      && !context.CreatorPersonas.Any(persona =>
+                                             persona.CreatorId == creator.Id && persona.IsEnabled))
                     .Select(creator => creator.DisplayName)
                     .FirstOrDefault(),
             })

@@ -90,7 +90,7 @@ public class FollowArtistButtonTests : BUnitTestBase
 
         MockArtistFollowService
             .Setup(x => x.SetFollowStateAsync(
-                PersonaId, UserId, true, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+                PersonaId, UserId, true, It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ArtistFollowOutcome.ArtistUnavailable);
 
         var cut = TestContext.Render<FollowArtistButton>(parameters => parameters
@@ -110,7 +110,7 @@ public class FollowArtistButtonTests : BUnitTestBase
 
         MockArtistFollowService
             .Setup(x => x.SetFollowStateAsync(
-                PersonaId, UserId, true, 99, It.IsAny<CancellationToken>()))
+                PersonaId, UserId, true, 99, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ArtistFollowOutcome.Followed);
 
         var cut = TestContext.Render<FollowArtistButton>(parameters => parameters
@@ -122,7 +122,7 @@ public class FollowArtistButtonTests : BUnitTestBase
         cut.Find("button").Click();
 
         MockArtistFollowService.Verify(
-            x => x.SetFollowStateAsync(PersonaId, UserId, true, 99, It.IsAny<CancellationToken>()),
+            x => x.SetFollowStateAsync(PersonaId, UserId, true, 99, It.IsAny<int?>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -162,5 +162,11 @@ public class FollowArtistButtonTests : BUnitTestBase
         MockArtistFollowService
             .Setup(x => x.GetFollowerCountAsync(PersonaId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(followerCount);
+
+        // Consulted on every click to follow. Default is an ordinary listener: no consent, so no
+        // "Follow as" dialog and an anonymous follow.
+        MockArtistFollowService
+            .Setup(x => x.GetFollowAsOptionsAsync(UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FollowAsOptionsDto(false, []));
     }
 }

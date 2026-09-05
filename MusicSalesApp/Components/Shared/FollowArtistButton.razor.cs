@@ -63,6 +63,12 @@ public partial class FollowArtistButtonModel : BlazorBase
     private int? _currentUserId;
     private int _loadedPersonaId;
 
+    // The dialogs are not rendered until one is needed - see the note in the markup.
+    protected bool _dialogsRequested;
+    protected bool _showFollowAsDialog;
+    protected IReadOnlyList<FollowAsPersonaDto> _followAsOptions = [];
+    protected int? _selectedFollowAsPersonaId;
+
     /// <summary>
     /// The count as shown. Abbreviated past a thousand because the exact figure stops being the
     /// interesting part and starts being noise on a card.
@@ -145,13 +151,74 @@ public partial class FollowArtistButtonModel : BlazorBase
             return;
         }
 
-        _isProcessing = true;
         var wanted = !_isFollowing;
+
+        // Only when STARTING to follow, and only for a listener who has consented, is there an
+        // identity to choose. Unfollowing never asks anything.
+        if (wanted)
+        {
+            try
+            {
+                var options = await ArtistFollowService.GetFollowAsOptionsAsync(_currentUserId.Value);
+
+                if (options.NeedsChoice)
+                {
+                    _followAsOptions = options.Personas;
+
+                    // Anonymous is the pre-selected option even here. Consenting in general is not
+                    // consenting to every artist, and the safe answer should be the default one.
+                    _selectedFollowAsPersonaId = null;
+                    _dialogsRequested = true;
+                    _showFollowAsDialog = true;
+
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                }
+
+                // One persona, or none, or no consent - nothing to ask.
+                await ApplyFollowStateAsync(true, options.DefaultPersonaId);
+                return;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to read follow-as options for persona {PersonaId}.", CreatorPersonaId);
+                return;
+            }
+        }
+
+        await ApplyFollowStateAsync(false, null);
+    }
+
+    /// <summary>
+    /// The listener picked an identity in the dialog.
+    /// </summary>
+    protected async Task ConfirmFollowAsAsync()
+    {
+        _showFollowAsDialog = false;
+        await ApplyFollowStateAsync(true, _selectedFollowAsPersonaId);
+    }
+
+    protected void CancelFollowAs()
+    {
+        // Cancel means cancel: no follow is created, because the listener never settled on how
+        // they wanted to appear.
+        _showFollowAsDialog = false;
+        _selectedFollowAsPersonaId = null;
+    }
+
+    private async Task ApplyFollowStateAsync(bool wanted, int? followAsPersonaId)
+    {
+        if (_isProcessing || _currentUserId is null)
+        {
+            return;
+        }
+
+        _isProcessing = true;
 
         try
         {
             var outcome = await ArtistFollowService.SetFollowStateAsync(
-                CreatorPersonaId, _currentUserId.Value, wanted, SourceSongMetadataId);
+                CreatorPersonaId, _currentUserId.Value, wanted, SourceSongMetadataId, followAsPersonaId);
 
             // Set from the outcome rather than from what was asked for. A refusal - the artist is
             // gone, or the listener blocked them from another tab - must leave the button showing
@@ -201,6 +268,14 @@ public partial class FollowArtistButtonModel : BlazorBase
 
     protected async Task ShowLoginDialogAsync()
     {
+        // The dialogs are absent from the render tree until now, so ask for them and let the
+        // component render once before reaching for the reference.
+        if (!_dialogsRequested)
+        {
+            _dialogsRequested = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
         if (_loginDialog is not null)
         {
             await _loginDialog.ShowAsync();

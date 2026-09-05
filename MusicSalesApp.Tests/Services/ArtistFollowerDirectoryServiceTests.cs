@@ -226,10 +226,14 @@ public class ArtistFollowerDirectoryServiceTests
     // ------------------------------------------------------ followers who are artists themselves
 
     /// <summary>
-    /// Turns the seeded listener into an active creator, optionally with an enabled persona, and
-    /// returns nothing - the point is the state it leaves behind.
+    /// Turns the seeded listener into an active creator who has consented to being named, and
+    /// returns their persona id (or null when they have none).
     /// </summary>
-    private async Task MakeListenerAnArtistAsync(string personaName, string creatorDisplayName)
+    /// <remarks>
+    /// Consent is on here because these tests are about what a NAMED follower looks like. That it
+    /// is off by default is covered by ArtistFollowConsentTests, which owns the consent rules.
+    /// </remarks>
+    private async Task<int?> MakeListenerAConsentingArtistAsync(string personaName, string creatorDisplayName)
     {
         await using var context = _harness.NewContext();
 
@@ -238,22 +242,28 @@ public class ArtistFollowerDirectoryServiceTests
             UserId = _harness.ListenerUserId,
             DisplayName = creatorDisplayName,
             IsActive = true,
+            RevealPersonaToFollowedArtists = true,
         };
 
         context.Creators.Add(creator);
         await context.SaveChangesAsync();
 
-        if (!string.IsNullOrEmpty(personaName))
+        if (string.IsNullOrEmpty(personaName))
         {
-            context.CreatorPersonas.Add(new CreatorPersona
-            {
-                CreatorId = creator.Id,
-                Name = personaName,
-                IsEnabled = true,
-            });
-
-            await context.SaveChangesAsync();
+            return null;
         }
+
+        var persona = new CreatorPersona
+        {
+            CreatorId = creator.Id,
+            Name = personaName,
+            IsEnabled = true,
+        };
+
+        context.CreatorPersonas.Add(persona);
+        await context.SaveChangesAsync();
+
+        return persona.Id;
     }
 
     [Test]
@@ -262,8 +272,9 @@ public class ArtistFollowerDirectoryServiceTests
         // Artist-to-artist discovery: the creator can see who it is and go and hear their music.
         // The persona name is already public on every song card, so nothing new about the ACCOUNT
         // is disclosed - what is new is the association with following.
-        await MakeListenerAnArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
-        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+        var personaId = await MakeListenerAConsentingArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, personaId);
 
         var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
 
@@ -278,7 +289,7 @@ public class ArtistFollowerDirectoryServiceTests
     public async Task GetFollowers_FallsBackToTheCreatorDisplayNameWhenThereIsNoPersona()
     {
         // The same chain a song credit uses: persona first, then the creator display name.
-        await MakeListenerAnArtistAsync(personaName: null, creatorDisplayName: "Jane");
+        await MakeListenerAConsentingArtistAsync(personaName: null, creatorDisplayName: "Jane");
         await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
 
         var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
@@ -296,7 +307,7 @@ public class ArtistFollowerDirectoryServiceTests
         // GetEffectiveArtistName has a third link - the email with the domain stripped - which is
         // fine for a credit the account holder chose to publish under and completely wrong here.
         // A creator with no persona and no display name stays a pseudonym.
-        await MakeListenerAnArtistAsync(personaName: null, creatorDisplayName: null);
+        await MakeListenerAConsentingArtistAsync(personaName: null, creatorDisplayName: null);
         await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
 
         var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
@@ -315,7 +326,9 @@ public class ArtistFollowerDirectoryServiceTests
     {
         // Only identities that are publicly live right now are named. Somebody who has stopped
         // being a creator is not publishing under that name any more.
-        await MakeListenerAnArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+        var personaId = await MakeListenerAConsentingArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, personaId);
 
         await using (var context = _harness.NewContext())
         {
@@ -323,8 +336,6 @@ public class ArtistFollowerDirectoryServiceTests
             creator.IsActive = false;
             await context.SaveChangesAsync();
         }
-
-        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
 
         var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
 
@@ -334,7 +345,9 @@ public class ArtistFollowerDirectoryServiceTests
     [Test]
     public async Task GetFollowers_KeepsASuspendedArtistAnonymous()
     {
-        await MakeListenerAnArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+        var personaId = await MakeListenerAConsentingArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, personaId);
 
         await using (var context = _harness.NewContext())
         {
@@ -342,8 +355,6 @@ public class ArtistFollowerDirectoryServiceTests
             user.IsSuspended = true;
             await context.SaveChangesAsync();
         }
-
-        await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
 
         var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
 

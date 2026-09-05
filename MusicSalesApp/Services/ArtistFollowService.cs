@@ -29,6 +29,7 @@ public class ArtistFollowService : IArtistFollowService
         int listenerUserId,
         bool following,
         int? sourceSongMetadataId = null,
+        int? followAsPersonaId = null,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -70,6 +71,7 @@ public class ArtistFollowService : IArtistFollowService
         }
 
         var sourceSongId = await ResolveSourceSongAsync(context, creatorPersonaId, sourceSongMetadataId, cancellationToken);
+        var followAsId = await ResolveFollowAsPersonaAsync(context, listenerUserId, followAsPersonaId, cancellationToken);
 
         if (existing is not null)
         {
@@ -84,6 +86,11 @@ public class ArtistFollowService : IArtistFollowService
             existing.IsActive = true;
             existing.UnfollowedDateUtc = null;
             existing.SourceSongMetadataId ??= sourceSongId;
+
+            // Overwritten rather than kept: re-following is a fresh decision, and the listener may
+            // have chosen a different identity - or none - this time.
+            existing.FollowAsPersonaId = followAsId;
+
             await context.SaveChangesAsync(cancellationToken);
             return ArtistFollowOutcome.Followed;
         }
@@ -99,6 +106,7 @@ public class ArtistFollowService : IArtistFollowService
             ListenerUserId = listenerUserId,
             FollowedDateUtc = DateTime.UtcNow,
             SourceSongMetadataId = sourceSongId,
+            FollowAsPersonaId = followAsId,
             IsActive = true,
             AnonymousListenerNumber = _identityService.AllocateNumber(usedNumbers.ToHashSet()),
         };
@@ -160,6 +168,68 @@ public class ArtistFollowService : IArtistFollowService
                 cancellationToken);
 
         return belongsToPersona ? sourceSongMetadataId : null;
+    }
+
+    /// <summary>
+    /// Validates the identity a listener asked to follow as, returning null for anonymous.
+    /// </summary>
+    /// <remarks>
+    /// Refuses unless the listener has consented AND the persona is genuinely theirs and enabled.
+    /// A client could otherwise pass any persona id and attribute its follow to a stranger, which
+    /// would be worse than a privacy leak - it would be impersonation.
+    /// </remarks>
+    private static async Task<int?> ResolveFollowAsPersonaAsync(
+        AppDbContext context,
+        int listenerUserId,
+        int? followAsPersonaId,
+        CancellationToken cancellationToken)
+    {
+        if (followAsPersonaId is not > 0)
+        {
+            return null;
+        }
+
+        var isOwnedAndConsented = await context.CreatorPersonas
+            .AnyAsync(
+                persona => persona.Id == followAsPersonaId
+                           && persona.IsEnabled
+                           && persona.Creator.UserId == listenerUserId
+                           && persona.Creator.IsActive
+                           && persona.Creator.RevealPersonaToFollowedArtists,
+                cancellationToken);
+
+        return isOwnedAndConsented ? followAsPersonaId : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<FollowAsOptionsDto> GetFollowAsOptionsAsync(
+        int listenerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var consents = await context.Creators
+            .AnyAsync(
+                creator => creator.UserId == listenerUserId
+                           && creator.IsActive
+                           && creator.RevealPersonaToFollowedArtists,
+                cancellationToken);
+
+        if (!consents)
+        {
+            // No consent, no choice, no dialog - the follow is anonymous and the caller does not
+            // need to know why.
+            return new FollowAsOptionsDto(false, []);
+        }
+
+        var personas = await context.CreatorPersonas
+            .AsNoTracking()
+            .Where(persona => persona.Creator.UserId == listenerUserId && persona.IsEnabled)
+            .OrderBy(persona => persona.Name)
+            .Select(persona => new FollowAsPersonaDto(persona.Id, persona.Name))
+            .ToListAsync(cancellationToken);
+
+        return new FollowAsOptionsDto(true, personas);
     }
 
     /// <inheritdoc />

@@ -60,7 +60,52 @@
         }
     </div>
 
-    <SfDialog @ref="_loginDialog" Width="400px" IsModal="true" Visible="false" CssClass="settings-dialog">
+    @*
+        Both dialogs are kept out of the render tree until something actually needs one. A library
+        page renders hundreds of these bells, and a pair of dialog components per card is real
+        weight for something almost nobody opens.
+    *@
+    @if (_dialogsRequested)
+    {
+        <SfDialog @bind-Visible="_showFollowAsDialog" Width="420px" IsModal="true" ShowCloseIcon="true" CssClass="settings-dialog">
+            <DialogTemplates>
+                <Header>Follow as</Header>
+                <Content>
+                    <p class="settings-prose">
+                        Which of your artist names should @PersonaName see? They will be able to open your
+                        artist page and follow you back.
+                    </p>
+                    <div class="settings-check">
+                        @foreach (var option in _followAsOptions)
+                        {
+                            <label class="settings-label">
+                                <input type="radio"
+                                       name="follow-as-persona"
+                                       value="@option.Id"
+                                       checked="@(_selectedFollowAsPersonaId == option.Id)"
+                                       @onchange="@(() => _selectedFollowAsPersonaId = option.Id)" />
+                                @option.Name
+                            </label>
+                        }
+                        @* Always available: consenting in general is not consenting to every artist. *@
+                        <label class="settings-label">
+                            <input type="radio"
+                                   name="follow-as-persona"
+                                   value="0"
+                                   checked="@(_selectedFollowAsPersonaId is null)"
+                                   @onchange="@(() => _selectedFollowAsPersonaId = null)" />
+                            Follow anonymously
+                        </label>
+                    </div>
+                </Content>
+            </DialogTemplates>
+            <DialogButtons>
+                <DialogButton Content="Follow" IsPrimary="true" OnClick="ConfirmFollowAsAsync" />
+                <DialogButton Content="Cancel" OnClick="CancelFollowAs" />
+            </DialogButtons>
+        </SfDialog>
+
+        <SfDialog @ref="_loginDialog" Width="400px" IsModal="true" Visible="false" CssClass="settings-dialog">
         <DialogTemplates>
             <Header>Log in to follow</Header>
             <Content>
@@ -69,7 +114,8 @@
         </DialogTemplates>
         <DialogButtons>
             <DialogButton Content="Go to Login" IsPrimary="true" OnClick="NavigateToLoginAsync" />
-            <DialogButton Content="Cancel" OnClick="CloseLoginDialogAsync" />
-        </DialogButtons>
-    </SfDialog>
+                <DialogButton Content="Cancel" OnClick="CloseLoginDialogAsync" />
+            </DialogButtons>
+        </SfDialog>
+    }
 }

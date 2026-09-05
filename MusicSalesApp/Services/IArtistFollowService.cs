@@ -23,6 +23,19 @@ public interface IArtistFollowService
         int listenerUserId,
         bool following,
         int? sourceSongMetadataId = null,
+        int? followAsPersonaId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether this listener has consented to being named to artists they follow, and which of
+    /// their own personas they could follow as.
+    /// </summary>
+    /// <remarks>
+    /// Called on click rather than on render - a library page has hundreds of Follow bells and this
+    /// is a per-user question, so asking once when someone actually acts is the whole difference.
+    /// </remarks>
+    Task<FollowAsOptionsDto> GetFollowAsOptionsAsync(
+        int listenerUserId,
         CancellationToken cancellationToken = default);
 
     Task<bool> IsFollowingAsync(int creatorPersonaId, int listenerUserId, CancellationToken cancellationToken = default);

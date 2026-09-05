@@ -251,6 +251,117 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetRevealPersonaToFollowedArtistsAsync(
+        int creatorId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.Creators
+            .Where(creator => creator.Id == creatorId)
+            .Select(creator => creator.RevealPersonaToFollowedArtists)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetRevealPersonaToFollowedArtistsAsync(
+        int creatorId,
+        bool reveal,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var creator = await context.Creators
+            .FirstOrDefaultAsync(row => row.Id == creatorId, cancellationToken);
+
+        if (creator is null)
+        {
+            return false;
+        }
+
+        var wasRevealing = creator.RevealPersonaToFollowedArtists;
+        creator.RevealPersonaToFollowedArtists = reveal;
+        await context.SaveChangesAsync(cancellationToken);
+
+        if (wasRevealing && !reveal)
+        {
+            await RotateAnonymousNumbersAsync(context, creator.UserId, cancellationToken);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Gives this user a fresh pseudonym with every artist they follow.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called only when consent is withdrawn. Hiding the name is not enough on its own: the row
+    /// keeps its Following-since date and its source song, so an artist who saw "Jane Echo" there
+    /// yesterday would read today's "Listener #4817" as the same person without effort. A new
+    /// number in that row breaks the visual continuity that made it obvious.
+    /// </para>
+    /// <para>
+    /// <b>It does not undo what was already seen</b>, and nothing can - an artist who wrote the
+    /// name down, or simply remembers, still knows. This closes the casual case, which is the one
+    /// that would otherwise happen by accident to every withdrawing user.
+    /// </para>
+    /// <para>
+    /// The cost is real and lands on the followed artist: they lose the ability to tell repeat
+    /// support apart for this person. That is the trade the listener asked for by withdrawing.
+    /// </para>
+    /// </remarks>
+    private static async Task RotateAnonymousNumbersAsync(
+        AppDbContext context,
+        int listenerUserId,
+        CancellationToken cancellationToken)
+    {
+        var follows = await context.ArtistFollowers
+            .Where(follow => follow.ListenerUserId == listenerUserId)
+            .ToListAsync(cancellationToken);
+
+        if (follows.Count == 0)
+        {
+            return;
+        }
+
+        // Numbers are unique per persona, so each follow is renumbered against its own artist's
+        // existing set - not against one global pool.
+        var personaIds = follows.Select(follow => follow.CreatorPersonaId).Distinct().ToList();
+
+        var takenByPersona = (await context.ArtistFollowers
+                .Where(follow => personaIds.Contains(follow.CreatorPersonaId))
+                .Select(follow => new { follow.CreatorPersonaId, follow.AnonymousListenerNumber })
+                .ToListAsync(cancellationToken))
+            .GroupBy(row => row.CreatorPersonaId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => row.AnonymousListenerNumber).ToHashSet());
+
+        var identityService = new ArtistFollowerIdentityService();
+
+        foreach (var follow in follows)
+        {
+            var taken = takenByPersona.TryGetValue(follow.CreatorPersonaId, out var set)
+                ? set
+                : [];
+
+            var replacement = identityService.AllocateNumber(taken);
+            taken.Add(replacement);
+
+            // The old number is not reserved. Handing it out again is harmless - it identifies a
+            // relationship, not a person, and the row it belonged to no longer carries it.
+            follow.AnonymousListenerNumber = replacement;
+
+            // The stored identity choice goes too. Turning consent back on later should require a
+            // deliberate re-follow rather than silently restoring names.
+            follow.FollowAsPersonaId = null;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<int?> GetActiveCreatorIdAsync(int userId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
