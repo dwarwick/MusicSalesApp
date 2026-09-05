@@ -146,6 +146,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private HashSet<int> _streamedSongIds = new();
 
+    // Resolved once per load, for the same reason _streamedSongIds is: the library renders
+    // hundreds of cards, and a self-resolving Follow button on each would be one query per card.
+    private HashSet<int> _followedPersonaIds = new();
+
     private Dictionary<int, int?> _creatorUserIdMap = new Dictionary<int, int?>();
     private Dictionary<string, int?> _creatorIdMap = new Dictionary<string, int?>();
     protected TipDialogModel _tipDialog;
@@ -177,6 +181,17 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         /// Null if no persona or no persona image.
         /// </summary>
         public string PersonaImageUrl { get; set; }
+
+        /// <summary>
+        /// The persona behind <see cref="DisplayName"/>, or null when the name came from free
+        /// text or a creator display name rather than a persona.
+        /// </summary>
+        /// <remarks>
+        /// Null is the normal case for plenty of songs, and it is what decides whether a card gets
+        /// a Follow button at all - following is artist-level, and without a persona there is no
+        /// artist entity to follow.
+        /// </remarks>
+        public int? PersonaId { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -666,6 +681,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             return new ArtistDisplayInfo
             {
                 DisplayName = songMeta.Persona.Name,
+                PersonaId = songMeta.PersonaId,
                 LinkUrl = $"/artist/{Uri.EscapeDataString(songMeta.Persona.Name)}",
                 PersonaImageUrl = string.IsNullOrEmpty(songMeta.Persona.ImageBlobPath)
                     ? null
@@ -719,6 +735,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         return _artistInfoMap.TryGetValue(fileName, out var info) ? info : new ArtistDisplayInfo();
     }
+
+    /// <summary>
+    /// Whether this visitor already follows the given persona, from the set resolved in bulk at
+    /// load. Null when there is no persona, which is what keeps the card's Follow button off.
+    /// </summary>
+    protected bool? IsFollowingArtist(int? personaId) =>
+        personaId.HasValue ? _followedPersonaIds.Contains(personaId.Value) : null;
 
     /// <summary>
     /// Gets the display genre for a song. Returns "Unknown Genre" if genre is null or whitespace.
@@ -1092,6 +1115,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _streamedSongIds = await StreamCountService.GetUserStreamedSongIdsAsync(
                 _currentUserId.Value, _songMetadataIds.Values);
+
+            var personaIds = _artistInfoMap.Values
+                .Where(info => info.PersonaId.HasValue)
+                .Select(info => info.PersonaId!.Value)
+                .Distinct()
+                .ToList();
+
+            if (personaIds.Count > 0)
+            {
+                _followedPersonaIds = (await ArtistFollowService.GetFollowedPersonaIdsAsync(
+                    personaIds, _currentUserId.Value)).ToHashSet();
+            }
         }
         catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
         {

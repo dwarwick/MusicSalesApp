@@ -1,0 +1,233 @@
+@page "/creator/followers"
+@rendermode InteractiveServer
+@inherits CreatorFollowersModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
+
+<PageTitle>Your followers</PageTitle>
+
+@*
+    Same settings-* kit as /creator/personas and /CreatorSettings - this is the third surface that
+    reuses it rather than inventing a parallel vocabulary.
+
+    Everything on this page is anonymous by design. A follower is "Listener #4817" and there is no
+    control anywhere here that could reveal more, because the service this page calls cannot return
+    more: ArtistFollowerSummaryDto has no field for an email or a user id.
+*@
+<div class="settings-page">
+    @if (_loading)
+    {
+        <div class="settings-loading" role="status">
+            <span class="settings-spinner" aria-hidden="true"></span>
+            <span>Loading your followers&hellip;</span>
+        </div>
+    }
+    else
+    {
+        <div class="settings-main settings-main-wide">
+            <div class="settings-head">
+                <p class="settings-head-eyebrow">Creator</p>
+                <h1 class="settings-head-title">Your followers</h1>
+                <p class="settings-head-note">
+                    Listeners who follow you hear about your new music automatically. You can send each of them one
+                    thank&#8209;you. StreamTunes never shares a listener's email address or name with you.
+                </p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="settings-alert settings-alert-warn" role="alert">
+                    <span>@_errorMessage</span>
+                </div>
+            }
+
+            @if (_personas.Count == 0)
+            {
+                <section class="settings-card">
+                    <div class="settings-empty">
+                        <p class="settings-prose">
+                            You have no personas yet, and following is artist&#8209;level &mdash; so there is nothing for a
+                            listener to follow.
+                        </p>
+                        <a class="e-btn settings-btn settings-btn-violet" href="@AppPageRoutes.CreatorPersonas">Create a persona</a>
+                    </div>
+                </section>
+            }
+            else
+            {
+                @if (_personas.Count > 1)
+                {
+                    <section class="settings-card">
+                        <div class="settings-section-head">
+                            <div>
+                                <p class="settings-eyebrow">Persona</p>
+                                <h2 class="settings-title">Whose followers?</h2>
+                                <p class="settings-note">A listener follows one persona, not you &mdash; so each has its own followers.</p>
+                            </div>
+                        </div>
+                        <div class="settings-actions">
+                            @foreach (var persona in _personas)
+                            {
+                                <SfButton CssClass="@GetPersonaButtonClass(persona.Id)"
+                                          OnClick="@(() => SelectPersonaAsync(persona.Id))">
+                                    @persona.Name
+                                </SfButton>
+                            }
+                        </div>
+                    </section>
+                }
+
+                <section class="settings-card">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Analytics</p>
+                            <h2 class="settings-title">@_selectedPersonaName</h2>
+                        </div>
+                    </div>
+
+                    <div class="follower-stat-row">
+                        <div class="status-tile">
+                            <span class="settings-label">Followers</span>
+                            <span class="follower-stat-value">@_analytics?.TotalFollowers.ToString("N0")</span>
+                        </div>
+                        <div class="status-tile">
+                            <span class="settings-label">New this month</span>
+                            <span class="follower-stat-value">+@_analytics?.NewFollowersThisMonth.ToString("N0")</span>
+                        </div>
+                    </div>
+
+                    @if (_analytics?.TopSongsGeneratingFollows.Count > 0)
+                    {
+                        <h3 class="settings-label">Top songs generating follows</h3>
+                        <ol class="terms-list follower-source-list">
+                            @foreach (var source in _analytics.TopSongsGeneratingFollows)
+                            {
+                                <li>
+                                    <span>@source.SongTitle</span>
+                                    <span class="settings-count">@source.FollowCount</span>
+                                </li>
+                            }
+                        </ol>
+                    }
+                </section>
+
+                <section class="settings-card">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Followers</p>
+                            <h2 class="settings-title">Who is listening</h2>
+                            <p class="settings-note">
+                                Each listener keeps the same number with you, so you can tell repeat support apart.
+                                The same person appears under a different number to another artist.
+                            </p>
+                        </div>
+                    </div>
+
+                    @if (_followers.Count == 0)
+                    {
+                        <div class="settings-empty">
+                            <p class="settings-prose">No followers yet. A Follow button appears on your artist page and beside your songs.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <SfGrid TValue="ArtistFollowerSummaryDto"
+                                DataSource="@_followers"
+                                AllowPaging="true"
+                                AllowSorting="true"
+                                AllowResizing="true">
+                            <GridPageSettings PageSize="15"></GridPageSettings>
+                            <GridColumns>
+                                <GridColumn Field="@nameof(ArtistFollowerSummaryDto.AnonymousDisplayName)" HeaderText="Follower" Width="150"></GridColumn>
+                                <GridColumn Field="@nameof(ArtistFollowerSummaryDto.SourceSongTitle)" HeaderText="Followed after listening to" Width="200">
+                                    <Template>
+                                        @{
+                                            var follower = (ArtistFollowerSummaryDto)context;
+                                        }
+                                        <span>@(string.IsNullOrEmpty(follower.SourceSongTitle) ? "—" : follower.SourceSongTitle)</span>
+                                    </Template>
+                                </GridColumn>
+                                <GridColumn Field="@nameof(ArtistFollowerSummaryDto.FollowedDateUtc)" HeaderText="Following since" Format="MMM d, yyyy" Width="140"></GridColumn>
+                                <GridColumn HeaderText="Thanked" Width="180">
+                                    <Template>
+                                        @{
+                                            var follower = (ArtistFollowerSummaryDto)context;
+                                        }
+                                        @if (follower.HasBeenThanked)
+                                        {
+                                            <span class="status-pill">Yes</span>
+                                            <span class="settings-hint">@follower.LastMessageText</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="status-pill status-pill-warn">No</span>
+                                        }
+                                    </Template>
+                                </GridColumn>
+                                <GridColumn HeaderText="Action" Width="160">
+                                    <Template>
+                                        @{
+                                            var follower = (ArtistFollowerSummaryDto)context;
+                                        }
+                                        @if (!follower.HasBeenThanked)
+                                        {
+                                            <SfButton CssClass="e-btn settings-btn settings-btn-violet settings-btn-small"
+                                                      OnClick="@(() => OpenThankYouDialogAsync(follower))">
+                                                Send Thank You
+                                            </SfButton>
+                                        }
+                                        else
+                                        {
+                                            <span class="settings-hint">Sent @follower.LastMessageDateUtc?.ToString("MMM d")</span>
+                                        }
+                                    </Template>
+                                </GridColumn>
+                            </GridColumns>
+                        </SfGrid>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@*
+    CssClass="settings-dialog" is required, not decorative: a Syncfusion dialog renders at the body
+    root, OUTSIDE .settings-page, so without it every settings-btn inside silently loses its
+    overrides and comes out in default Syncfusion blue.
+*@
+<SfDialog @bind-Visible="_showThankYouDialog" Width="440px" IsModal="true" ShowCloseIcon="true" CssClass="settings-dialog">
+    <DialogTemplates>
+        <Header>Send a thank you</Header>
+        <Content>
+            <p class="settings-prose">
+                To <strong>@_thankYouTarget?.AnonymousDisplayName</strong>. They will see it in their StreamTunes account.
+                You can send this once.
+            </p>
+
+            <SfTextBox @bind-Value="_thankYouText"
+                       Multiline="true"
+                       Placeholder="Thanks so much for following and listening!"
+                       Input="OnThankYouTextInput" />
+
+            <p class="settings-hint">
+                <span class="settings-count">@_thankYouLength / @ArtistMessageContentPolicy.MaxLength</span>
+                &mdash; messages stay inside StreamTunes, so they cannot contain contact details or links.
+            </p>
+
+            @if (!string.IsNullOrEmpty(_thankYouError))
+            {
+                <p class="settings-inline-status settings-inline-status-bad" role="alert">@_thankYouError</p>
+            }
+        </Content>
+    </DialogTemplates>
+    <DialogButtons>
+        <DialogButton Content="@(_sendingThankYou ? "Sending..." : "Send")"
+                      IsPrimary="true"
+                      Disabled="_sendingThankYou"
+                      OnClick="SendThankYouAsync" />
+        <DialogButton Content="Cancel" OnClick="CloseThankYouDialog" />
+    </DialogButtons>
+</SfDialog>

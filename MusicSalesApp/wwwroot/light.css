@@ -1760,3 +1760,24 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .ai-declare { border-color: var(--st-line); }
 .ai-declare-invalid { border-color: var(--st-danger); }
 .ai-declare-or { color: var(--st-text-3); }
+
+/* Follow artist button. --st-text-2 rather than --st-text-3: the count can sit on a hover-tinted
+   card, where --st-text-3 measures 4.33:1 in dark and fails AA. */
+.follow-artist-count {
+    color: var(--st-text-2);
+}
+
+/* Creator followers page. --st-text rather than --st-accent: this is a figure, not a link, and
+   --st-accent is measured for legibility on --st-surface only. */
+.follower-stat-value {
+    color: var(--st-text);
+}
+
+/* Followed artists / artist messages lists */
+.follow-row {
+    border-bottom: 1px solid var(--st-line);
+}
+
+.follow-row.is-unread {
+    border-left: 3px solid var(--st-accent);
+}

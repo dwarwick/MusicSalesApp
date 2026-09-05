@@ -27,6 +27,25 @@ public class ApplicationUser : IdentityUser<int>
     // Email preferences - user opt-in to receive new song notification emails
     public bool ReceiveNewSongEmails { get; set; } = false;
 
+    // Follow-feature email preferences. These default to TRUE where ReceiveNewSongEmails defaults
+    // to false, and the difference is deliberate: the site-wide digest is unsolicited mail about
+    // the whole catalogue, whereas these only ever fire for an artist the listener chose to
+    // follow. Following is the opt-in. Both are still switchable at /manage-account, and a
+    // per-artist mute lives on ArtistFollower for going quiet without unfollowing.
+    //
+    // There is no in-app equivalent of these flags: the notification row IS the in-app
+    // notification, and the per-artist mute already suppresses it.
+    public bool ReceiveArtistReleaseEmails { get; set; } = true;
+
+    public bool ReceiveArtistMessageEmails { get; set; } = true;
+
+    // The push counterparts. Separate from the email flags because the channels are genuinely
+    // different: a listener may well want a phone alert for a new release but no mail about it,
+    // and collapsing the two would force one choice on both.
+    public bool ReceiveArtistReleasePush { get; set; } = true;
+
+    public bool ReceiveArtistMessagePush { get; set; } = true;
+
     // Last known browser timezone from the user, stored as an IANA timezone ID.
     [MaxLength(100)]
     public string TimeZoneId { get; set; }

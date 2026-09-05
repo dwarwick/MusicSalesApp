@@ -590,3 +590,22 @@
         min-width: auto;
     }
 }
+
+/* Creator followers page — the two stat tiles stack rather than squeeze on a phone. */
+.follower-stat-row {
+    gap: 12px;
+}
+
+.follower-stat-value {
+    font-size: 22px;
+}
+
+/* Followed artists / artist messages — the actions drop below the detail on a phone rather than
+   competing with it for a single row. */
+.follow-row {
+    gap: 10px;
+}
+
+.follow-row-main {
+    min-width: 100%;
+}

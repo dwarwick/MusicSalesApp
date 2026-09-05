@@ -426,6 +426,27 @@ try
     builder.Services.AddScoped<ICreatorPersonaService, CreatorPersonaService>();
     builder.Services.AddScoped<ITipService, TipService>();
     builder.Services.AddScoped<IReportedSongService, ReportedSongService>();
+
+    // Artist follow feature. The identity service is a singleton because it holds only a Random
+    // and no state per request; everything else is scoped like the rest of the data services.
+    builder.Services.AddSingleton<IArtistFollowerIdentityService, ArtistFollowerIdentityService>();
+    builder.Services.AddScoped<IArtistFollowService, ArtistFollowService>();
+    builder.Services.AddScoped<IArtistFollowerDirectoryService, ArtistFollowerDirectoryService>();
+    builder.Services.AddScoped<IArtistFollowerMessageService, ArtistFollowerMessageService>();
+    builder.Services.AddScoped<IArtistReleaseNotificationService, ArtistReleaseNotificationService>();
+    builder.Services.AddScoped<IArtistFollowerAnalyticsService, ArtistFollowerAnalyticsService>();
+    builder.Services.AddScoped<IArtistMessageModerationService, ArtistMessageModerationService>();
+    builder.Services.AddScoped<IArtistNotificationPreferenceService, ArtistNotificationPreferenceService>();
+
+    // Push. The two senders are registered against the SAME interface on purpose - the dispatcher
+    // takes IEnumerable<IPushNotificationSender> and selects by platform, so adding a transport
+    // later is a registration rather than a change to the dispatcher. Both are singletons: each
+    // caches a credential (an OAuth token, an APNs provider token) whose whole value is being
+    // reused across sends.
+    builder.Services.AddSingleton<IPushNotificationSender, FirebasePushNotificationSender>();
+    builder.Services.AddSingleton<IPushNotificationSender, ApplePushNotificationSender>();
+    builder.Services.AddScoped<IPushDeviceTokenService, PushDeviceTokenService>();
+    builder.Services.AddScoped<IArtistPushDispatchService, ArtistPushDispatchService>();
     builder.Services.AddScoped<IContactRequestEmailService, ContactRequestEmailService>();
     builder.Services.AddScoped<IContactRequestRateLimitService, ContactRequestRateLimitService>();
     builder.Services.AddScoped<IContactRequestAdminService, ContactRequestAdminService>();

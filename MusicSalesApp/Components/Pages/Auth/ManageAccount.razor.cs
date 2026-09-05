@@ -35,6 +35,10 @@ public partial class ManageAccountModel : BlazorBase
 
     // Email preferences
     protected bool _receiveNewSongEmails = false;
+    protected bool _receiveArtistReleaseEmails = true;
+    protected bool _receiveArtistMessageEmails = true;
+    protected bool _receiveArtistReleasePush = true;
+    protected bool _receiveArtistMessagePush = true;
 
     // Shown inside the Email preferences card rather than only in the page-level banner.
     // That banner renders above the first section, so a reader who saves from the third one
@@ -91,6 +95,16 @@ public partial class ManageAccountModel : BlazorBase
     
     private ApplicationUser _currentUser;
 
+    /// <summary>
+    /// The signed-in listener's id, for the child sections that need it.
+    /// </summary>
+    /// <remarks>
+    /// An accessor rather than widening <c>_currentUser</c>: the sections need an id and nothing
+    /// else, and exposing the whole Identity row to the markup is how an email ends up rendered
+    /// somewhere it was never meant to be.
+    /// </remarks>
+    protected int? CurrentUserId => _currentUser?.Id;
+
     [Inject]
     private IAccountDeletionService AccountDeletionService { get; set; }
 
@@ -117,6 +131,10 @@ public partial class ManageAccountModel : BlazorBase
                         _userTimeZoneId = UserTimeZoneDisplayHelper.GetTimeZoneId(_currentUser);
                         // Load email preferences
                         _receiveNewSongEmails = _currentUser.ReceiveNewSongEmails;
+                        _receiveArtistReleaseEmails = _currentUser.ReceiveArtistReleaseEmails;
+                        _receiveArtistMessageEmails = _currentUser.ReceiveArtistMessageEmails;
+                        _receiveArtistReleasePush = _currentUser.ReceiveArtistReleasePush;
+                        _receiveArtistMessagePush = _currentUser.ReceiveArtistMessagePush;
 
                         await DetectAndPersistUserTimeZoneAsync();
                         
@@ -324,6 +342,10 @@ public partial class ManageAccountModel : BlazorBase
         try
         {
             _currentUser.ReceiveNewSongEmails = _receiveNewSongEmails;
+            _currentUser.ReceiveArtistReleaseEmails = _receiveArtistReleaseEmails;
+            _currentUser.ReceiveArtistMessageEmails = _receiveArtistMessageEmails;
+            _currentUser.ReceiveArtistReleasePush = _receiveArtistReleasePush;
+            _currentUser.ReceiveArtistMessagePush = _receiveArtistMessagePush;
             var result = await UserManager.UpdateAsync(_currentUser);
 
             if (result.Succeeded)

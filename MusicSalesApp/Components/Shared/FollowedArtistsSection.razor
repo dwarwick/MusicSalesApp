@@ -1,0 +1,96 @@
+@inherits FollowedArtistsSectionModel
+@using MusicSalesApp.Common.Helpers
+
+<section class="settings-card" id="@AppPageRoutes.ManageAccountFollowingSection">
+    <div class="settings-section-head">
+        <div>
+            <p class="settings-eyebrow">Following</p>
+            <h2 class="settings-title">Artists you follow</h2>
+            <p class="settings-note">
+                We tell you when these artists release something new. Mute one to stay a follower without the
+                notifications, or unfollow to stop hearing from them entirely.
+            </p>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="settings-loading" role="status">
+            <span class="settings-spinner" aria-hidden="true"></span>
+            <span>Loading&hellip;</span>
+        </div>
+    }
+    else if (_artists.Count == 0)
+    {
+        <div class="settings-empty">
+            <p class="settings-prose">You are not following anyone yet. Look for Follow on an artist's page.</p>
+            <a class="e-btn settings-btn settings-btn-violet" href="@AppPageRoutes.MusicLibrary">Browse music</a>
+        </div>
+    }
+    else
+    {
+        <ul class="follow-list">
+            @foreach (var artist in _artists)
+            {
+                <li class="follow-row persona-row">
+                    <div class="follow-row-main">
+                        <a class="follow-row-artist" href="@ArtistUrl(artist.ArtistName)">@artist.ArtistName</a>
+                        <span class="settings-hint">Following since @FollowedSince(artist)</span>
+
+                        @if (artist.LatestReleaseTitle is not null)
+                        {
+                            <span class="settings-hint">
+                                Latest release:
+                                <a href="@SongUrl(artist.LatestReleaseTitle)">@artist.LatestReleaseTitle</a>
+                            </span>
+                        }
+
+                        @if (artist.UnreadMessageCount > 0)
+                        {
+                            <span class="status-pill">@artist.UnreadMessageCount unread</span>
+                        }
+
+                        @if (artist.IsBlocked)
+                        {
+                            <span class="status-pill status-pill-warn">Blocked</span>
+                        }
+                    </div>
+
+                    <div class="settings-actions follow-row-actions">
+                        @if (!artist.IsBlocked)
+                        {
+                            <SfButton CssClass="e-btn settings-btn settings-btn-small"
+                                      OnClick="@(() => ToggleReleaseNotificationsAsync(artist))">
+                                @(artist.ReleaseNotificationsEnabled ? "Mute new releases" : "Unmute new releases")
+                            </SfButton>
+                            <SfButton CssClass="e-btn settings-btn settings-btn-small"
+                                      OnClick="@(() => ToggleArtistMessagesAsync(artist))">
+                                @(artist.ArtistMessagesEnabled ? "Mute messages" : "Unmute messages")
+                            </SfButton>
+                        }
+
+                        <SfButton CssClass="e-btn settings-btn settings-btn-danger-outline settings-btn-small"
+                                  OnClick="@(() => UnfollowAsync(artist))">
+                            Unfollow
+                        </SfButton>
+                        <SfButton CssClass="e-btn settings-btn settings-btn-danger-outline settings-btn-small"
+                                  OnClick="@(() => ToggleBlockedAsync(artist))">
+                            @(artist.IsBlocked ? "Unblock" : "Block")
+                        </SfButton>
+                    </div>
+                </li>
+            }
+        </ul>
+
+        @*
+            The page-level banner renders above the first section and this one is several sections
+            down, so a save from here would move nothing on screen and the button would read as
+            dead. The status is also DIRECTIONAL - "Muted" versus "Unmuted" - because a bare "Saved"
+            leaves the reader unable to tell which way the switch went.
+        *@
+        @if (!string.IsNullOrEmpty(_statusMessage))
+        {
+            <p class="settings-inline-status" role="status">@_statusMessage</p>
+        }
+    }
+</section>

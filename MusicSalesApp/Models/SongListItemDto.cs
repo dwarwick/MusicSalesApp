@@ -1,4 +1,4 @@
-﻿namespace MusicSalesApp.Models;
+namespace MusicSalesApp.Models;
 
 /// <summary>
 /// DTO returned by the songs list API endpoint for the MAUI Android app.
@@ -50,6 +50,19 @@ public class SongListItemDto
 
     /// <summary>As <see cref="AlbumArtVersion"/>, for the persona image.</summary>
     public int PersonaImageVersion { get; set; }
+
+    /// <summary>
+    /// The <c>CreatorPersona</c> behind <see cref="ArtistName"/>, or null when the song has no
+    /// persona and its artist name came from free text or the creator's display name.
+    /// </summary>
+    /// <remarks>
+    /// This is the only STABLE artist identifier a client gets. ArtistName is a display string
+    /// resolved through a fallback chain and changes when a creator renames a persona, so anything
+    /// that has to refer to the same artist twice - following them, above all - keys on this. A
+    /// null means there is no artist entity to refer to, and the client should offer no Follow
+    /// button rather than inventing one from the name.
+    /// </remarks>
+    public int? PersonaId { get; set; }
 
     public string PersonaBio { get; set; }
 

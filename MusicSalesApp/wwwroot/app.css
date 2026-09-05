@@ -4802,3 +4802,48 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
    shows which answers belong together and can be marked invalid as a whole. */
 .ai-declare { border-style: solid; border-width: 1px; border-radius: var(--st-radius-sm); }
 .ai-declare-or { display: block; }
+
+/* Follow artist button — layout only. Colour lives in light.css/dark.css and sizing in the
+   breakpoint sheets, per the property-routing rule in AGENTS.md. The button itself reuses the
+   existing cta-primary / cta-outline tiers rather than growing a fourth one. */
+.follow-artist {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Creator followers page — layout only. */
+.follower-stat-row {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.follower-source-list {
+    list-style: decimal inside;
+}
+
+.follower-source-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+/* Followed artists / artist messages lists in Manage Account. Layout only. */
+.follow-list {
+    list-style: none;
+}
+
+.follow-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.follow-row-main {
+    display: flex;
+    flex-direction: column;
+}
+
+.follow-row-actions {
+    flex-wrap: wrap;
+}

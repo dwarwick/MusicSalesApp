@@ -901,3 +901,55 @@
 .ai-declare-or { margin: 7px 0 6px; font-size: 11px; font-style: italic; }
 
 .apply-all-field-wide { min-width: 14rem; }
+
+/* Follow artist button */
+.follow-artist {
+    gap: 12px;
+}
+
+.follow-artist-count {
+    font-size: 14px;
+}
+
+/* Creator followers page */
+.follower-stat-row {
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.follower-stat-value {
+    font-size: 28px;
+    font-weight: 600;
+}
+
+.follower-source-list li {
+    gap: 12px;
+    padding: 6px 0;
+}
+
+/* Followed artists / artist messages lists */
+.follow-list {
+    padding-left: 0;
+    margin: 0;
+}
+
+.follow-row {
+    gap: 16px;
+    padding: 14px 0;
+}
+
+.follow-row-main {
+    gap: 4px;
+    min-width: 260px;
+}
+
+.follow-row-artist {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Follow button on a library card — smaller than the page-level one, which is sized for a hero. */
+.card-follow-artist .follow-artist-button {
+    font-size: 12px;
+    padding: 2px 10px;
+}

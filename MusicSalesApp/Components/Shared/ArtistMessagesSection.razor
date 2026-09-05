@@ -1,0 +1,124 @@
+@inherits ArtistMessagesSectionModel
+@using MusicSalesApp.Common.Helpers
+
+<section class="settings-card" id="@AppPageRoutes.ManageAccountArtistMessagesSection">
+    <div class="settings-section-head">
+        <div>
+            <p class="settings-eyebrow">Messages</p>
+            <h2 class="settings-title">Messages from artists</h2>
+            <p class="settings-note">
+                Artists you follow can send you one thank&#8209;you each. They never see your email address or your
+                name &mdash; only that someone is following them.
+            </p>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="settings-loading" role="status">
+            <span class="settings-spinner" aria-hidden="true"></span>
+            <span>Loading&hellip;</span>
+        </div>
+    }
+    else if (_messages.Count == 0)
+    {
+        <div class="settings-empty">
+            <p class="settings-prose">No messages yet.</p>
+        </div>
+    }
+    else
+    {
+        <ul class="follow-list">
+            @foreach (var message in _messages)
+            {
+                <li class="follow-row persona-row @(message.IsRead ? "" : "is-unread")">
+                    <div class="follow-row-main">
+                        <a class="follow-row-artist" href="@ArtistUrl(message.ArtistName)">@message.ArtistName</a>
+                        <p class="settings-prose">@message.MessageText</p>
+
+                        <span class="settings-hint">
+                            @message.CreatedDateUtc.ToString("MMM d, yyyy")
+                            @if (message.RelatedSongTitle is not null)
+                            {
+                                <span>
+                                    &middot; about <a href="@SongUrl(message.RelatedSongTitle)">@message.RelatedSongTitle</a>
+                                </span>
+                            }
+                        </span>
+
+                        @if (!message.IsRead)
+                        {
+                            <span class="status-pill">Unread</span>
+                        }
+                        @if (message.IsReported)
+                        {
+                            <span class="status-pill status-pill-warn">Reported</span>
+                        }
+                    </div>
+
+                    @*
+                        There is deliberately no Reply control. Version 1 is artist-to-listener
+                        only - a two-way channel needs its own moderation and abuse handling on
+                        both ends, which is a bigger feature than acknowledging support.
+                    *@
+                    <div class="settings-actions follow-row-actions">
+                        @if (!message.IsRead)
+                        {
+                            <SfButton CssClass="e-btn settings-btn settings-btn-small"
+                                      OnClick="@(() => MarkReadAsync(message))">
+                                Mark read
+                            </SfButton>
+                        }
+
+                        @if (!message.IsReported)
+                        {
+                            <SfButton CssClass="e-btn settings-btn settings-btn-danger-outline settings-btn-small"
+                                      OnClick="@(() => OpenReportDialogAsync(message))">
+                                Report
+                            </SfButton>
+                        }
+
+                        <SfButton CssClass="e-btn settings-btn settings-btn-small"
+                                  OnClick="@(() => HideAsync(message))">
+                            Hide
+                        </SfButton>
+                    </div>
+                </li>
+            }
+        </ul>
+
+        @if (!string.IsNullOrEmpty(_statusMessage))
+        {
+            <p class="settings-inline-status" role="status">@_statusMessage</p>
+        }
+    }
+</section>
+
+@* Syncfusion renders a dialog at the body root, outside .settings-page, so it needs
+   CssClass="settings-dialog" or every settings-btn inside loses its overrides. *@
+<SfDialog @bind-Visible="_showReportDialog" Width="420px" IsModal="true" ShowCloseIcon="true" CssClass="settings-dialog">
+    <DialogTemplates>
+        <Header>Report this message</Header>
+        <Content>
+            <p class="settings-prose">A StreamTunes admin will review it. The artist is not told who reported them.</p>
+
+            <div class="settings-check">
+                @foreach (var reason in ReportReasonTypes.All)
+                {
+                    <label class="settings-label">
+                        <input type="radio"
+                               name="artist-message-report-reason"
+                               value="@reason"
+                               checked="@(_reportReason == reason)"
+                               @onchange="@(() => _reportReason = reason)" />
+                        @reason
+                    </label>
+                }
+            </div>
+        </Content>
+    </DialogTemplates>
+    <DialogButtons>
+        <DialogButton Content="Report" IsPrimary="true" OnClick="SubmitReportAsync" />
+        <DialogButton Content="Cancel" OnClick="CloseReportDialog" />
+    </DialogButtons>
+</SfDialog>

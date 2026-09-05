@@ -46,6 +46,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CreatorPersona> CreatorPersonas { get; set; }
     public DbSet<MobileVerificationCode> MobileVerificationCodes { get; set; }
     public DbSet<ReportedSong> ReportedSongs { get; set; }
+    public DbSet<ArtistFollower> ArtistFollowers { get; set; }
+    public DbSet<ArtistFollowerMessage> ArtistFollowerMessages { get; set; }
+    public DbSet<ArtistReleaseNotification> ArtistReleaseNotifications { get; set; }
+    public DbSet<PushDeviceToken> PushDeviceTokens { get; set; }
     public DbSet<AdminMessage> AdminMessages { get; set; }
     public DbSet<AdminMessageRole> AdminMessageRoles { get; set; }
     public DbSet<AdminMessageRecipient> AdminMessageRecipients { get; set; }
@@ -931,5 +935,159 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
 
         builder.Entity<ContactRequestSubmission>()
             .HasIndex(submission => new { submission.IpAddress, submission.SubmittedAtUtc });
+
+        ConfigureArtistFollowFeature(builder);
+    }
+
+    /// <summary>
+    /// The follow relationship, its messages and its release notifications.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Every delete behaviour here is chosen against SQL Server's multiple-cascade-path rule,
+    /// not for tidiness.</b> ApplicationUser and SongMetadata are both reachable by more than one
+    /// route from these tables, so cascading on all of them makes the model unbuildable. Where a
+    /// cascade is refused, <c>AccountDeletionService</c> deletes the rows by hand - which is the
+    /// same arrangement ReportedSong already uses.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureArtistFollowFeature(ModelBuilder builder)
+    {
+        // A persona going away takes its follows with it. The listener side cannot also cascade -
+        // two cascade paths into ArtistFollower is exactly what SQL Server refuses - so account
+        // deletion clears these explicitly.
+        builder.Entity<ArtistFollower>()
+            .HasOne(af => af.CreatorPersona)
+            .WithMany()
+            .HasForeignKey(af => af.CreatorPersonaId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<ArtistFollower>()
+            .HasOne(af => af.ListenerUser)
+            .WithMany()
+            .HasForeignKey(af => af.ListenerUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // The source song is a breadcrumb, not a dependency: losing the song must not lose the
+        // follow, so this nulls out rather than cascading.
+        builder.Entity<ArtistFollower>()
+            .HasOne(af => af.SourceSongMetadata)
+            .WithMany()
+            .HasForeignKey(af => af.SourceSongMetadataId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // "Following the same artist twice is impossible", as a database guarantee. Note this
+        // covers inactive rows too, which is deliberate: unfollowing is a soft delete and
+        // re-following must reuse the existing row so the pseudonym survives.
+        builder.Entity<ArtistFollower>()
+            .HasIndex(af => new { af.CreatorPersonaId, af.ListenerUserId })
+            .IsUnique();
+
+        // The creator's follower list, and the listener's followed-artists list respectively.
+        builder.Entity<ArtistFollower>()
+            .HasIndex(af => af.CreatorPersonaId);
+
+        builder.Entity<ArtistFollower>()
+            .HasIndex(af => af.ListenerUserId);
+
+        // Allocating a pseudonym checks this for a collision inside one persona on every follow.
+        builder.Entity<ArtistFollower>()
+            .HasIndex(af => new { af.CreatorPersonaId, af.AnonymousListenerNumber })
+            .IsUnique();
+
+        builder.Entity<ArtistFollowerMessage>()
+            .HasOne(m => m.ArtistFollower)
+            .WithMany()
+            .HasForeignKey(m => m.ArtistFollowerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<ArtistFollowerMessage>()
+            .HasOne(m => m.SenderUser)
+            .WithMany()
+            .HasForeignKey(m => m.SenderUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<ArtistFollowerMessage>()
+            .HasOne(m => m.RelatedSongMetadata)
+            .WithMany()
+            .HasForeignKey(m => m.RelatedSongMetadataId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // One thank-you per follower, ever - enforced here rather than in the service so a
+        // concurrent double-click cannot produce two. Filtered on the kind so that adding
+        // listener replies later needs a new kind, not a dropped constraint.
+        builder.Entity<ArtistFollowerMessage>()
+            .HasIndex(m => m.ArtistFollowerId)
+            .IsUnique()
+            .HasFilter($"[MessageKind] = '{ArtistMessageKinds.ThankYou}'");
+
+        // The every-15-minutes email job scans for unsent messages.
+        builder.Entity<ArtistFollowerMessage>()
+            .HasIndex(m => m.EmailSentDateUtc);
+
+        // The admin review queue reads the open reports.
+        builder.Entity<ArtistFollowerMessage>()
+            .HasIndex(m => new { m.IsReported, m.ModerationResolvedAtUtc });
+
+        // Cascades so that deleting a persona - which a creator can do, and which account deletion
+        // does for them - is not blocked by notification history pointing at it. This is the only
+        // cascade into this table; the song and listener FKs below stay NoAction, so there is
+        // exactly one cascade path and SQL Server accepts the model.
+        builder.Entity<ArtistReleaseNotification>()
+            .HasOne(n => n.CreatorPersona)
+            .WithMany()
+            .HasForeignKey(n => n.CreatorPersonaId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<ArtistReleaseNotification>()
+            .HasOne(n => n.SongMetadata)
+            .WithMany()
+            .HasForeignKey(n => n.SongMetadataId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<ArtistReleaseNotification>()
+            .HasOne(n => n.ListenerUser)
+            .WithMany()
+            .HasForeignKey(n => n.ListenerUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // The duplicate-release guard. This is what lets the creating job be re-run, or overlap
+        // itself, without a listener hearing about the same release twice.
+        builder.Entity<ArtistReleaseNotification>()
+            .HasIndex(n => new { n.SongMetadataId, n.ListenerUserId })
+            .IsUnique();
+
+        // The listener's notification list.
+        builder.Entity<ArtistReleaseNotification>()
+            .HasIndex(n => new { n.ListenerUserId, n.CreatedDateUtc });
+
+        // The nightly email pass scans for unsent rows.
+        builder.Entity<ArtistReleaseNotification>()
+            .HasIndex(n => n.EmailSentDateUtc);
+
+        // The push dispatcher scans both tables the same way the email jobs do.
+        builder.Entity<ArtistReleaseNotification>()
+            .HasIndex(n => n.PushSentDateUtc);
+
+        builder.Entity<ArtistFollowerMessage>()
+            .HasIndex(m => m.PushSentDateUtc);
+
+        // Only one FK, so a cascade here is unambiguous and account deletion needs no hand-written
+        // delete for these rows - unlike the follow tables above, which are reachable by two paths.
+        builder.Entity<PushDeviceToken>()
+            .HasOne(device => device.User)
+            .WithMany()
+            .HasForeignKey(device => device.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A push token is globally unique, and this index is what makes registering an existing
+        // token a REASSIGNMENT rather than a duplicate row - which is what stops one person's
+        // notifications reaching the phone's previous owner.
+        builder.Entity<PushDeviceToken>()
+            .HasIndex(device => device.Token)
+            .IsUnique();
+
+        builder.Entity<PushDeviceToken>()
+            .HasIndex(device => new { device.UserId, device.IsActive });
     }
 }

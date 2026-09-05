@@ -1,4 +1,4 @@
-﻿@page "/music-library"
+@page "/music-library"
 @rendermode InteractiveServer
 @inherits MusicLibraryModel
 @using MusicSalesApp.Services
@@ -282,6 +282,16 @@ else
                                  loading="lazy" decoding="async" />
                         }
                         <a href="@artistInfo.LinkUrl" @onclick:stopPropagation="true" title="View all songs by @artistInfo.DisplayName">@artistInfo.DisplayName</a>
+                    </div>
+                    @* Following is artist-level, so this sits with the artist's name rather than in
+                       the song action row above. KnownIsFollowing is what keeps it to ONE query for
+                       the whole page instead of one per card - see the parameter's own note. It
+                       renders nothing at all when the song has no persona. *@
+                    <div class="card-follow-artist" @onclick:stopPropagation="true">
+                        <FollowArtistButton CreatorPersonaId="@(artistInfo.PersonaId ?? 0)"
+                                            PersonaName="@artistInfo.DisplayName"
+                                            SourceSongMetadataId="GetSongMetadataId(f.Name)"
+                                            KnownIsFollowing="IsFollowingArtist(artistInfo.PersonaId)" />
                     </div>
                 }
                 <!-- Genre (clickable link) -->

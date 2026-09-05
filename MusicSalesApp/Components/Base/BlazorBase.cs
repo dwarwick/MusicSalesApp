@@ -195,6 +195,27 @@ public abstract class BlazorBase : ComponentBase
     protected IReportedSongService ReportedSongService { get; set; } = default!;
 
     [Inject]
+    protected IArtistFollowService ArtistFollowService { get; set; } = default!;
+
+    [Inject]
+    protected IArtistFollowerDirectoryService ArtistFollowerDirectoryService { get; set; } = default!;
+
+    [Inject]
+    protected IArtistFollowerMessageService ArtistFollowerMessageService { get; set; } = default!;
+
+    [Inject]
+    protected IArtistReleaseNotificationService ArtistReleaseNotificationService { get; set; } = default!;
+
+    [Inject]
+    protected IArtistFollowerAnalyticsService ArtistFollowerAnalyticsService { get; set; } = default!;
+
+    [Inject]
+    protected IArtistMessageModerationService ArtistMessageModerationService { get; set; } = default!;
+
+    [Inject]
+    protected IArtistNotificationPreferenceService ArtistNotificationPreferenceService { get; set; } = default!;
+
+    [Inject]
     protected IContactRequestAdminService ContactRequestAdminService { get; set; } = default!;
 
     [Inject]

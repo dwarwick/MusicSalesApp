@@ -93,6 +93,15 @@ else
                             </svg>
                             @GetTotalStreamCount().ToString("N0") streams
                         </span>
+                        @*
+                            /artist/{name} and /creator/{id} are the only artist pages this site
+                            has, so this hero is where Follow belongs. It renders nothing when the
+                            page's tracks carry no persona - there is no artist entity to follow.
+                        *@
+                        <FollowArtistButton CreatorPersonaId="@(persona?.Id ?? 0)"
+                                            PersonaName="@artistName"
+                                            SourceSongMetadataId="@GetCurrentTrackMetadata()?.Id"
+                                            ShowFollowerCount="true" />
                         @if (persona != null && !string.IsNullOrEmpty(persona.WebsiteUrl))
                         {
                             <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>

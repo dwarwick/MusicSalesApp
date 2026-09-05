@@ -388,3 +388,9 @@ FodyWeavers.xsd
 .pytest_cache/
 *.egg-info/
 /MusicSalesApp.LyricsFunctions/local.settings.json
+
+## Push notification credentials. The APNs auth key is a THIRD Apple .p8, separate from the
+## Sign in with Apple and App Store Connect keys, and the Firebase service account key is a
+## Google Cloud credential. Both grant send rights; neither belongs in source control.
+**/apns-auth-key*.p8
+**/firebase-service-account*.json

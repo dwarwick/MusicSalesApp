@@ -892,4 +892,119 @@ public class AccountDeletionServiceTests
         _mockAppleTokenRevocationService.Verify(
             x => x.RevokeRefreshTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    /// <summary>
+    /// The follow feature adds three tables whose listener-side foreign keys are all NoAction, so
+    /// nothing removes them on its own. Leaving any behind would block the user row from being
+    /// deleted at all - and if it somehow did not, would leave a deleted account sitting in
+    /// creators' follower counts.
+    /// </summary>
+    [Test]
+    public async Task DeleteAccountAsync_RemovesEveryFollowFeatureRowForTheUser()
+    {
+        var user = CreateTestUser();
+        var creatorUser = CreateTestUser(TestUserId + 1);
+        var song = CreateSongMetadata();
+        await _context.SaveChangesAsync();
+
+        var creator = CreateCreator(creatorUser.Id);
+        await _context.SaveChangesAsync();
+
+        var persona = new CreatorPersona { CreatorId = creator.Id, Name = "Alex Rivers" };
+        _context.CreatorPersonas.Add(persona);
+        await _context.SaveChangesAsync();
+
+        var follow = new ArtistFollower
+        {
+            CreatorPersonaId = persona.Id,
+            ListenerUserId = user.Id,
+            FollowedDateUtc = DateTime.UtcNow,
+            IsActive = true,
+            AnonymousListenerNumber = 4817,
+        };
+        _context.ArtistFollowers.Add(follow);
+        _context.ArtistReleaseNotifications.Add(new ArtistReleaseNotification
+        {
+            CreatorPersonaId = persona.Id,
+            SongMetadataId = song.Id,
+            ListenerUserId = user.Id,
+            CreatedDateUtc = DateTime.UtcNow,
+        });
+        await _context.SaveChangesAsync();
+
+        _context.ArtistFollowerMessages.Add(new ArtistFollowerMessage
+        {
+            ArtistFollowerId = follow.Id,
+            SenderUserId = creatorUser.Id,
+            MessageKind = ArtistMessageKinds.ThankYou,
+            MessageText = "Thanks!",
+            CreatedDateUtc = DateTime.UtcNow,
+        });
+        await _context.SaveChangesAsync();
+
+        var result = await _service.DeleteAccountAsync(user);
+
+        await using var verifyContext = new AppDbContext(_contextOptions);
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(await verifyContext.ArtistFollowers.AnyAsync(), Is.False);
+            Assert.That(await verifyContext.ArtistReleaseNotifications.AnyAsync(), Is.False);
+
+            // Cascaded away with the follow row it hung off.
+            Assert.That(await verifyContext.ArtistFollowerMessages.AnyAsync(), Is.False);
+        });
+    }
+
+    /// <summary>
+    /// A creator's outgoing messages sit on OTHER people's follow relationships, so deleting their
+    /// own follows does not reach them - and SenderUserId is NoAction, so the user row cannot go
+    /// until they do.
+    /// </summary>
+    [Test]
+    public async Task DeleteAccountAsync_RemovesMessagesTheUserSentAsACreator()
+    {
+        var creatorUser = CreateTestUser();
+        var listener = CreateTestUser(TestUserId + 1);
+        await _context.SaveChangesAsync();
+
+        var creator = CreateCreator(creatorUser.Id);
+        await _context.SaveChangesAsync();
+
+        var persona = new CreatorPersona { CreatorId = creator.Id, Name = "Alex Rivers" };
+        _context.CreatorPersonas.Add(persona);
+        await _context.SaveChangesAsync();
+
+        var follow = new ArtistFollower
+        {
+            CreatorPersonaId = persona.Id,
+            ListenerUserId = listener.Id,
+            FollowedDateUtc = DateTime.UtcNow,
+            IsActive = true,
+            AnonymousListenerNumber = 3012,
+        };
+        _context.ArtistFollowers.Add(follow);
+        await _context.SaveChangesAsync();
+
+        _context.ArtistFollowerMessages.Add(new ArtistFollowerMessage
+        {
+            ArtistFollowerId = follow.Id,
+            SenderUserId = creatorUser.Id,
+            MessageKind = ArtistMessageKinds.ThankYou,
+            MessageText = "Thanks!",
+            CreatedDateUtc = DateTime.UtcNow,
+        });
+        await _context.SaveChangesAsync();
+
+        var result = await _service.DeleteAccountAsync(creatorUser);
+
+        await using var verifyContext = new AppDbContext(_contextOptions);
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(await verifyContext.ArtistFollowerMessages.AnyAsync(), Is.False);
+        });
+    }
 }

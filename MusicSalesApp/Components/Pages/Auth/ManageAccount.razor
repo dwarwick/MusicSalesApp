@@ -44,6 +44,8 @@
             <a href="@SectionLink("account")" class="settings-nav-link">Account</a>
             <a href="@SectionLink("subscription")" class="settings-nav-link">Subscription</a>
             <a href="@SectionLink("email-preferences")" class="settings-nav-link">Email preferences</a>
+            <a href="@SectionLink(AppPageRoutes.ManageAccountFollowingSection)" class="settings-nav-link">Following</a>
+            <a href="@SectionLink(AppPageRoutes.ManageAccountArtistMessagesSection)" class="settings-nav-link">Artist messages</a>
             <a href="@SectionLink("passkeys")" class="settings-nav-link">Passkeys</a>
             <a href="@SectionLink("password")" class="settings-nav-link">Password</a>
             <a href="@SectionLink("close-account")" class="settings-nav-link settings-nav-link-danger">Close account</a>
@@ -246,6 +248,26 @@
                     <div class="settings-check">
                         <SfCheckBox @bind-Checked="_receiveNewSongEmails" TChecked="bool" Label="Receive email notifications when new music is added" />
                     </div>
+                    @* The two follow-feature switches. There is no in-app equivalent to switch off:
+                       the notification IS the record, and muting one artist is done per artist in
+                       the Following section rather than site-wide here. *@
+                    <div class="settings-check">
+                        <SfCheckBox @bind-Checked="_receiveArtistReleaseEmails" TChecked="bool" Label="Email me when artists I follow release new music" />
+                    </div>
+                    <div class="settings-check">
+                        <SfCheckBox @bind-Checked="_receiveArtistMessageEmails" TChecked="bool" Label="Email me when an artist I follow sends me a message" />
+                    </div>
+                    @* Push settings live here even though the web cannot receive a push: they are
+                       account-level and control what the StreamTunes app does on every device
+                       signed in to this account. The app has its own copy of these switches, and
+                       both write the same two columns. *@
+                    <div class="settings-check">
+                        <SfCheckBox @bind-Checked="_receiveArtistReleasePush" TChecked="bool" Label="Send a notification to my phone when artists I follow release new music" />
+                    </div>
+                    <div class="settings-check">
+                        <SfCheckBox @bind-Checked="_receiveArtistMessagePush" TChecked="bool" Label="Send a notification to my phone when an artist I follow sends me a message" />
+                    </div>
+                    <p class="settings-hint">Phone notifications need the StreamTunes app, and only reach devices you are signed in on.</p>
                     @* Never gated on the checkbox. Switching a notification OFF is a save like
                        any other - the terms checkbox on the subscription card gates its button
                        because agreement is a precondition, which is not the case here. *@
@@ -260,6 +282,10 @@
                         }
                     </div>
                 </section>
+
+                <FollowedArtistsSection UserId="@CurrentUserId" />
+
+                <ArtistMessagesSection UserId="@CurrentUserId" />
 
                 <section class="settings-card" id="passkeys">
                     <div class="settings-section-head">

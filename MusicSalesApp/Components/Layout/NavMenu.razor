@@ -1,4 +1,4 @@
-﻿@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Common.Helpers
 @using Syncfusion.Blazor
 @using Syncfusion.Blazor.Buttons
 @using Syncfusion.Blazor.Navigations
@@ -129,6 +129,7 @@
                                     <MenuItem Url="/creator/dashboard" Text="  Dashboard" IconCss="streamtunes-menu-icon streamtunes-menu-icon-dashboard"></MenuItem>
                                     <MenuItem Url="/creator/songs" Text="  Manage My Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-song-list"></MenuItem>
                                     <MenuItem Url="@AppPageRoutes.CreatorPersonas" Text="  Manage My Personas" IconCss="streamtunes-menu-icon streamtunes-menu-icon-personality"></MenuItem>
+                                    <MenuItem Url="@AppPageRoutes.CreatorFollowers" Text="  My Followers" IconCss="streamtunes-menu-icon streamtunes-menu-icon-users"></MenuItem>
                                 </Authorized>
                             </AuthorizeView>
 
@@ -147,6 +148,7 @@
                             <MenuItem Url="/admin/payouts" Text="  Payouts" IconCss="streamtunes-menu-icon streamtunes-menu-icon-money"></MenuItem>
                             <MenuItem Url="/admin/tip-fraud" Text="  Tip Fraud Monitor" IconCss="streamtunes-menu-icon streamtunes-menu-icon-warning"></MenuItem>
                             <MenuItem Url="/admin/reported-songs" Text="  Reported Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-flag"></MenuItem>
+                            <MenuItem Url="@AppPageRoutes.AdminArtistMessages" Text="  Reported Artist Messages" IconCss="streamtunes-menu-icon streamtunes-menu-icon-flag"></MenuItem>
                             <MenuItem Url="/admin/logs" Text="  View Logs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-document"></MenuItem>
                             <MenuItem Url="/admin/storage-backup" Text="  Storage Backup" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
                             <MenuItem Url="/admin/image-variant-backfill" Text="  Image Variant Backfill" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>

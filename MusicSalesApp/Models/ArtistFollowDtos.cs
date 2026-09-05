@@ -1,0 +1,151 @@
+#nullable enable
+namespace MusicSalesApp.Models;
+
+// Data-transfer shapes for the artist follow feature.
+//
+// The split between the creator-facing and listener-facing records below is the privacy boundary
+// made structural. ArtistFollowerSummaryDto has no field that could hold an email, a username or a
+// listener id, so a query that tried to leak one would not compile - a far better guarantee than
+// remembering not to select the column. ArtistMessageDto is the same idea in the other direction:
+// it has nowhere to put the sending creator's account.
+
+/// <summary>
+/// One follower as their artist sees them. Carries a pseudonym and nothing else about the person.
+/// </summary>
+public sealed record ArtistFollowerSummaryDto(
+    int ArtistFollowerId,
+    string AnonymousDisplayName,
+    DateTime FollowedDateUtc,
+    int? SourceSongMetadataId,
+    string? SourceSongTitle,
+    bool HasBeenThanked,
+    DateTime? LastMessageDateUtc,
+    string? LastMessageText);
+
+/// <summary>
+/// One artist as their follower sees them.
+/// </summary>
+public sealed record FollowedArtistDto(
+    int ArtistFollowerId,
+    int CreatorPersonaId,
+    string ArtistName,
+    string? PersonaImageBlobPath,
+    DateTime FollowedDateUtc,
+    int? LatestReleaseSongMetadataId,
+    string? LatestReleaseTitle,
+    DateTime? LatestReleaseDateUtc,
+    bool ReleaseNotificationsEnabled,
+    bool ArtistMessagesEnabled,
+    bool IsBlocked,
+    int UnreadMessageCount);
+
+/// <summary>
+/// A message from an artist, as the listener sees it.
+/// </summary>
+/// <remarks>
+/// There is deliberately no sender user id, sender email or creator name on this record. The
+/// listener knows the persona; the human behind the alias is no more disclosed to them than the
+/// listener is to the creator.
+/// </remarks>
+public sealed record ArtistMessageDto(
+    int MessageId,
+    int CreatorPersonaId,
+    string ArtistName,
+    string MessageText,
+    int? RelatedSongMetadataId,
+    string? RelatedSongTitle,
+    DateTime CreatedDateUtc,
+    bool IsRead,
+    bool IsReported);
+
+/// <summary>
+/// A new-release notification, as the listener sees it.
+/// </summary>
+public sealed record ArtistReleaseNotificationDto(
+    int NotificationId,
+    int CreatorPersonaId,
+    string ArtistName,
+    int SongMetadataId,
+    string SongTitle,
+    bool SongIsAvailable,
+    DateTime CreatedDateUtc,
+    bool IsRead);
+
+/// <summary>
+/// The creator's follower headline figures.
+/// </summary>
+public sealed record ArtistFollowerAnalyticsDto(
+    int TotalFollowers,
+    int NewFollowersThisMonth,
+    IReadOnlyList<FollowSourceSongDto> TopSongsGeneratingFollows);
+
+/// <summary>
+/// How many follows one song is credited with starting.
+/// </summary>
+public sealed record FollowSourceSongDto(int SongMetadataId, string SongTitle, int FollowCount);
+
+/// <summary>
+/// What happened when a follow state was requested.
+/// </summary>
+/// <remarks>
+/// Split finely because the mobile client maps outcomes to HTTP status codes, and the distinction
+/// between "your request was already true" and "we refused" decides whether a queued offline
+/// intent is dropped or retried.
+/// </remarks>
+public enum ArtistFollowOutcome
+{
+    /// <summary>A new follow was created, or a dormant one reactivated.</summary>
+    Followed,
+
+    /// <summary>Already following; nothing changed.</summary>
+    AlreadyFollowing,
+
+    /// <summary>The follow was deactivated.</summary>
+    Unfollowed,
+
+    /// <summary>Not following in the first place; nothing changed.</summary>
+    NotFollowing,
+
+    /// <summary>The persona does not exist, is disabled, or its creator is inactive or suspended.</summary>
+    ArtistUnavailable,
+
+    /// <summary>The listener has blocked this artist and must unblock before following again.</summary>
+    Blocked,
+}
+
+/// <summary>
+/// What happened when a creator tried to send a thank-you.
+/// </summary>
+public enum ArtistThankYouOutcome
+{
+    Sent,
+
+    /// <summary>This follower has already been thanked. One per relationship, ever.</summary>
+    AlreadyThanked,
+
+    /// <summary>The text failed <c>ArtistMessageContentPolicy</c>; see the reason on the result.</summary>
+    ContentRejected,
+
+    /// <summary>The listener is not currently following, so the creator may not initiate contact.</summary>
+    NotFollowing,
+
+    /// <summary>The listener has blocked or muted this artist.</summary>
+    Blocked,
+
+    /// <summary>The persona's daily thank-you allowance is used up.</summary>
+    RateLimited,
+
+    /// <summary>The persona is disabled, or its creator is inactive or suspended.</summary>
+    ArtistUnavailable,
+
+    /// <summary>The signed-in creator does not own the persona they are sending as.</summary>
+    NotPersonaOwner,
+}
+
+/// <summary>
+/// The outcome of a thank-you attempt, with the reason text when the content was refused.
+/// </summary>
+public sealed record ArtistThankYouResult(ArtistThankYouOutcome Outcome, string? RejectionReason = null)
+{
+    public bool Succeeded => Outcome == ArtistThankYouOutcome.Sent;
+}

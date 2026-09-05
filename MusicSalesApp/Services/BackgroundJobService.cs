@@ -101,6 +101,39 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.SendPendingEmailsAsync(),
                 Cron.Daily(6));
 
+            // Artist release notifications, split in two because the halves have opposite costs.
+            //
+            // Creating the rows is pure database work, so it runs hourly and a follower sees the
+            // release the same day. Emailing them sleeps 5 seconds between messages to stay out of
+            // spam filters, which only makes sense once a night. :40 is clear of the other hourly
+            // jobs at :00 and :20.
+            RecurringJob.AddOrUpdate<IArtistReleaseNotificationService>(
+                HangfireJobIds.CreateArtistReleaseNotifications,
+                service => service.CreatePendingNotificationsAsync(),
+                "40 * * * *");
+
+            // 04:30 UTC. 04:00 is the site-wide new-song digest and 04:15 the PayPal drift
+            // reconcile, so this sits in the gap between them.
+            RecurringJob.AddOrUpdate<IArtistReleaseNotificationService>(
+                HangfireJobIds.SendArtistReleaseNotificationEmails,
+                service => service.SendPendingEmailsAsync(),
+                Cron.Daily(4, 30));
+
+            // Every 15 minutes rather than nightly: a creator's thank-you that lands the next
+            // morning reads as broken. Same */15 slot shape as the two stalled-media reconcilers.
+            RecurringJob.AddOrUpdate<IArtistFollowerMessageService>(
+                HangfireJobIds.SendArtistMessageEmails,
+                service => service.SendPendingEmailsAsync(),
+                "*/15 * * * *");
+
+            // Push, every 5 minutes - more often than either email job because push has no
+            // deliberate spacing to observe and is the channel a listener notices immediately.
+            // It covers both release notifications and artist messages in one pass.
+            RecurringJob.AddOrUpdate<IArtistPushDispatchService>(
+                HangfireJobIds.DispatchArtistPushNotifications,
+                service => service.DispatchPendingAsync(),
+                "*/5 * * * *");
+
             // Nightly incremental backup of the Azure blob containers into their backup- copies.
             // 06:45 UTC sits clear of every other daily job (0:00, 1:30, 2:00, 2:30, 3:00, 3:15,
             // 3:45, 4:00, 5:00, 5:30, 6:00) and of the hourly jobs, which fire on the hour or at :20.

@@ -42,6 +42,20 @@ public static class AppPageRoutes
     /// </summary>
     public const string ManageAccountSubscriptionSection = "subscription";
     public const string ManageAccountSubscription = ManageAccount + "#" + ManageAccountSubscriptionSection;
+    public const string CreatorFollowers = "/creator/followers";
+    public const string AdminArtistMessages = "/admin/artist-messages";
+
+    /// <summary>
+    /// The followed-artists and artist-messages sections of Manage Account. Same reasoning as
+    /// <see cref="ManageAccountSubscriptionSection"/>: the id half is the anchor the page renders,
+    /// so a link and its target cannot drift apart. Note the nav rail must build these through the
+    /// page's SectionLink helper - a bare "#following" href resolves against &lt;base href="/"&gt;
+    /// and navigates to the HOME page carrying the fragment.
+    /// </summary>
+    public const string ManageAccountFollowingSection = "following";
+    public const string ManageAccountFollowing = ManageAccount + "#" + ManageAccountFollowingSection;
+    public const string ManageAccountArtistMessagesSection = "artist-messages";
+    public const string ManageAccountArtistMessages = ManageAccount + "#" + ManageAccountArtistMessagesSection;
     public const string MusicLibrary = "/music-library";
     public const string Register = "/register";
     public const string RefreshSignIn = "/account/refresh-signin";
