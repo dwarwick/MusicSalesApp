@@ -20,6 +20,7 @@ public class ArtistPushDispatchServiceTests
     private ArtistFollowerMessageService _messageService;
     private ArtistReleaseNotificationService _releaseService;
     private PushDeviceTokenService _deviceTokenService;
+    private Mock<IAppSettingsService> _appSettings;
     private ArtistPushDispatchService _service;
 
     [SetUp]
@@ -48,10 +49,14 @@ public class ArtistPushDispatchServiceTests
         _deviceTokenService = new PushDeviceTokenService(
             _harness.ContextFactory.Object, Mock.Of<ILogger<PushDeviceTokenService>>());
 
+        _appSettings = new Mock<IAppSettingsService>();
+        _appSettings.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(true);
+
         _service = new ArtistPushDispatchService(
             _harness.ContextFactory.Object,
             _deviceTokenService,
             _sender,
+            _appSettings.Object,
             Mock.Of<ILogger<ArtistPushDispatchService>>());
     }
 
@@ -62,6 +67,18 @@ public class ArtistPushDispatchServiceTests
     {
         await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true, _harness.SongId);
         await _deviceTokenService.RegisterAsync(_harness.ListenerUserId, PushPlatforms.Android, "token-abc", "device-1");
+
+        // Opt the listener in explicitly. Both push preferences default to OFF, so "has a
+        // registered device" is not by itself enough to be sent anything - the listener has to
+        // have asked. Every test below that expects a delivery depends on this line, and the two
+        // that expect silence turn one of them back off to say so.
+        await using (var optIn = _harness.NewContext())
+        {
+            var user = await optIn.Users.SingleAsync(u => u.Id == _harness.ListenerUserId);
+            user.ReceiveArtistReleasePush = true;
+            user.ReceiveArtistMessagePush = true;
+            await optIn.SaveChangesAsync();
+        }
 
         await using var context = _harness.NewContext();
         return (await context.ArtistFollowers.SingleAsync()).Id;
@@ -276,6 +293,51 @@ public class ArtistPushDispatchServiceTests
             Assert.That(delivered, Is.Zero);
             Assert.That(notification.PushSentDateUtc, Is.Null);
         });
+    }
+
+    [Test]
+    public async Task Dispatch_SendsNothingWhileTheAdminFlagIsOff()
+    {
+        // The release switch. Until push is proven and the apps are in the stores there is nothing
+        // on the other end, so the dispatcher must not even try.
+        _appSettings.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(false);
+
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        await _releaseService.CreatePendingNotificationsAsync();
+
+        var delivered = await _service.DispatchPendingAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(delivered, Is.Zero);
+            Assert.That(_sender.Sent, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task Dispatch_QueuesRatherThanDiscardsWhileTheFlagIsOff()
+    {
+        // Nothing is lost while push is switched off - the rows stay unstamped, exactly as they do
+        // for an unconfigured transport, so turning it on later delivers the backlog.
+        _appSettings.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(false);
+
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        await _releaseService.CreatePendingNotificationsAsync();
+        await _service.DispatchPendingAsync();
+
+        await using (var context = _harness.NewContext())
+        {
+            Assert.That(
+                (await context.ArtistReleaseNotifications.SingleAsync()).PushSentDateUtc,
+                Is.Null,
+                "A switched-off flag must not consume the notification.");
+        }
+
+        _appSettings.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(true);
+
+        Assert.That(await _service.DispatchPendingAsync(), Is.EqualTo(1));
     }
 
     // ------------------------------------------------------------ messages

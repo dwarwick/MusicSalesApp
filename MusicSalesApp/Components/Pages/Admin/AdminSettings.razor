@@ -161,6 +161,31 @@ else
                 </div>
             </div>
 
+            @* The release switch for phone notifications. Off until push has been proven end to
+               end AND the apps carrying the registration code are in the stores - before that
+               there is nothing on the other end, and the listener-facing checkboxes are hidden
+               too, because offering a preference the app cannot honour is worse than not offering
+               it. *@
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Phone Notifications</label>
+                    <div>
+                        <SfCheckBox TChecked="bool"
+                                    Label="Send push notifications to phones"
+                                    @bind-Checked="_pushNotificationsEnabled" />
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        Off, nothing is sent and the phone-notification options disappear from every
+                        listener's account page. Devices can still register while it is off, which is how
+                        you test the round trip before switching it on.
+                        <strong class="d-block mt-1">
+                            Nothing is lost while this is off. Notifications queue and go out when it is
+                            turned on, rather than being silently discarded.
+                        </strong>
+                    </small>
+                </div>
+            </div>
+
             @* This is the rollback control for browser-direct uploads, so it lives where an admin
                can reach it under pressure. Before this existed the only way to turn the feature off
                was a hand-written UPDATE against the live database. *@

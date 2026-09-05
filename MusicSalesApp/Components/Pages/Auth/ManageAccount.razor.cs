@@ -35,10 +35,14 @@ public partial class ManageAccountModel : BlazorBase
 
     // Email preferences
     protected bool _receiveNewSongEmails = false;
-    protected bool _receiveArtistReleaseEmails = true;
-    protected bool _receiveArtistMessageEmails = true;
-    protected bool _receiveArtistReleasePush = true;
-    protected bool _receiveArtistMessagePush = true;
+    protected bool _receiveArtistReleaseEmails;
+    protected bool _receiveArtistMessageEmails;
+    protected bool _receiveArtistReleasePush;
+    protected bool _receiveArtistMessagePush;
+
+    // Hidden entirely until an admin switches push on. There is no point offering a preference
+    // the app on the listener's phone cannot act on yet.
+    protected bool _pushNotificationsEnabled;
 
     // Shown inside the Email preferences card rather than only in the page-level banner.
     // That banner renders above the first section, so a reader who saves from the third one
@@ -135,6 +139,7 @@ public partial class ManageAccountModel : BlazorBase
                         _receiveArtistMessageEmails = _currentUser.ReceiveArtistMessageEmails;
                         _receiveArtistReleasePush = _currentUser.ReceiveArtistReleasePush;
                         _receiveArtistMessagePush = _currentUser.ReceiveArtistMessagePush;
+                        _pushNotificationsEnabled = await AppSettingsService.IsPushNotificationsEnabledAsync();
 
                         await DetectAndPersistUserTimeZoneAsync();
                         

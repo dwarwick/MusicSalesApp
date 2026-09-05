@@ -292,6 +292,7 @@ public class ArtistReleaseNotificationServiceTests
     public async Task SendPendingEmails_SendsOnceAndNamesTheArtistAndSong()
     {
         await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+        await _harness.OptListenerIntoEmailsAsync();
         _harness.AddSong("Ocean Road");
         await _service.CreatePendingNotificationsAsync();
 

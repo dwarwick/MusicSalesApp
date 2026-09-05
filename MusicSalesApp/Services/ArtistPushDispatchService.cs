@@ -18,23 +18,35 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly IPushDeviceTokenService _deviceTokenService;
     private readonly IPushNotificationSender _sender;
+    private readonly IAppSettingsService _appSettingsService;
     private readonly ILogger<ArtistPushDispatchService> _logger;
 
     public ArtistPushDispatchService(
         IDbContextFactory<AppDbContext> dbContextFactory,
         IPushDeviceTokenService deviceTokenService,
         IPushNotificationSender sender,
+        IAppSettingsService appSettingsService,
         ILogger<ArtistPushDispatchService> logger)
     {
         _dbContextFactory = dbContextFactory;
         _deviceTokenService = deviceTokenService;
         _sender = sender;
+        _appSettingsService = appSettingsService;
         _logger = logger;
     }
 
     /// <inheritdoc />
     public async Task<int> DispatchPendingAsync()
     {
+        // The admin kill switch, checked before anything else. Deliberately leaves every row
+        // unstamped, exactly like an unconfigured transport: turning push on later delivers what
+        // is still pending rather than having silently consumed it while the flag was off.
+        if (!await _appSettingsService.IsPushNotificationsEnabledAsync())
+        {
+            _logger.LogDebug("Push notifications are switched off; skipping dispatch.");
+            return 0;
+        }
+
         if (!_sender.IsConfigured)
         {
             // Nothing configured. Leave every row unstamped so that configuring credentials later

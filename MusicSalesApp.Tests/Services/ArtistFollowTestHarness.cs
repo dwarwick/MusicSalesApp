@@ -145,6 +145,25 @@ public sealed class ArtistFollowTestHarness : IDisposable
     /// <summary>
     /// Adds another song for the seeded persona, optionally already stamped as published.
     /// </summary>
+    /// <summary>
+    /// Turns the listener's two follow-feature email preferences on.
+    /// </summary>
+    /// <remarks>
+    /// Both default to OFF, matching <c>ReceiveNewSongEmails</c> beside them, so a test that
+    /// expects an email has to say that the listener asked for one. Following an artist is
+    /// consent to the in-app record, not consent to be mailed.
+    /// </remarks>
+    public async Task OptListenerIntoEmailsAsync()
+    {
+        await using var context = NewContext();
+
+        var listener = await context.Users.SingleAsync(u => u.Id == ListenerUserId);
+        listener.ReceiveArtistReleaseEmails = true;
+        listener.ReceiveArtistMessageEmails = true;
+
+        await context.SaveChangesAsync();
+    }
+
     public int AddSong(string title, DateTime? firstPublishedAtUtc = null, bool isEnabled = true)
     {
         using var context = NewContext();

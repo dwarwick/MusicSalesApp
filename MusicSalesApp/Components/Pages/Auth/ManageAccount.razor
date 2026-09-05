@@ -259,15 +259,21 @@
                     </div>
                     @* Push settings live here even though the web cannot receive a push: they are
                        account-level and control what the StreamTunes app does on every device
-                       signed in to this account. The app has its own copy of these switches, and
-                       both write the same two columns. *@
-                    <div class="settings-check">
-                        <SfCheckBox @bind-Checked="_receiveArtistReleasePush" TChecked="bool" Label="Send a notification to my phone when artists I follow release new music" />
-                    </div>
-                    <div class="settings-check">
-                        <SfCheckBox @bind-Checked="_receiveArtistMessagePush" TChecked="bool" Label="Send a notification to my phone when an artist I follow sends me a message" />
-                    </div>
-                    <p class="settings-hint">Phone notifications need the StreamTunes app, and only reach devices you are signed in on.</p>
+                       signed in to this account.
+
+                       The whole block is hidden until an admin switches push on, label included.
+                       Until the phone apps are in the stores nothing can arrive, and a preference
+                       that quietly does nothing is worse than no preference at all. *@
+                    @if (_pushNotificationsEnabled)
+                    {
+                        <div class="settings-check">
+                            <SfCheckBox @bind-Checked="_receiveArtistReleasePush" TChecked="bool" Label="Send a notification to my phone when artists I follow release new music" />
+                        </div>
+                        <div class="settings-check">
+                            <SfCheckBox @bind-Checked="_receiveArtistMessagePush" TChecked="bool" Label="Send a notification to my phone when an artist I follow sends me a message" />
+                        </div>
+                        <p class="settings-hint">Phone notifications need the StreamTunes app, and only reach devices you are signed in on.</p>
+                    }
                     @* Never gated on the checkbox. Switching a notification OFF is a save like
                        any other - the terms checkbox on the subscription card gates its button
                        because agreement is a precondition, which is not the case here. *@

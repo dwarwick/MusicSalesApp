@@ -44,6 +44,10 @@ public class ArtistFollowerMessageServiceTests
     {
         await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true, _harness.SongId);
 
+        // Email preferences default to OFF, so every test below that expects an email has to have
+        // the listener ask for one first. The opted-out test turns it back off to say so.
+        await _harness.OptListenerIntoEmailsAsync();
+
         await using var context = _harness.NewContext();
         return (await context.ArtistFollowers.SingleAsync()).Id;
     }

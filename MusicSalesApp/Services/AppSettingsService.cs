@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
@@ -122,6 +122,16 @@ public class AppSettingsService : IAppSettingsService
     /// Defaults off; see <see cref="AppSettingsService.IsDirectToStorageUploadEnabledAsync"/>.
     /// </summary>
     public const string DirectToStorageUploadEnabledKey = "DirectToStorageUploadEnabled";
+
+    /// <summary>
+    /// Whether push notifications are live.
+    /// </summary>
+    /// <remarks>
+    /// Defaults OFF, and stays off until push is proven end to end AND the phone apps carrying the
+    /// registration code are actually in the stores. Until then no device can receive anything, so
+    /// offering the preference would promise something the app on the listener's phone cannot do.
+    /// </remarks>
+    public const string PushNotificationsEnabledKey = "PushNotificationsEnabled";
 
     /// <summary>
     /// Whether the promotional reduction to the stream-qualifying threshold is active.
@@ -463,6 +473,31 @@ public class AppSettingsService : IAppSettingsService
             DirectToStorageUploadEnabledKey,
             enabled.ToString(),
             "Upload creator files from the browser straight to Azure, bypassing the web server");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsPushNotificationsEnabledAsync()
+    {
+        var value = await GetSettingAsync(PushNotificationsEnabledKey);
+
+        // Defaults OFF, and an absent or unparseable row must never turn it on by accident. Until
+        // the phone apps are in the stores there is nothing on the other end, so the safe reading
+        // of "no answer" is "not yet".
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        return bool.TryParse(value, out var enabled) && enabled;
+    }
+
+    /// <inheritdoc />
+    public async Task SetPushNotificationsEnabledAsync(bool enabled)
+    {
+        await SetSettingAsync(
+            PushNotificationsEnabledKey,
+            enabled.ToString(),
+            "Send push notifications to phones for new releases and artist messages");
     }
 
     /// <inheritdoc />

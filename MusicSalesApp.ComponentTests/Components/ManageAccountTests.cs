@@ -654,6 +654,51 @@ public class ManageAccountTests : BUnitTestBase
         return (Task)method!.Invoke(instance, null)!;
     }
 
+    [Test]
+    public void ManageAccount_HidesThePhoneNotificationOptionsUntilAnAdminSwitchesPushOn()
+    {
+        // The apps carrying the registration code are not in the stores yet, so nothing can
+        // arrive on a phone. Offering the preference anyway would be promising something the
+        // app cannot do - and the HINT has to go with the checkboxes, because a line reading
+        // "Phone notifications need the StreamTunes app" above nothing at all is worse than
+        // either state on its own.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        MockAppSettingsService.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(false);
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("notification to my phone"));
+            Assert.That(cut.Markup, Does.Not.Contain("Phone notifications need the StreamTunes app"));
+
+            // The email preferences beside them are unaffected - the flag gates push only.
+            Assert.That(cut.Markup, Does.Contain("Email me when artists I follow release new music"));
+        });
+    }
+
+    [Test]
+    public void ManageAccount_ShowsThePhoneNotificationOptionsOnceAnAdminSwitchesPushOn()
+    {
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        MockAppSettingsService.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(true);
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("notification to my phone when artists I follow release new music"));
+            Assert.That(cut.Markup, Does.Contain("notification to my phone when an artist I follow sends me a message"));
+            Assert.That(cut.Markup, Does.Contain("Phone notifications need the StreamTunes app"));
+        });
+    }
+
     [TestCase(true, "Saved. We will email you when new music is added.")]
     [TestCase(false, "Saved. We will not email you when new music is added.")]
     public async Task ManageAccount_SaveEmailPreferences_ConfirmsInsideTheCardAndSaysWhichWay(
