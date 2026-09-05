@@ -171,19 +171,22 @@ body {
 .like-button,
 .dislike-button,
 .like-display,
-.dislike-display {
+.dislike-display,
+.follow-artist-bell {
     color: black;
     background-color: white;
 }
 
 .like-button:hover,
-.dislike-button:hover {
+.dislike-button:hover,
+.follow-artist-bell:hover {
     background-color: rgba(179, 179, 179, 0.2);
     /*color: #fff;*/
 }
 
 .like-button.active,
-.dislike-button.active {
+.dislike-button.active,
+.follow-artist-bell.is-following {
     background-color: rgba(179, 179, 179, 0.2);
     /*color: #fff;*/
 }
@@ -1141,7 +1144,8 @@ body {
 /* The approved layout has these as bare icon + count, with no button chrome - the card
    already carries enough boxes. Scoped to the row, which only the song card renders. */
 .card-ai-actions-row .like-button,
-.card-ai-actions-row .dislike-button {
+.card-ai-actions-row .dislike-button,
+.card-ai-actions-row .follow-artist-bell {
     background: transparent;
     border: none;
     box-shadow: none;
@@ -1149,13 +1153,15 @@ body {
 }
 
 .card-ai-actions-row .like-button:hover,
-.card-ai-actions-row .dislike-button:hover {
+.card-ai-actions-row .dislike-button:hover,
+.card-ai-actions-row .follow-artist-bell:hover {
     background: transparent;
     color: var(--st-accent);
 }
 
 .card-ai-actions-row .like-button.active,
-.card-ai-actions-row .dislike-button.active {
+.card-ai-actions-row .dislike-button.active,
+.card-ai-actions-row .follow-artist-bell.is-following {
     background: transparent;
     color: var(--st-accent);
 }
@@ -1780,17 +1786,4 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 
 .follow-row.is-unread {
     border-left: 3px solid var(--st-accent);
-}
-
-/* Follow bell. Matches .like-button so the cluster reads as one control group. The FILLED glyph
-   is what signals following - the tinted background only echoes what like/dislike do when active,
-   so the state does not rest on colour alone. */
-.follow-artist-bell {
-    color: black;
-    background-color: white;
-}
-
-.follow-artist-bell:hover,
-.follow-artist-bell.is-following {
-    background-color: rgba(179, 179, 179, 0.2);
 }
