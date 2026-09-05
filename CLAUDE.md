@@ -259,16 +259,22 @@ account-level flags on `ApplicationUser`, per notification kind, all four defaul
 > and a listener unchecking the box would silently keep receiving. The migrations set the column
 > default instead.
 
-**Push is Firebase for Android and direct APNs for iOS**, not FCM for both. Routing iOS through FCM
-would mean the Firebase SDK in the iOS app head, which already carries documented App Store
-launch-crash workarounds (`MtouchRegistrar=static`, LLVM AOT) — a large native SDK there is exactly
-the change that reopens them. Direct APNs is an ES256 JWT and an HTTP/2 request, reusing the key
-loader `AppleTokenRevocationService` already has.
+**Push is Firebase Cloud Messaging for BOTH platforms.** The server never talks to APNs; FCM
+relays to it, and the APNs auth key is uploaded to the Firebase console rather than living on this
+server. There is therefore no Apple section in config and no sandbox/production switch.
 
-`ApplePushNotificationSender` needs a **third** Apple key: an APNs Auth Key, not the Sign in with
-Apple key and not the App Store Connect key beside it in `App_Data/Secrets`. All three are .p8 files
-with their own key ids, none are interchangeable, and the wrong one fails with a 403 saying only
-`InvalidProviderToken`.
+That last part is the reason for the choice. **FCM records the APNs environment against each token
+at registration**, so a development-signed build and a TestFlight build can both be delivered to
+without the server knowing which is which. Talking to APNs directly means owning that distinction
+forever, and getting it wrong produces an unhelpful `BadDeviceToken` in both directions.
+
+The cost is the Firebase SDK in the iOS app head, which carries documented App Store launch-crash
+workarounds (`MtouchRegistrar=static`, LLVM AOT). Run `test_device.sh` before submitting.
+
+**Test and Production are SEPARATE Firebase projects**, so a test broadcast can never reach a
+production device. Each environment names its own service-account file
+(`firebase-service-account.test.json` / `.production.json`), and the app selects
+`google-services.{Test,Production}.json` by the `FirebaseEnvironment` MSBuild property.
 
 **Everything is inert without credentials**, the same posture Apple revocation takes: the site
 starts, the feature runs, push is skipped. What it must *not* do is consume the notification —
@@ -325,13 +331,16 @@ Nothing here can be configured from the repo. Push stays inert until:
 |---|---|
 | Firebase Console | A project; add the Android app with package `net.streamtunes.musicsalesapp.maui`; download `google-services.json` into `Platforms/Android/` in the MAUI repo |
 | Google Cloud | A service account with the Firebase Messaging role; its JSON key on the server |
-| Apple Developer | Enable the Push Notifications capability on the App ID, **regenerate the provisioning profile**, and create an APNs Auth Key (.p8) |
-| Server config | `Push:Firebase:ProjectId`, `Push:Firebase:ServiceAccountKeyPath` (or `...KeyJson`), `Push:Apple:TeamId`, `Push:Apple:KeyId`, `Push:Apple:BundleId`, `Push:Apple:PrivateKeyPath` (or `...Pem`), `Push:Apple:UseSandbox` |
+| Apple Developer | Enable Push Notifications on the App ID, **regenerate the provisioning profile**, create an APNs Auth Key (.p8), and **upload that key to the Firebase console** under Cloud Messaging with its Key ID and Team ID |
+| Server config | `Push:Firebase:ProjectId` and `Push:Firebase:ServiceAccountKeyPath` (or `...KeyJson`), per environment. No Apple section - the APNs key lives in Firebase, not here. |
 
-`Push:Apple:UseSandbox` follows the environment and must match the build: a sandbox token is
-rejected by production and vice versa, with an unhelpful `BadDeviceToken` either way. The same trap
-applies to `aps-environment` in `Platforms/iOS/Entitlements.plist`, which ships as `development`
-and needs `production` for an App Store build.
+`aps-environment` in `Platforms/iOS/Entitlements.plist` still ships as `development` and still
+needs `production` for an App Store build - that entitlement governs how the DEVICE registers, and
+FCM cannot paper over it. What FCM does remove is the server-side half: there is no APNs host to
+pick and no sandbox flag to get wrong.
+
+The APNs Auth Key is a **third** Apple .p8, separate from the Sign in with Apple and App Store
+Connect keys in `App_Data/Secrets` - but it is uploaded to Firebase rather than deployed here.
 
 ### `SongMetadata.FirstPublishedAtUtc` is what makes the release rules fall out
 
