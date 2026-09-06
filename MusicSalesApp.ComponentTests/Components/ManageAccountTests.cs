@@ -654,18 +654,19 @@ public class ManageAccountTests : BUnitTestBase
         return (Task)method!.Invoke(instance, null)!;
     }
 
-    [Test]
-    public void ManageAccount_HidesThePhoneNotificationOptionsUntilAnAdminSwitchesPushOn()
+    [TestCase(true)]
+    [TestCase(false)]
+    public void ManageAccount_NeverOffersPhoneNotificationPreferences(bool pushEnabled)
     {
-        // The apps carrying the registration code are not in the stores yet, so nothing can
-        // arrive on a phone. Offering the preference anyway would be promising something the
-        // app cannot do - and the HINT has to go with the checkboxes, because a line reading
-        // "Phone notifications need the StreamTunes app" above nothing at all is worse than
-        // either state on its own.
+        // They live in the app now, under Config > Notifications, next to the OS permission they
+        // depend on. Two places to set the same thing is how someone allows notifications on their
+        // phone, leaves the account switches off here, and receives nothing with no way to tell
+        // those two states apart from the device. Asserted for BOTH states of the admin flag,
+        // because the flag used to be what revealed these controls.
         SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
         SetupRendererInfo();
 
-        MockAppSettingsService.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(false);
+        MockAppSettingsService.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(pushEnabled);
 
         var cut = TestContext.Render<ManageAccount>();
         cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
@@ -674,28 +675,11 @@ public class ManageAccountTests : BUnitTestBase
         {
             Assert.That(cut.Markup, Does.Not.Contain("notification to my phone"));
             Assert.That(cut.Markup, Does.Not.Contain("Phone notifications need the StreamTunes app"));
+            Assert.That(cut.Markup, Does.Not.Contain("How often"));
 
-            // The email preferences beside them are unaffected - the flag gates push only.
+            // The EMAIL preferences stay here: the web can act on those, and they are not
+            // duplicated in the app.
             Assert.That(cut.Markup, Does.Contain("Email me when artists I follow release new music"));
-        });
-    }
-
-    [Test]
-    public void ManageAccount_ShowsThePhoneNotificationOptionsOnceAnAdminSwitchesPushOn()
-    {
-        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
-        SetupRendererInfo();
-
-        MockAppSettingsService.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(true);
-
-        var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(cut.Markup, Does.Contain("notification to my phone when artists I follow release new music"));
-            Assert.That(cut.Markup, Does.Contain("notification to my phone when an artist I follow sends me a message"));
-            Assert.That(cut.Markup, Does.Contain("Phone notifications need the StreamTunes app"));
         });
     }
 

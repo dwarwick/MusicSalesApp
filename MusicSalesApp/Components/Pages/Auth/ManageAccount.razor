@@ -257,36 +257,13 @@
                     <div class="settings-check">
                         <SfCheckBox @bind-Checked="_receiveArtistMessageEmails" TChecked="bool" Label="Email me when an artist I follow sends me a message" />
                     </div>
-                    @* Push settings live here even though the web cannot receive a push: they are
-                       account-level and control what the StreamTunes app does on every device
-                       signed in to this account.
-
-                       The whole block is hidden until an admin switches push on, label included.
-                       Until the phone apps are in the stores nothing can arrive, and a preference
-                       that quietly does nothing is worse than no preference at all. *@
-                    @if (_pushNotificationsEnabled)
-                    {
-                        <div class="settings-check">
-                            <SfCheckBox @bind-Checked="_receiveArtistReleasePush" TChecked="bool" Label="Send a notification to my phone when artists I follow release new music" />
-                        </div>
-                        <div class="settings-check">
-                            <SfCheckBox @bind-Checked="_receiveArtistMessagePush" TChecked="bool" Label="Send a notification to my phone when an artist I follow sends me a message" />
-                        </div>
-                        @* A cap on interruptions, not a delay setting: on a window the app sends
-                           one summary covering everything that happened in it. Applies to both
-                           kinds above, which is why it sits below them rather than beside one. *@
-                        <div class="settings-field">
-                            <label class="settings-label" for="artist-push-frequency">How often</label>
-                            <SfDropDownList TValue="ArtistPushFrequency"
-                                            TItem="ArtistPushFrequencyOption"
-                                            ID="artist-push-frequency"
-                                            DataSource="@ArtistPushFrequencyOptions"
-                                            @bind-Value="_artistPushFrequency">
-                                <DropDownListFieldSettings Text="Text" Value="Value" />
-                            </SfDropDownList>
-                        </div>
-                        <p class="settings-hint">Phone notifications need the StreamTunes app, and only reach devices you are signed in on. Choosing a window means at most one notification in that time, summarising whatever happened.</p>
-                    }
+                    @* Push preferences are deliberately NOT here. They live in the StreamTunes
+                       app, under Config > Notifications, together with the OS permission they
+                       depend on - a phone toggle and a web toggle that can disagree is how someone
+                       ends up allowing notifications on their device and receiving nothing. The
+                       columns are still account-level and still set through
+                       api/mobile/follows/notification-preferences; this page just no longer offers
+                       a second, contradictory place to set them. *@
                     @* Never gated on the checkbox. Switching a notification OFF is a save like
                        any other - the terms checkbox on the subscription card gates its button
                        because agreement is a precondition, which is not the case here. *@
