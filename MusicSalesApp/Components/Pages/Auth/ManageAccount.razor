@@ -272,7 +272,20 @@
                         <div class="settings-check">
                             <SfCheckBox @bind-Checked="_receiveArtistMessagePush" TChecked="bool" Label="Send a notification to my phone when an artist I follow sends me a message" />
                         </div>
-                        <p class="settings-hint">Phone notifications need the StreamTunes app, and only reach devices you are signed in on.</p>
+                        @* A cap on interruptions, not a delay setting: on a window the app sends
+                           one summary covering everything that happened in it. Applies to both
+                           kinds above, which is why it sits below them rather than beside one. *@
+                        <div class="settings-field">
+                            <label class="settings-label" for="artist-push-frequency">How often</label>
+                            <SfDropDownList TValue="ArtistPushFrequency"
+                                            TItem="ArtistPushFrequencyOption"
+                                            ID="artist-push-frequency"
+                                            DataSource="@ArtistPushFrequencyOptions"
+                                            @bind-Value="_artistPushFrequency">
+                                <DropDownListFieldSettings Text="Text" Value="Value" />
+                            </SfDropDownList>
+                        </div>
+                        <p class="settings-hint">Phone notifications need the StreamTunes app, and only reach devices you are signed in on. Choosing a window means at most one notification in that time, summarising whatever happened.</p>
                     }
                     @* Never gated on the checkbox. Switching a notification OFF is a save like
                        any other - the terms checkbox on the subscription card gates its button

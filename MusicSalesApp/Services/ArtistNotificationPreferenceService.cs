@@ -1,5 +1,6 @@
 #nullable enable
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 
 namespace MusicSalesApp.Services;
@@ -33,6 +34,12 @@ public class ArtistNotificationPreferenceService : IArtistNotificationPreference
                 ReceiveArtistMessageEmails = user.ReceiveArtistMessageEmails && !user.IsSuspended,
                 ReceiveArtistReleasePush = user.ReceiveArtistReleasePush && !user.IsSuspended,
                 ReceiveArtistMessagePush = user.ReceiveArtistMessagePush && !user.IsSuspended,
+
+                // Reported as stored even for a suspended user, unlike the switches above. It is
+                // not a claim that anything will be delivered - the switches already say that - and
+                // blanking it to Instant would silently discard a choice the moment an account was
+                // suspended, then restore the wrong one when it came back.
+                ArtistPushFrequency = ArtistPushFrequencies.FromValue(user.ArtistPushFrequency),
             })
             .FirstOrDefaultAsync(cancellationToken);
     }
@@ -60,6 +67,10 @@ public class ArtistNotificationPreferenceService : IArtistNotificationPreference
         user.ReceiveArtistMessageEmails = preferences.ReceiveArtistMessageEmails;
         user.ReceiveArtistReleasePush = preferences.ReceiveArtistReleasePush;
         user.ReceiveArtistMessagePush = preferences.ReceiveArtistMessagePush;
+
+        // Normalised on the way in: the column is an int, and a value outside the enum would make
+        // the dispatcher's window lookup fall back to Instant on every run rather than once here.
+        user.ArtistPushFrequency = (int)ArtistPushFrequencies.FromValue((int)preferences.ArtistPushFrequency);
 
         await context.SaveChangesAsync(cancellationToken);
         return true;

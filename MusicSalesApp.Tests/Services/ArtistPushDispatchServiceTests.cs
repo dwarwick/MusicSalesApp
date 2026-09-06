@@ -404,6 +404,151 @@ public class ArtistPushDispatchServiceTests
     /// A sender that records what it was asked to deliver and answers with a configurable outcome.
     /// One instance covers both platforms, matching the single-transport design.
     /// </summary>
+    // ------------------------------------------------------------ frequency
+
+    /// <summary>
+    /// Puts the listener on a batched frequency and back-dates every pending row, so the window
+    /// has demonstrably elapsed without the test having to wait for it.
+    /// </summary>
+    private async Task SetFrequencyAsync(ArtistPushFrequency frequency, TimeSpan? age = null)
+    {
+        await using var context = _harness.NewContext();
+
+        var user = await context.Users.SingleAsync(u => u.Id == _harness.ListenerUserId);
+        user.ArtistPushFrequency = (int)frequency;
+
+        if (age is { } backdate)
+        {
+            var created = DateTime.UtcNow - backdate;
+
+            foreach (var notification in await context.ArtistReleaseNotifications.ToListAsync())
+            {
+                notification.CreatedDateUtc = created;
+            }
+
+            foreach (var message in await context.ArtistFollowerMessages.ToListAsync())
+            {
+                message.CreatedDateUtc = created;
+            }
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    [Test]
+    public async Task Dispatch_OnInstant_StillSendsOnePushPerNotification()
+    {
+        // The default, and what every listener had before frequencies existed.
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        _harness.AddSong("Harbour Lights");
+        await _releaseService.CreatePendingNotificationsAsync();
+
+        await _service.DispatchPendingAsync();
+
+        Assert.That(_sender.Sent, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task Dispatch_OnAWindow_HoldsEverythingUntilTheOldestHasWaited()
+    {
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        await _releaseService.CreatePendingNotificationsAsync();
+        await SetFrequencyAsync(ArtistPushFrequency.Daily, TimeSpan.FromHours(1));
+
+        var delivered = await _service.DispatchPendingAsync();
+
+        await using var context = _harness.NewContext();
+        var notification = await context.ArtistReleaseNotifications.SingleAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(delivered, Is.Zero);
+            Assert.That(_sender.Sent, Is.Empty);
+
+            // Unstamped is the whole point: waiting must not consume the notification, or the
+            // listener would simply never hear about it.
+            Assert.That(notification.PushSentDateUtc, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task Dispatch_OnAWindow_CollapsesTheBacklogIntoOneSummary()
+    {
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        _harness.AddSong("Harbour Lights");
+        _harness.AddSong("Night Ferry");
+        await _releaseService.CreatePendingNotificationsAsync();
+        await SetFrequencyAsync(ArtistPushFrequency.Daily, TimeSpan.FromHours(25));
+
+        await _service.DispatchPendingAsync();
+
+        await using var context = _harness.NewContext();
+        var unsent = await context.ArtistReleaseNotifications.CountAsync(n => n.PushSentDateUtc == null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_sender.Sent, Has.Count.EqualTo(1), "three releases, one interruption");
+            Assert.That(_sender.Sent[0].Message.Body, Does.Contain("3 new songs"));
+
+            // Every row the summary stood for is settled, or the next run sends a smaller
+            // duplicate summary about the same songs.
+            Assert.That(unsent, Is.Zero);
+        });
+    }
+
+    [Test]
+    public async Task Dispatch_ASingleArtistDigest_PointsAtThatArtist()
+    {
+        // The destination has to match the words: a summary naming one artist opens that artist.
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        _harness.AddSong("Harbour Lights");
+        await _releaseService.CreatePendingNotificationsAsync();
+        await SetFrequencyAsync(ArtistPushFrequency.TwelveHours, TimeSpan.FromHours(13));
+
+        await _service.DispatchPendingAsync();
+
+        var data = _sender.Sent[0].Message.Data;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(data[PushDataKeys.Kind], Is.EqualTo(PushNotificationKinds.Digest));
+            Assert.That(data[PushDataKeys.Count], Is.EqualTo("2"));
+            Assert.That(data[PushDataKeys.ArtistName], Is.EqualTo("Alex Rivers"));
+            Assert.That(data[PushDataKeys.PersonaId], Is.EqualTo(_harness.PersonaId.ToString()));
+
+            // No song id: a summary is not about one song, and offering one would take the tap
+            // somewhere the text did not promise.
+            Assert.That(data.ContainsKey(PushDataKeys.SongId), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task Dispatch_AWindowWithOneThingInIt_SendsTheOrdinarySinglePush()
+    {
+        // A digest of one is just the notification, and it keeps its song id so the tap still
+        // opens the song rather than the artist.
+        await FollowWithDeviceAsync();
+        var songId = _harness.AddSong("Ocean Road");
+        await _releaseService.CreatePendingNotificationsAsync();
+        await SetFrequencyAsync(ArtistPushFrequency.Daily, TimeSpan.FromHours(25));
+
+        await _service.DispatchPendingAsync();
+
+        var data = _sender.Sent[0].Message.Data;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_sender.Sent, Has.Count.EqualTo(1));
+            Assert.That(data[PushDataKeys.Kind], Is.EqualTo(PushNotificationKinds.Release));
+            Assert.That(data[PushDataKeys.SongId], Is.EqualTo(songId.ToString()));
+            Assert.That(_sender.Sent[0].Message.Body, Does.Contain("Ocean Road"));
+        });
+    }
+
     private sealed class FakePushSender : IPushNotificationSender
     {
         public bool Configured { get; set; } = true;

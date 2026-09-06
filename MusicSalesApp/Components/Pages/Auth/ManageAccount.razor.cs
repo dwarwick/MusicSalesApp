@@ -45,6 +45,17 @@ public partial class ManageAccountModel : BlazorBase
     // the app on the listener's phone cannot act on yet.
     protected bool _pushNotificationsEnabled;
 
+    // How often push may interrupt. Governs both kinds, unlike the two checkboxes above it, and is
+    // enforced by ArtistPushDispatchService rather than here - see ArtistPushFrequency.
+    protected ArtistPushFrequency _artistPushFrequency;
+
+    protected static readonly IReadOnlyList<ArtistPushFrequencyOption> ArtistPushFrequencyOptions =
+        Enum.GetValues<ArtistPushFrequency>()
+            .Select(value => new ArtistPushFrequencyOption(value, ArtistPushFrequencies.DisplayName(value)))
+            .ToList();
+
+    public sealed record ArtistPushFrequencyOption(ArtistPushFrequency Value, string Text);
+
     // Shown inside the Email preferences card rather than only in the page-level banner.
     // That banner renders above the first section, so a reader who saves from the third one
     // never sees it - the click looks like it did nothing at all.
@@ -160,6 +171,7 @@ public partial class ManageAccountModel : BlazorBase
                         _receiveArtistMessageEmails = _currentUser.ReceiveArtistMessageEmails;
                         _receiveArtistReleasePush = _currentUser.ReceiveArtistReleasePush;
                         _receiveArtistMessagePush = _currentUser.ReceiveArtistMessagePush;
+                        _artistPushFrequency = ArtistPushFrequencies.FromValue(_currentUser.ArtistPushFrequency);
                         _pushNotificationsEnabled = await AppSettingsService.IsPushNotificationsEnabledAsync();
 
                         await DetectAndPersistUserTimeZoneAsync();
@@ -372,6 +384,7 @@ public partial class ManageAccountModel : BlazorBase
             _currentUser.ReceiveArtistMessageEmails = _receiveArtistMessageEmails;
             _currentUser.ReceiveArtistReleasePush = _receiveArtistReleasePush;
             _currentUser.ReceiveArtistMessagePush = _receiveArtistMessagePush;
+            _currentUser.ArtistPushFrequency = (int)_artistPushFrequency;
             var result = await UserManager.UpdateAsync(_currentUser);
 
             if (result.Succeeded)

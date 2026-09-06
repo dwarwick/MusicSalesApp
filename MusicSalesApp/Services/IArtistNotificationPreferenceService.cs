@@ -1,4 +1,6 @@
 #nullable enable
+using MusicSalesApp.Common.Helpers;
+
 namespace MusicSalesApp.Services;
 
 /// <summary>
@@ -47,4 +49,15 @@ public sealed class ArtistNotificationPreferences
     public bool ReceiveArtistReleasePush { get; set; }
 
     public bool ReceiveArtistMessagePush { get; set; }
+
+    /// <summary>
+    /// How often push may interrupt. Governs BOTH kinds, unlike the switches above.
+    /// </summary>
+    /// <remarks>
+    /// A frequency is not a fifth on/off switch: the two push booleans still decide whether a kind
+    /// is sent at all, and this decides how often whatever survives them is allowed to buzz. The
+    /// pair is worth keeping separate, because "I want release alerts, just not six of them at
+    /// once" is an ordinary thing to want and the booleans alone cannot express it.
+    /// </remarks>
+    public ArtistPushFrequency ArtistPushFrequency { get; set; }
 }

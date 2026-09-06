@@ -43,6 +43,14 @@ public class ApplicationUser : IdentityUser<int>
 
     public bool ReceiveArtistMessagePush { get; set; }
 
+    // How often the push channel may interrupt, as an ArtistPushFrequency. Instant (0) is the
+    // default and is what everyone had before this column existed, so an un-migrated row and an
+    // untouched preference mean the same thing. Enforced in ArtistPushDispatchService: anything
+    // other than Instant holds this listener's pending rows until the oldest has waited a full
+    // window, then sends one summary. It governs BOTH releases and artist messages - the two
+    // booleans above still decide whether each kind is sent at all.
+    public int ArtistPushFrequency { get; set; }
+
     // Last known browser timezone from the user, stored as an IANA timezone ID.
     [MaxLength(100)]
     public string TimeZoneId { get; set; }

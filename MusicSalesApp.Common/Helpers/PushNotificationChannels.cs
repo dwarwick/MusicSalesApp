@@ -51,6 +51,20 @@ public static class PushDataKeys
 
     /// <summary>The in-app notification or message row, so the client can mark it read on open.</summary>
     public const string EntityId = "entityId";
+
+    /// <summary>How many notifications a <see cref="PushNotificationKinds.Digest"/> stands for.</summary>
+    public const string Count = "count";
+
+    /// <summary>
+    /// The artist a single-artist digest is about, so the client can open that artist rather than
+    /// the app in general.
+    /// </summary>
+    /// <remarks>
+    /// The NAME rather than only the id, because the client's artist page is addressed by name -
+    /// and a digest must not need a catalogue round trip to work out where it goes. Absent on a
+    /// digest spanning several artists, which has no single destination.
+    /// </remarks>
+    public const string ArtistName = "artistName";
 }
 
 /// <summary>
@@ -61,4 +75,14 @@ public static class PushNotificationKinds
     public const string Release = "release";
 
     public const string ArtistMessage = "artist-message";
+
+    /// <summary>
+    /// Several notifications collapsed into one, because the listener asked not to be interrupted
+    /// per event - see <see cref="ArtistPushFrequency"/>.
+    /// </summary>
+    /// <remarks>
+    /// Carries no song id, because it is about more than one thing. A client that does not know
+    /// this kind simply opens the app, which is the correct destination for a summary anyway.
+    /// </remarks>
+    public const string Digest = "digest";
 }

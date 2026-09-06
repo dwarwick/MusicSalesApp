@@ -56,18 +56,20 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
             return 0;
         }
 
-        var delivered = 0;
-        delivered += await DispatchReleaseNotificationsAsync();
-        delivered += await DispatchArtistMessagesAsync();
+        // Loaded together rather than dispatched one kind after the other, because a listener on a
+        // batched frequency gets ONE push covering whatever happened in the window - and what
+        // happened may be a release and a message, not two of a kind.
+        var pending = await LoadPendingReleasesAsync();
+        pending.AddRange(await LoadPendingArtistMessagesAsync());
 
-        return delivered;
+        return await DeliverAsync(pending);
     }
 
-    private async Task<int> DispatchReleaseNotificationsAsync()
+    private async Task<List<PendingPush>> LoadPendingReleasesAsync()
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var pending = await context.ArtistReleaseNotifications
+        return await context.ArtistReleaseNotifications
             .AsNoTracking()
             .Where(notification => notification.PushSentDateUtc == null)
             .OrderBy(notification => notification.CreatedDateUtc)
@@ -89,22 +91,17 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
                 SubjectIsAvailable = notification.SongMetadata.IsActive && notification.SongMetadata.IsEnabled,
                 Muted = false,
                 IsBlocked = false,
+                CreatedDateUtc = notification.CreatedDateUtc,
+                FrequencyValue = notification.ListenerUser.ArtistPushFrequency,
             })
             .ToListAsync();
-
-        return await DeliverAsync(
-            pending,
-            ids => context.ArtistReleaseNotifications
-                .Where(row => ids.Contains(row.Id))
-                .ExecuteUpdateAsync(setters =>
-                    setters.SetProperty(row => row.PushSentDateUtc, DateTime.UtcNow)));
     }
 
-    private async Task<int> DispatchArtistMessagesAsync()
+    private async Task<List<PendingPush>> LoadPendingArtistMessagesAsync()
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var pending = await context.ArtistFollowerMessages
+        return await context.ArtistFollowerMessages
             .AsNoTracking()
             .Where(message => message.PushSentDateUtc == null && !message.IsHiddenByListener)
             .OrderBy(message => message.CreatedDateUtc)
@@ -122,15 +119,44 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
                 SubjectIsAvailable = true,
                 Muted = !message.ArtistFollower.ArtistMessagesEnabled,
                 IsBlocked = message.ArtistFollower.IsBlockedByListener,
+                CreatedDateUtc = message.CreatedDateUtc,
+                FrequencyValue = message.ArtistFollower.ListenerUser.ArtistPushFrequency,
             })
             .ToListAsync();
+    }
 
-        return await DeliverAsync(
-            pending,
-            ids => context.ArtistFollowerMessages
-                .Where(row => ids.Contains(row.Id))
-                .ExecuteUpdateAsync(setters =>
-                    setters.SetProperty(row => row.PushSentDateUtc, DateTime.UtcNow)));
+    /// <summary>
+    /// Marks rows as pushed, sending each id back to the table it came from.
+    /// </summary>
+    private async Task StampAsync(IEnumerable<PendingPush> items)
+    {
+        var byKind = items.GroupBy(item => item.Kind).ToList();
+
+        if (byKind.Count == 0)
+        {
+            return;
+        }
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        var now = DateTime.UtcNow;
+
+        foreach (var group in byKind)
+        {
+            var ids = group.Select(item => item.EntityId).ToList();
+
+            if (group.Key == PushNotificationKinds.Release)
+            {
+                await context.ArtistReleaseNotifications
+                    .Where(row => ids.Contains(row.Id))
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.PushSentDateUtc, now));
+            }
+            else
+            {
+                await context.ArtistFollowerMessages
+                    .Where(row => ids.Contains(row.Id))
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.PushSentDateUtc, now));
+            }
+        }
     }
 
     /// <summary>
@@ -143,49 +169,54 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
     /// suffered a TRANSPORT failure is left alone so a later run tries again. A rejected token is
     /// settled, not deferred - retrying it can never succeed.
     /// </remarks>
-    private async Task<int> DeliverAsync(
-        List<PendingPush> pending,
-        Func<List<int>, Task<int>> stamp)
+    private async Task<int> DeliverAsync(List<PendingPush> pending)
     {
         if (pending.Count == 0)
         {
             return 0;
         }
 
-        var skipped = pending.Where(item => !item.ShouldPush).Select(item => item.EntityId).ToList();
+        var skipped = pending.Where(item => !item.ShouldPush).ToList();
 
         if (skipped.Count > 0)
         {
-            await stamp(skipped);
+            await StampAsync(skipped);
             _logger.LogInformation(
                 "Skipped {Count} pushes (opted out, suspended, muted, blocked or subject withdrawn).",
                 skipped.Count);
         }
 
-        var sendable = pending.Where(item => item.ShouldPush).ToList();
+        // One outgoing push per group. A listener on Instant gets a group per notification, which
+        // is exactly the old behaviour; a listener on a window gets at most one group covering
+        // everything that has waited long enough.
+        var groups = BuildSendGroups(pending.Where(item => item.ShouldPush));
 
-        if (sendable.Count == 0)
+        if (groups.Count == 0)
         {
             return 0;
         }
 
+        var sendable = groups.SelectMany(group => group).ToList();
+
         var tokensByUser = await _deviceTokenService.GetActiveTokensAsync(
             sendable.Select(item => item.ListenerUserId));
 
-        var settled = new List<int>();
+        var settled = new List<PendingPush>();
         var rejectedTokens = new List<string>();
         var delivered = 0;
 
-        foreach (var item in sendable)
+        foreach (var group in groups)
         {
+            var item = group[0];
+
             if (!tokensByUser.TryGetValue(item.ListenerUserId, out var devices) || devices.Count == 0)
             {
                 // Wants push, has no device registered. Settled - there is nothing to wait for.
-                settled.Add(item.EntityId);
+                settled.AddRange(group);
                 continue;
             }
 
-            var message = BuildMessage(item);
+            var message = BuildMessage(group);
             var anyDeferred = false;
 
             // Not grouped by platform: FCM delivers to Android and iOS tokens alike, so
@@ -213,7 +244,9 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
 
             if (!anyDeferred)
             {
-                settled.Add(item.EntityId);
+                // The whole group settles together. Half a digest is not a thing that can be
+                // re-sent: the surviving rows would come back as a second, smaller summary.
+                settled.AddRange(group);
             }
         }
 
@@ -224,12 +257,13 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
 
         if (settled.Count > 0)
         {
-            await stamp(settled);
+            await StampAsync(settled);
         }
 
         _logger.LogInformation(
-            "Pushed to {Delivered} devices; settled {Settled} of {Total} notifications, retired {Rejected} tokens.",
+            "Pushed to {Delivered} devices in {Groups} notifications; settled {Settled} of {Total} rows, retired {Rejected} tokens.",
             delivered,
+            groups.Count,
             settled.Count,
             sendable.Count,
             rejectedTokens.Count);
@@ -237,7 +271,107 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         return delivered;
     }
 
-    private static PushMessage BuildMessage(PendingPush item)
+    /// <summary>
+    /// Decides what goes out as its own push and what is collapsed into a summary.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Instant is every row on its own, which is what everyone had before frequencies existed.
+    /// On a window, a listener's rows are held until the OLDEST has waited the full window, then
+    /// leave together as one push. So the setting is a cap on interruptions rather than a delay
+    /// applied to each item: at most one push per window, however much happened inside it.
+    /// </para>
+    /// <para>
+    /// Waiting for the oldest row means a listener on Daily waits up to a day for the first thing
+    /// too. The alternative - send at once, then go quiet for the window - needs a
+    /// last-sent-at column per user and makes the first push of a quiet period arrive alone; it is
+    /// a reasonable change to make later, but it is not what "at most once a day" says.
+    /// </para>
+    /// </remarks>
+    private static List<List<PendingPush>> BuildSendGroups(IEnumerable<PendingPush> sendable)
+    {
+        var now = DateTime.UtcNow;
+        var groups = new List<List<PendingPush>>();
+
+        foreach (var perListener in sendable.GroupBy(item => item.ListenerUserId))
+        {
+            // Read from the rows rather than passed in, because every row for one listener carries
+            // that listener's own frequency.
+            var frequency = ArtistPushFrequencies.FromValue(perListener.First().FrequencyValue);
+
+            if (!ArtistPushFrequencies.IsBatched(frequency))
+            {
+                groups.AddRange(perListener.Select(item => new List<PendingPush> { item }));
+                continue;
+            }
+
+            var batch = perListener.OrderBy(item => item.CreatedDateUtc).ToList();
+            var waited = now - batch[0].CreatedDateUtc;
+
+            if (waited < ArtistPushFrequencies.WindowFor(frequency))
+            {
+                // Left unstamped, so a later run reconsiders it. Nothing is consumed by waiting.
+                continue;
+            }
+
+            groups.Add(batch);
+        }
+
+        return groups;
+    }
+
+    private static PushMessage BuildMessage(List<PendingPush> group) =>
+        group.Count == 1 ? BuildSingleMessage(group[0]) : BuildDigestMessage(group);
+
+    /// <summary>
+    /// One push standing for several notifications.
+    /// </summary>
+    /// <remarks>
+    /// The destination has to match what the text says, so the payload only names an artist when
+    /// the summary does. A digest about one artist carries their name and opens that artist; a
+    /// digest spanning several has no single destination and opens the app.
+    /// </remarks>
+    private static PushMessage BuildDigestMessage(List<PendingPush> group)
+    {
+        var artists = group
+            .Select(item => string.IsNullOrWhiteSpace(item.ArtistName)
+                ? ArtistDisplayNames.UnknownArtist
+                : item.ArtistName!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var data = new Dictionary<string, string>
+        {
+            [PushDataKeys.Kind] = PushNotificationKinds.Digest,
+            [PushDataKeys.Count] = group.Count.ToString(),
+        };
+
+        if (artists.Count > 1)
+        {
+            return new PushMessage(
+                "Artists you follow",
+                $"{group.Count} new updates from {artists.Count} artists you follow.",
+                data);
+        }
+
+        var artist = artists[0];
+        data[PushDataKeys.ArtistName] = artist;
+        data[PushDataKeys.PersonaId] = group[0].CreatorPersonaId.ToString();
+
+        var releases = group.Count(item => item.Kind == PushNotificationKinds.Release);
+
+        if (releases == group.Count)
+        {
+            return new PushMessage(
+                $"New music from {artist}",
+                $"{artist} released {releases} new songs.",
+                data);
+        }
+
+        return new PushMessage($"Updates from {artist}", $"{artist} has {group.Count} updates for you.", data);
+    }
+
+    private static PushMessage BuildSingleMessage(PendingPush item)
     {
         var artist = string.IsNullOrWhiteSpace(item.ArtistName)
             ? ArtistDisplayNames.UnknownArtist
@@ -285,6 +419,12 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         public bool SubjectIsAvailable { get; init; }
         public bool Muted { get; init; }
         public bool IsBlocked { get; init; }
+
+        /// <summary>When the notification happened - what the frequency window is measured from.</summary>
+        public DateTime CreatedDateUtc { get; init; }
+
+        /// <summary>The listener's ArtistPushFrequency, raw, because the column is an int.</summary>
+        public int FrequencyValue { get; init; }
 
         public bool ShouldPush =>
             WantsPush && !IsSuspended && SubjectIsAvailable && !Muted && !IsBlocked;
