@@ -83,6 +83,13 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
 
         if (releases.Count == 0)
         {
+            // Say so rather than returning in silence. A run that qualifies nothing used to log
+            // nothing at all, which is indistinguishable from the job never having run - and that
+            // is exactly the state someone is in when they are asking why no notification arrived.
+            _logger.LogInformation(
+                "No songs are inside the {WindowDays}-day release window; created 0 notifications.",
+                NotifiableWindow.TotalDays);
+
             return 0;
         }
 
@@ -152,10 +159,12 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
             }
         }
 
-        if (created > 0)
-        {
-            _logger.LogInformation("Created {Count} artist release notifications.", created);
-        }
+        // Unconditional, including the zero. "Considered N, created 0" tells you the songs were
+        // found and the followers were the problem; silence tells you nothing at all.
+        _logger.LogInformation(
+            "Considered {ReleaseCount} release(s) in the window; created {Count} artist release notifications.",
+            releases.Count,
+            created);
 
         return created;
     }
