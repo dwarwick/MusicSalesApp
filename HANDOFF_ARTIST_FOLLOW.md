@@ -1,7 +1,14 @@
 # Handoff — Artist follow & listener engagement
 
 Branch: `work/artist-follow-engagement`, in **both** repos.
-Written 2026-09-05. Server + web are done and tested; the MAUI client is not started.
+Written 2026-09-05, last updated 2026-09-06. Server + web are done and tested; the MAUI client is
+not started.
+
+> **The MAUI branch also carries an unrelated fix**, merged 2026-09-06 from
+> `work/fix-home-auth-on-cold-start`: the home page rendered signed-out over a restored session
+> after a force-close and reopen. The bug was on master, not from this work — see that branch's
+> commit for the reasoning. It is mentioned here only so its presence in the diff is not a
+> surprise.
 
 The commit messages on this branch carry the reasoning for each change and are worth reading
 (`git log master..HEAD`). This file covers only what is **not** recoverable from the code, the
@@ -39,12 +46,15 @@ All gitignored, all needed for push to do anything:
 | Blazor | `MusicSalesApp/App_Data/Secrets/firebase-service-account.production.json` | same, Production project |
 | MAUI | `MusicSalesApp.Maui/Platforms/Android/google-services.Test.json` | Firebase console, Test project |
 | MAUI | `MusicSalesApp.Maui/Platforms/Android/google-services.Production.json` | Firebase console, Production project |
+| MAUI | `MusicSalesApp.Maui/Platforms/iOS/GoogleService-Info.Test.plist` | Firebase console, Test project |
+| MAUI | `MusicSalesApp.Maui/Platforms/iOS/GoogleService-Info.Production.plist` | Firebase console, Production project |
 
 Both builds are `Exists()`-guarded, so **a fresh clone builds fine and simply has no push**. Do not
 read a silent build as proof push is broken — check the files are there first.
 
-The two iOS plists (`GoogleService-Info.{Test,Production}.plist`) do not exist yet anywhere; see
-§4.1.
+> The MAUI `.gitignore` did not cover any of these four until 2026-09-06. They had been sitting
+> untracked-but-unignored, one `git add -A` from being committed to a public repo with their project
+> ids and API keys. Rules are in place now; if you work in an older clone, check before staging.
 
 ### Verification
 
@@ -169,9 +179,10 @@ What is missing:
    uninstalled devices from the dispatcher's side. Once the binding lands this becomes: set
    `Messaging.SharedInstance.ApnsToken` from the AppDelegate callback, and return
    `Messaging.SharedInstance.FcmToken` from `GetTokenAsync`.
-3. **Neither `Platforms/iOS/GoogleService-Info.{Test,Production}.plist` exists.** The csproj
-   already carries the `Exists()`-guarded `BundleResource` items; they just need downloading from
-   the two Firebase consoles.
+3. ~~The iOS plists do not exist.~~ **Done 2026-09-06** — both
+   `Platforms/iOS/GoogleService-Info.{Test,Production}.plist` are now in place. They are gitignored,
+   so they still have to be restored per machine (see §1). Nothing consumes them until item 1
+   lands.
 4. **Console configuration** — the App ID needs "Push Notifications" enabled and the provisioning
    profile **regenerated afterwards**; the APNs auth key (Key ID `9RTLMRH4GX`, Team ID
    `K7ZGP97YV6`) must be uploaded under Cloud Messaging in **both** Firebase projects. A missing
