@@ -419,8 +419,16 @@ namespace MusicSalesApp.Components.Players
                     // DisposeAsync nulls the field the moment the visitor leaves - so re-reading it
                     // between awaits would trade this race for a NullReferenceException.
                     var module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/PlaylistPlayerInteractive.razor.js");
+                    if (_disposed)
+                    {
+                        // DisposeAsync has already run, so it never saw this module. Release it here
+                        // or the import leaks for the life of the circuit - the component is gone,
+                        // but the circuit that owns the browser-side reference map is not.
+                        await module.DisposeAsync();
+                        return;
+                    }
+
                     _jsModule = module;
-                    if (_disposed) return;
 
                     await module.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds(), GetTrackLengthSeconds(_currentTrackIndex) ?? 0);
                     await module.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);

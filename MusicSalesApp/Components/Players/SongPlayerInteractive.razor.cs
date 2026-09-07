@@ -152,8 +152,16 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 // DisposeAsync nulls the field the moment the visitor leaves - so re-reading it
                 // between awaits would trade this race for a NullReferenceException.
                 var module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/SongPlayerInteractive.razor.js");
+                if (_disposed)
+                {
+                    // DisposeAsync has already run, so it never saw this module. Release it here or
+                    // the import leaks for the life of the circuit - the component is gone, but the
+                    // circuit that owns the browser-side reference map is not.
+                    await module.DisposeAsync();
+                    return;
+                }
+
                 _jsModule = module;
-                if (_disposed) return;
 
                 // Logged because the interaction between these four is not observable from the outside: a
                 // restricted listener is cut off at the preview limit, so a qualifying threshold at or above
