@@ -44,6 +44,22 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
         return "Google Play service account credentials could not be loaded on the server.";
     }
 
+    /// <summary>
+    /// True when Google has answered definitively that it no longer holds this purchase.
+    ///
+    /// <para>
+    /// Google retains subscription purchases only for a period after they expire; past that,
+    /// <c>purchases.subscriptionsv2.get</c> answers <c>410 Gone</c> with reason
+    /// <c>subscriptionPurchaseNoLongerAvailable</c>. That is an <em>answer</em> - the subscription
+    /// expired long ago - not a failure to reach Google, so it belongs with the 404 case and must
+    /// not be logged at Error. Logged at Error it reached
+    /// <see cref="AdminErrorNotificationSink"/> and emailed the admin about a subscription that
+    /// simply lapsed, which it did on 2026-09-07.
+    /// </para>
+    /// </summary>
+    internal static bool IsPurchaseNoLongerAvailable(Google.GoogleApiException exception) =>
+        exception?.HttpStatusCode == System.Net.HttpStatusCode.Gone;
+
     internal static string DescribeGoogleApiAccessIssue(string reason, string message)
     {
         if (string.Equals(reason, "accessNotConfigured", StringComparison.OrdinalIgnoreCase) ||
@@ -188,6 +204,16 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
         {
             _logger.LogWarning(ex, "Google Play subscription not found for token (may be invalid or expired)");
             throw new GooglePlayVerificationException("Google Play could not find this purchase token for the configured app.", ex);
+        }
+        catch (Google.GoogleApiException ex) when (IsPurchaseNoLongerAvailable(ex))
+        {
+            // Warning, not Error: Google is telling us the subscription lapsed long enough ago that
+            // it no longer keeps the record. Nothing is broken and there is nothing to fix. The
+            // caller already treats a verification failure as "could not refresh" and leaves local
+            // state alone, which is the right outcome for a subscription that has long since ended.
+            _logger.LogWarning(ex, "Google Play no longer retains this purchase; it expired too long ago to query");
+            throw new GooglePlayVerificationException(
+                "This Google Play purchase expired too long ago for Google to report on it.", ex);
         }
         catch (Google.GoogleApiException ex) when (
             ex.HttpStatusCode == System.Net.HttpStatusCode.Forbidden ||

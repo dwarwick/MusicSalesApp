@@ -229,11 +229,21 @@ public class WebGoogleAuthController : Controller
                 registrationIntentToken);
         }
 
+        // Two different names, deliberately, and they must not be collapsed into one.
+        //
+        // The first is the LOGIN PROVIDER, which SignInManager stores in the auth properties and
+        // GetExternalLoginInfoAsync reads back as info.LoginProvider. That value is the key in
+        // AspNetUserLogins, so it has to stay "Google" or FindByLoginAsync would miss every
+        // account that has ever signed in with Google and silently create duplicates.
+        //
+        // The second is the SCHEME, which only selects the handler - and therefore the callback
+        // path and the failure behaviour. Web gets its own so a failed sign-in can be returned to
+        // /login rather than to the app's deep link.
         var properties = _signInManager.ConfigureExternalAuthenticationProperties(
             ExternalLoginProviders.Google,
             callbackUrl);
 
-        return Challenge(properties, ExternalLoginProviders.Google);
+        return Challenge(properties, GoogleAuthSchemes.Web);
     }
 
     private async Task<IActionResult> CompleteGoogleRegistrationAsync(

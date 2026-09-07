@@ -52,6 +52,12 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerInteractiveModel> _dotNetRef;
     private bool invokedJs = false;
+
+    /// <summary>
+    /// Set once <see cref="DisposeAsync"/> has begun, so work still in flight can stop rather than
+    /// reach for a module that is being torn down underneath it.
+    /// </summary>
+    private bool _disposed;
     protected bool _hasActiveSubscription;
     protected bool _isAdmin;
     protected bool _isCreatorOfSong;
@@ -135,37 +141,57 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             return;
         }
 
-        if (!invokedJs && !_loading && !IsProcessingTipReturn && _songInfo != null)
+        try
         {
-            invokedJs = true;
-            _dotNetRef = DotNetObjectReference.Create(this);
-            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/SongPlayerInteractive.razor.js");
+            if (!invokedJs && !_loading && !IsProcessingTipReturn && _songInfo != null)
+            {
+                invokedJs = true;
+                _dotNetRef = DotNetObjectReference.Create(this);
 
-            // Logged because the interaction between these four is not observable from the outside: a
-            // restricted listener is cut off at the preview limit, so a qualifying threshold at or above
-            // it means that listener can never be credited with a stream - and the symptom is simply
-            // that nothing happens, which looks identical to the counter being broken.
-            var qualifyingSeconds = GetStreamQualifyingSeconds();
-            Logger.LogInformation(
-                "SongPlayer: initAudioPlayer song={SongMetadataId} restricted={Restricted} previewSeconds={PreviewSeconds} "
-                + "qualifyingSeconds={QualifyingSeconds} (creator={CreatorSeconds}, adminDefault={AdminDefault}, reduction={ReductionEnabled})",
-                GetSongMetadataId(),
-                IsProgressBarRestricted(),
-                PREVIEW_DURATION_SECONDS,
-                qualifyingSeconds,
-                _songMetadata?.Creator?.StreamQualifyingSeconds,
-                _streamQualifying.DefaultSeconds,
-                _streamQualifying.ReductionEnabled);
+                // Held in a local for the rest of the block. Four browser round trips follow, and
+                // DisposeAsync nulls the field the moment the visitor leaves - so re-reading it
+                // between awaits would trade this race for a NullReferenceException.
+                var module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/SongPlayerInteractive.razor.js");
+                _jsModule = module;
+                if (_disposed) return;
 
-            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), qualifyingSeconds, _streamUrl, GetTrackLengthSeconds() ?? 0);
-            await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
-            await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
+                // Logged because the interaction between these four is not observable from the outside: a
+                // restricted listener is cut off at the preview limit, so a qualifying threshold at or above
+                // it means that listener can never be credited with a stream - and the symptom is simply
+                // that nothing happens, which looks identical to the counter being broken.
+                var qualifyingSeconds = GetStreamQualifyingSeconds();
+                Logger.LogInformation(
+                    "SongPlayer: initAudioPlayer song={SongMetadataId} restricted={Restricted} previewSeconds={PreviewSeconds} "
+                    + "qualifyingSeconds={QualifyingSeconds} (creator={CreatorSeconds}, adminDefault={AdminDefault}, reduction={ReductionEnabled})",
+                    GetSongMetadataId(),
+                    IsProgressBarRestricted(),
+                    PREVIEW_DURATION_SECONDS,
+                    qualifyingSeconds,
+                    _songMetadata?.Creator?.StreamQualifyingSeconds,
+                    _streamQualifying.DefaultSeconds,
+                    _streamQualifying.ReductionEnabled);
 
-            var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
-            _volume = savedVolume;
-            _previousVolume = savedVolume;
+                await module.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), qualifyingSeconds, _streamUrl, GetTrackLengthSeconds() ?? 0);
+                await module.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
+                await module.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
+                if (_disposed) return;
 
-            await InvokeAsync(StateHasChanged);
+                var savedVolume = await module.InvokeAsync<double>("getSavedVolume");
+                _volume = savedVolume;
+                _previousVolume = savedVolume;
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex) when (_disposed || CircuitTeardown.IsExpected(ex))
+        {
+            // Once disposal has run, any failure from this block is teardown, whatever type it
+            // arrives as. Same race as PlaylistPlayerInteractive, which production hit on 2026-09-05.
+            Logger.LogDebug(ex, "Song player initialisation stopped because the component went away.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Song player initialisation failed.");
         }
     }
 
@@ -223,6 +249,10 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Set first, so anything still awaiting in OnAfterRenderAsync stops instead of reaching
+        // for the module disposed below.
+        _disposed = true;
+
         if (_streamCountUpdatedHandler != null)
         {
             StreamCountService.OnStreamCountUpdated -= _streamCountUpdatedHandler;
@@ -245,6 +275,10 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 // outlive the bars - and in a Blazor SPA nothing unloads the page to collect them.
                 await _jsModule.InvokeVoidAsync("disposeBarDrags", _progressBarContainer, _volumeBarContainer);
                 await _jsModule.DisposeAsync();
+
+                // Nulled, not just disposed: every `if (_jsModule != null)` guard in this file is
+                // worthless against a disposed-but-non-null reference.
+                _jsModule = null;
             }
         }
         catch (Exception ex) when (CircuitTeardown.IsExpected(ex))

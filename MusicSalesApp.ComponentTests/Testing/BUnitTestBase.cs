@@ -66,6 +66,7 @@ public abstract class BUnitTestBase
     protected Mock<IAccountDeletionService> MockAccountDeletionService { get; private set; } = default!;
     protected Mock<IEmailService> MockEmailService { get; private set; } = default!;
     protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
+    protected Mock<ITaxFormTokenService> MockTaxFormTokenService { get; private set; } = default!;
     protected Mock<ICreatorPersonaService> MockCreatorPersonaService { get; private set; } = default!;
     protected Mock<IDashboardService> MockDashboardService { get; private set; } = default!;
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
@@ -144,6 +145,7 @@ public abstract class BUnitTestBase
         MockAccountDeletionService = new Mock<IAccountDeletionService>();
         MockEmailService = new Mock<IEmailService>();
         MockCreatorService = new Mock<ICreatorService>();
+        MockTaxFormTokenService = new Mock<ITaxFormTokenService>();
         MockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         MockDashboardService = new Mock<IDashboardService>();
         MockSongStatusService = new Mock<ISongStatusService>();
@@ -593,6 +595,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAccountDeletionService>(MockAccountDeletionService.Object);
         TestContext.Services.AddSingleton<IEmailService>(MockEmailService.Object);
         TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
+        TestContext.Services.AddSingleton<ITaxFormTokenService>(MockTaxFormTokenService.Object);
         TestContext.Services.AddSingleton<ICreatorPersonaService>(MockCreatorPersonaService.Object);
         TestContext.Services.AddSingleton<IDashboardService>(MockDashboardService.Object);
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);

@@ -19,21 +19,18 @@ public class CreatorController : ControllerBase
     private readonly ICreatorService _creatorService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<CreatorController> _logger;
-    private readonly ITaxBanditsService _taxBanditsService;
-    private readonly IConfiguration _configuration;
+    private readonly ITaxFormTokenService _taxFormTokenService;
 
     public CreatorController(
         ICreatorService creatorService,
         UserManager<ApplicationUser> userManager,
         ILogger<CreatorController> logger,
-        ITaxBanditsService taxBanditsService,
-        IConfiguration configuration)
+        ITaxFormTokenService taxFormTokenService)
     {
         _creatorService = creatorService;
         _userManager = userManager;
         _logger = logger;
-        _taxBanditsService = taxBanditsService;
-        _configuration = configuration;
+        _taxFormTokenService = taxFormTokenService;
     }
 
     /// <summary>
@@ -320,96 +317,18 @@ public class CreatorController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-        if (creator == null)
+        var result = await _taxFormTokenService.GetTaxFormTokenAsync(user.Id, user.Email);
+
+        return result.Outcome switch
         {
-            return BadRequest("Creator record not found. Please start the onboarding process first.");
-        }
-
-        // Tax form token is only available when status is Pending
-        if (creator.TaxFormStatus != TaxFormStatus.Pending)
-        {
-            return BadRequest("No pending tax form request. Please initiate a tax form submission first.");
-        }
-
-        // Get the PayeeRef (email) used in the original request
-        var payeeRef = creator.TaxBanditsPayeeRef ?? user.Email;
-        if (string.IsNullOrWhiteSpace(payeeRef))
-        {
-            return BadRequest("No email address found for tax form request.");
-        }
-
-        try
-        {
-            // Get allowed origins from Fido2:Origins configuration
-            // Supports: 
-            //   1. JSON array in appsettings.json: "Origins": ["https://example.com", "https://www.example.com"]
-            //   2. Indexed environment variables: Fido2:Origins:0, Fido2:Origins:1
-            //   3. Comma-separated string fallback: Fido2:Origins = "https://example.com,https://www.example.com"
-            var origins = _configuration.GetSection("Fido2:Origins").Get<List<string>>() ?? new List<string>();
-            
-            // Fallback: check if origins is empty but a comma-separated string was provided
-            if (origins.Count == 0)
-            {
-                var originsString = _configuration["Fido2:Origins"];
-                if (!string.IsNullOrWhiteSpace(originsString))
-                {
-                    origins = originsString
-                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                        .ToList();
-                    _logger.LogInformation("Parsed {Count} origins from comma-separated string", origins.Count);
-                }
-            }
-            
-            _logger.LogInformation("Configured origins for TaxBandits: {Origins}", string.Join(", ", origins));
-            
-            if (origins.Count == 0)
-            {
-                _logger.LogError("No origins configured in Fido2:Origins for TaxBandits Drop-in UI. " +
-                    "Set as indexed env vars (Fido2:Origins:0, Fido2:Origins:1) or comma-separated (Fido2:Origins=url1,url2)");
-                return StatusCode(500, new TaxFormTokenResponse
-                {
-                    Success = false,
-                    ErrorMessage = "Server configuration error: no allowed origins configured."
-                });
-            }
-
-            var tokenResult = await _taxBanditsService.GetTransientTokenAsync(origins);
-
-            if (!tokenResult.Success)
-            {
-                _logger.LogError("Failed to get transient token for user {UserId}: {Error}", user.Id, tokenResult.ErrorMessage);
-                return StatusCode(500, new TaxFormTokenResponse
-                {
-                    Success = false,
-                    ErrorMessage = $"Failed to initialize tax form: {tokenResult.ErrorMessage}"
-                });
-            }
-
-            var businessId = _configuration["TaxBandits:BusinessId"];
-            var scriptUrl = _configuration["TaxBandits:ScriptUrl"];
-
-            _logger.LogInformation("Tax form token generated for user {UserId}. BusinessId: {BusinessId}, TokenLength: {TokenLength}",
-                user.Id, businessId, tokenResult.TransientToken?.Length ?? 0);
-
-            return Ok(new TaxFormTokenResponse
-            {
-                Success = true,
-                TransientToken = tokenResult.TransientToken,
-                PayeeRef = payeeRef,
-                BusinessId = businessId,
-                ScriptUrl = scriptUrl
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Exception while getting tax form token for user {UserId}", user.Id);
-            return StatusCode(500, new TaxFormTokenResponse
+            TaxFormTokenOutcome.Success => Ok(result.Response),
+            TaxFormTokenOutcome.InvalidRequest => BadRequest(result.ErrorMessage),
+            _ => StatusCode(500, new TaxFormTokenResponse
             {
                 Success = false,
-                ErrorMessage = "An error occurred while preparing the tax form."
-            });
-        }
+                ErrorMessage = result.ErrorMessage
+            })
+        };
     }
 
     /// <summary>
@@ -541,15 +460,6 @@ public class CreatorListItem
     public DateTime? OnboardedAt { get; set; }
 }
 
-public class TaxFormTokenResponse
-{
-    public bool Success { get; set; }
-    public string? TransientToken { get; set; }
-    public string? PayeeRef { get; set; }
-    public string? BusinessId { get; set; }
-    public string? ScriptUrl { get; set; }
-    public string? ErrorMessage { get; set; }
-}
 
 public class CreatorSongItem
 {

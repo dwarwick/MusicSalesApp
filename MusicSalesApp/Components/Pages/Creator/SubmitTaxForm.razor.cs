@@ -5,12 +5,15 @@ using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
-using System.Net.Http.Json;
+using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Components.Pages.Creator;
 
 public partial class SubmitTaxFormModel : BlazorBase
 {
+    [Inject]
+    protected ITaxFormTokenService TaxFormTokenService { get; set; } = default!;
+
     protected bool _loading = true;
     protected bool _isCooldownActive = false;
     protected string _errorMessage = string.Empty;
@@ -85,14 +88,17 @@ public partial class SubmitTaxFormModel : BlazorBase
                     }
                 }
 
-                // Get the transient token and configuration from the server
-                Logger.LogInformation("Fetching tax form token from API");
-                var response = await Http.GetFromJsonAsync<TaxFormTokenResponse>("api/creator/tax-form-token");
+                // Asked in-process, not over HTTP. This page is @rendermode InteractiveServer, so
+                // OnAfterRenderAsync runs inside the circuit, where there is no HttpContext for the
+                // shared HttpClient to forward the auth cookie from - every self-call 401'd.
+                Logger.LogInformation("Fetching tax form token");
+                var result = await TaxFormTokenService.GetTaxFormTokenAsync(_currentUser.Id, _currentUser.Email);
+                var response = result.Response;
 
-                if (response == null || !response.Success)
+                if (result.Outcome != TaxFormTokenOutcome.Success || response == null)
                 {
-                    Logger.LogWarning("Tax form token request failed: {Error}", response?.ErrorMessage ?? "null response");
-                    _errorMessage = response?.ErrorMessage ?? "Failed to load tax form. Please return to Creator / Artist Settings and try again.";
+                    Logger.LogWarning("Tax form token request failed: {Error}", result.ErrorMessage ?? "no result");
+                    _errorMessage = result.ErrorMessage ?? "Failed to load tax form. Please return to Creator / Artist Settings and try again.";
                     _loading = false;
                     await InvokeAsync(StateHasChanged);
                     return;
@@ -229,12 +235,3 @@ public partial class SubmitTaxFormModel : BlazorBase
     }
 }
 
-public class TaxFormTokenResponse
-{
-    public bool Success { get; set; }
-    public string? TransientToken { get; set; }
-    public string? PayeeRef { get; set; }
-    public string? BusinessId { get; set; }
-    public string? ScriptUrl { get; set; }
-    public string? ErrorMessage { get; set; }
-}
