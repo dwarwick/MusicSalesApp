@@ -87,9 +87,17 @@ public class HlsContentKeyProtectorTests
         var protector = Create();
         var wrapped = protector.Protect(SongId, HlsContentKeyProtector.CreateContentKey());
 
-        // Flip a character in the payload. GCM authenticates, so this is detected rather than
-        // producing a wrong-but-plausible key that would decrypt every segment to noise.
-        var tampered = wrapped[..^2] + (wrapped[^2] == 'A' ? 'B' : 'A') + wrapped[^1];
+        // Flip a character in the MIDDLE of the payload. GCM authenticates, so this is detected
+        // rather than producing a wrong-but-plausible key that would decrypt every segment to
+        // noise.
+        //
+        // Not near the end, which is where this test used to flip: the trailing characters of a
+        // Base64 string can carry padding bits that decode to nothing, so a flip there sometimes
+        // produced byte-identical input and no exception. The content key is random per run, so
+        // the payload length - and therefore whether the flip landed on padding - varied, and the
+        // test failed perhaps one run in several.
+        var middle = wrapped.Length / 2;
+        var tampered = wrapped[..middle] + (wrapped[middle] == 'A' ? 'B' : 'A') + wrapped[(middle + 1)..];
 
         Assert.Catch<CryptographicException>(() => protector.Unprotect(SongId, tampered));
     }

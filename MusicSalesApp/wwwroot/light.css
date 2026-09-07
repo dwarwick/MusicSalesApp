@@ -171,19 +171,22 @@ body {
 .like-button,
 .dislike-button,
 .like-display,
-.dislike-display {
+.dislike-display,
+.follow-artist-bell {
     color: black;
     background-color: white;
 }
 
 .like-button:hover,
-.dislike-button:hover {
+.dislike-button:hover,
+.follow-artist-bell:hover {
     background-color: rgba(179, 179, 179, 0.2);
     /*color: #fff;*/
 }
 
 .like-button.active,
-.dislike-button.active {
+.dislike-button.active,
+.follow-artist-bell.is-following {
     background-color: rgba(179, 179, 179, 0.2);
     /*color: #fff;*/
 }
@@ -1141,7 +1144,8 @@ body {
 /* The approved layout has these as bare icon + count, with no button chrome - the card
    already carries enough boxes. Scoped to the row, which only the song card renders. */
 .card-ai-actions-row .like-button,
-.card-ai-actions-row .dislike-button {
+.card-ai-actions-row .dislike-button,
+.card-ai-actions-row .follow-artist-bell {
     background: transparent;
     border: none;
     box-shadow: none;
@@ -1149,13 +1153,15 @@ body {
 }
 
 .card-ai-actions-row .like-button:hover,
-.card-ai-actions-row .dislike-button:hover {
+.card-ai-actions-row .dislike-button:hover,
+.card-ai-actions-row .follow-artist-bell:hover {
     background: transparent;
     color: var(--st-accent);
 }
 
 .card-ai-actions-row .like-button.active,
-.card-ai-actions-row .dislike-button.active {
+.card-ai-actions-row .dislike-button.active,
+.card-ai-actions-row .follow-artist-bell.is-following {
     background: transparent;
     color: var(--st-accent);
 }
@@ -1504,6 +1510,8 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .settings-tz { color: var(--st-text-3); }
 .settings-subhead { color: var(--st-text); }
 .settings-hint { color: var(--st-text-3); }
+.settings-explainer { color: var(--st-text-3); }
+.settings-explainer > summary { color: var(--st-text-2); }
 .settings-working { color: var(--st-text-2); }
 
 .status-pill {
@@ -1664,6 +1672,9 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .settings-hero-icon { background-color: var(--st-accent-fill); color: var(--st-on-accent); }
 
 .settings-count, .settings-optional { color: var(--st-text-3); }
+
+/* Was inherited from .terms-list before this list stopped borrowing it. */
+.follower-source-list li { color: var(--st-text-2); }
 .settings-link { color: var(--st-accent); }
 
 .status-tile { background-color: var(--st-surface-hover); border-color: var(--st-line); }
@@ -1760,3 +1771,24 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .ai-declare { border-color: var(--st-line); }
 .ai-declare-invalid { border-color: var(--st-danger); }
 .ai-declare-or { color: var(--st-text-3); }
+
+/* Follow artist button. --st-text-2 rather than --st-text-3: the count can sit on a hover-tinted
+   card, where --st-text-3 measures 4.33:1 in dark and fails AA. */
+.follow-artist-count {
+    color: var(--st-text-2);
+}
+
+/* Creator followers page. --st-text rather than --st-accent: this is a figure, not a link, and
+   --st-accent is measured for legibility on --st-surface only. */
+.follower-stat-value {
+    color: var(--st-text);
+}
+
+/* Followed artists / artist messages lists */
+.follow-row {
+    border-bottom: 1px solid var(--st-line);
+}
+
+.follow-row.is-unread {
+    border-left: 3px solid var(--st-accent);
+}

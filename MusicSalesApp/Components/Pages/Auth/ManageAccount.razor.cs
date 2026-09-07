@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -35,6 +36,12 @@ public partial class ManageAccountModel : BlazorBase
 
     // Email preferences
     protected bool _receiveNewSongEmails = false;
+    protected bool _receiveArtistReleaseEmails;
+    protected bool _receiveArtistMessageEmails;
+
+    // Hidden entirely until an admin switches push on. There is no point offering a preference
+    // the app on the listener's phone cannot act on yet.
+
 
     // Shown inside the Email preferences card rather than only in the page-level banner.
     // That banner renders above the first section, so a reader who saves from the third one
@@ -91,6 +98,36 @@ public partial class ManageAccountModel : BlazorBase
     
     private ApplicationUser _currentUser;
 
+    /// <summary>
+    /// The signed-in listener's id, for the child sections that need it.
+    /// </summary>
+    /// <remarks>
+    /// An accessor rather than widening <c>_currentUser</c>: the sections need an id and nothing
+    /// else, and exposing the whole Identity row to the markup is how an email ends up rendered
+    /// somewhere it was never meant to be.
+    /// </remarks>
+    protected int? CurrentUserId => _currentUser?.Id;
+
+    /// <summary>
+    /// The Following section, held so the Artist messages section can refresh its unread counts.
+    /// </summary>
+    protected FollowedArtistsSectionModel _followedArtistsSection;
+
+    /// <summary>
+    /// Relays "a message changed" from the lower section to the upper one.
+    /// </summary>
+    /// <remarks>
+    /// Null until the section has rendered, which is why this is guarded rather than assumed: the
+    /// callback cannot fire before then, but the reference is still the page's to hold safely.
+    /// </remarks>
+    protected async Task RefreshFollowedArtistsAsync()
+    {
+        if (_followedArtistsSection is not null)
+        {
+            await _followedArtistsSection.RefreshAsync();
+        }
+    }
+
     [Inject]
     private IAccountDeletionService AccountDeletionService { get; set; }
 
@@ -117,6 +154,8 @@ public partial class ManageAccountModel : BlazorBase
                         _userTimeZoneId = UserTimeZoneDisplayHelper.GetTimeZoneId(_currentUser);
                         // Load email preferences
                         _receiveNewSongEmails = _currentUser.ReceiveNewSongEmails;
+                        _receiveArtistReleaseEmails = _currentUser.ReceiveArtistReleaseEmails;
+                        _receiveArtistMessageEmails = _currentUser.ReceiveArtistMessageEmails;
 
                         await DetectAndPersistUserTimeZoneAsync();
                         
@@ -324,6 +363,8 @@ public partial class ManageAccountModel : BlazorBase
         try
         {
             _currentUser.ReceiveNewSongEmails = _receiveNewSongEmails;
+            _currentUser.ReceiveArtistReleaseEmails = _receiveArtistReleaseEmails;
+            _currentUser.ReceiveArtistMessageEmails = _receiveArtistMessageEmails;
             var result = await UserManager.UpdateAsync(_currentUser);
 
             if (result.Succeeded)

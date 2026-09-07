@@ -76,6 +76,16 @@ public abstract class BUnitTestBase
     protected Mock<IStreamPayoutService> MockStreamPayoutService { get; private set; } = default!;
     protected Mock<ITipService> MockTipService { get; private set; } = default!;
     protected Mock<IReportedSongService> MockReportedSongService { get; private set; } = default!;
+
+    // Artist follow feature. Every service on BlazorBase needs a mock here or EVERY component
+    // test fails at once - the base registers the whole injected surface up front.
+    protected Mock<IArtistFollowService> MockArtistFollowService { get; private set; } = default!;
+    protected Mock<IArtistFollowerDirectoryService> MockArtistFollowerDirectoryService { get; private set; } = default!;
+    protected Mock<IArtistFollowerMessageService> MockArtistFollowerMessageService { get; private set; } = default!;
+    protected Mock<IArtistReleaseNotificationService> MockArtistReleaseNotificationService { get; private set; } = default!;
+    protected Mock<IArtistFollowerAnalyticsService> MockArtistFollowerAnalyticsService { get; private set; } = default!;
+    protected Mock<IArtistMessageModerationService> MockArtistMessageModerationService { get; private set; } = default!;
+    protected Mock<IArtistNotificationPreferenceService> MockArtistNotificationPreferenceService { get; private set; } = default!;
     protected Mock<IAdminNotificationService> MockAdminNotificationService { get; private set; } = default!;
     protected Mock<IAdminMessageService> MockAdminMessageService { get; private set; } = default!;
     protected Mock<IAdminMessageHubClient> MockAdminMessageHubClient { get; private set; } = default!;
@@ -144,6 +154,13 @@ public abstract class BUnitTestBase
         MockStreamPayoutService = new Mock<IStreamPayoutService>();
         MockTipService = new Mock<ITipService>();
         MockReportedSongService = new Mock<IReportedSongService>();
+        MockArtistFollowService = new Mock<IArtistFollowService>();
+        MockArtistFollowerDirectoryService = new Mock<IArtistFollowerDirectoryService>();
+        MockArtistFollowerMessageService = new Mock<IArtistFollowerMessageService>();
+        MockArtistReleaseNotificationService = new Mock<IArtistReleaseNotificationService>();
+        MockArtistFollowerAnalyticsService = new Mock<IArtistFollowerAnalyticsService>();
+        MockArtistMessageModerationService = new Mock<IArtistMessageModerationService>();
+        MockArtistNotificationPreferenceService = new Mock<IArtistNotificationPreferenceService>();
         MockAdminNotificationService = new Mock<IAdminNotificationService>();
         MockAdminMessageService = new Mock<IAdminMessageService>();
         MockAdminMessageHubClient = new Mock<IAdminMessageHubClient>();
@@ -586,6 +603,13 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IStreamPayoutService>(MockStreamPayoutService.Object);
         TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
         TestContext.Services.AddSingleton<IReportedSongService>(MockReportedSongService.Object);
+        TestContext.Services.AddSingleton<IArtistFollowService>(MockArtistFollowService.Object);
+        TestContext.Services.AddSingleton<IArtistFollowerDirectoryService>(MockArtistFollowerDirectoryService.Object);
+        TestContext.Services.AddSingleton<IArtistFollowerMessageService>(MockArtistFollowerMessageService.Object);
+        TestContext.Services.AddSingleton<IArtistReleaseNotificationService>(MockArtistReleaseNotificationService.Object);
+        TestContext.Services.AddSingleton<IArtistFollowerAnalyticsService>(MockArtistFollowerAnalyticsService.Object);
+        TestContext.Services.AddSingleton<IArtistMessageModerationService>(MockArtistMessageModerationService.Object);
+        TestContext.Services.AddSingleton<IArtistNotificationPreferenceService>(MockArtistNotificationPreferenceService.Object);
         TestContext.Services.AddSingleton<IAdminNotificationService>(MockAdminNotificationService.Object);
         TestContext.Services.AddSingleton<IAdminMessageService>(MockAdminMessageService.Object);
         TestContext.Services.AddSingleton<IAdminMessageHubClient>(MockAdminMessageHubClient.Object);

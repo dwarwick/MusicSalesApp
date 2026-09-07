@@ -141,7 +141,26 @@ public class Creator
     /// Whether the creator account is currently active and can sell music.
     /// When set to false, the creator's music will not be available in the Music Library or playlists.
     /// </summary>
-    public bool IsActive { get; set; } = false;
+    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Whether this creator is willing to be named to artists THEY follow, so those artists can
+    /// find their music and follow back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Off by default, and deliberately so: a persona name is already public, but "this persona
+    /// follows you" is not, and being a public artist is not consent to have who you follow
+    /// disclosed.
+    /// </para>
+    /// <para>
+    /// <b>Read at display time, never copied onto a follow row.</b> That is what makes withdrawal
+    /// immediate and total - unticking this hides the name from every artist at once, including
+    /// ones followed while it was on. Denormalising the name at follow time would have turned
+    /// withdrawal into a data-cleanup problem.
+    /// </para>
+    /// </remarks>
+    public bool RevealPersonaToFollowedArtists { get; set; } = false;
 
     /// <summary>
     /// The tax residency type of the creator. US for W-9 filers, FOREIGN for W-8BEN filers.

@@ -654,6 +654,35 @@ public class ManageAccountTests : BUnitTestBase
         return (Task)method!.Invoke(instance, null)!;
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void ManageAccount_NeverOffersPhoneNotificationPreferences(bool pushEnabled)
+    {
+        // They live in the app now, under Config > Notifications, next to the OS permission they
+        // depend on. Two places to set the same thing is how someone allows notifications on their
+        // phone, leaves the account switches off here, and receives nothing with no way to tell
+        // those two states apart from the device. Asserted for BOTH states of the admin flag,
+        // because the flag used to be what revealed these controls.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        MockAppSettingsService.Setup(x => x.IsPushNotificationsEnabledAsync()).ReturnsAsync(pushEnabled);
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("notification to my phone"));
+            Assert.That(cut.Markup, Does.Not.Contain("Phone notifications need the StreamTunes app"));
+            Assert.That(cut.Markup, Does.Not.Contain("How often"));
+
+            // The EMAIL preferences stay here: the web can act on those, and they are not
+            // duplicated in the app.
+            Assert.That(cut.Markup, Does.Contain("Email me when artists I follow release new music"));
+        });
+    }
+
     [TestCase(true, "Saved. We will email you when new music is added.")]
     [TestCase(false, "Saved. We will not email you when new music is added.")]
     public async Task ManageAccount_SaveEmailPreferences_ConfirmsInsideTheCardAndSaysWhichWay(

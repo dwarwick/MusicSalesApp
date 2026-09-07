@@ -41,6 +41,47 @@ public class AppSettingsServiceTests
         context.Database.EnsureDeleted();
     }
 
+    // ------------------------------------------------------------ push notifications
+
+    [Test]
+    public async Task IsPushNotificationsEnabledAsync_IsOffWhenNobodyHasSaidOtherwise()
+    {
+        // The whole point of the flag. Until push is proven end to end and the phone apps are in
+        // the stores, an absent row has to read as "not yet" rather than "sure, go ahead".
+        var enabled = await _service.IsPushNotificationsEnabledAsync();
+
+        Assert.That(enabled, Is.False);
+    }
+
+    [Test]
+    public async Task IsPushNotificationsEnabledAsync_IsOffWhenTheStoredValueIsNotABoolean()
+    {
+        await _service.SetSettingAsync(
+            AppSettingsService.PushNotificationsEnabledKey, "yes", "Hand-edited");
+
+        // A row nobody can parse must fail closed, the same as a missing one. Reading "yes" as
+        // true would let a typo in the settings table start sending notifications.
+        var enabled = await _service.IsPushNotificationsEnabledAsync();
+
+        Assert.That(enabled, Is.False);
+    }
+
+    [Test]
+    public async Task SetPushNotificationsEnabledAsync_RoundTripsBothWays()
+    {
+        await _service.SetPushNotificationsEnabledAsync(true);
+        var afterTurningOn = await _service.IsPushNotificationsEnabledAsync();
+
+        await _service.SetPushNotificationsEnabledAsync(false);
+        var afterTurningOff = await _service.IsPushNotificationsEnabledAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterTurningOn, Is.True);
+            Assert.That(afterTurningOff, Is.False, "An admin must be able to switch it back off.");
+        });
+    }
+
     [Test]
     public async Task GetSettingAsync_ReturnsNull_WhenSettingDoesNotExist()
     {

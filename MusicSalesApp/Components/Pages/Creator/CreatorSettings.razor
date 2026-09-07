@@ -469,6 +469,31 @@
                         <div class="settings-actions">
                             <SfButton CssClass="e-btn settings-btn settings-btn-violet" Content="@(_personas.Count == 0 ? "Create a Persona" : "Manage Personas")" OnClick="NavigateToPersonas" />
                         </div>
+
+                        @* Off by default, and it stays off unless the creator chooses otherwise.
+                           A persona name is already public; "this persona follows you" is not. *@
+                        <div class="settings-check">
+                            <SfCheckBox @bind-Checked="_revealPersonaToFollowedArtists" TChecked="bool"
+                                        Label="Reveal my persona name to artists I follow, so they can follow me back" />
+                        </div>
+                        <p class="settings-hint">
+                            Off by default. When it is on, artists you follow see the persona you chose at the
+                            time instead of an anonymous listener number, and can open your artist page.
+                            Turning it back off hides your name from every artist straight away, including ones
+                            you followed while it was on &mdash; though it cannot un&#8209;show what they have
+                            already seen. Your email address is never shared either way.
+                        </p>
+
+                        <div class="settings-actions">
+                            <SfButton Content="@(_savingRevealPersona ? "Saving..." : "Save")"
+                                      Disabled="@_savingRevealPersona"
+                                      OnClick="SaveRevealPersonaAsync"
+                                      CssClass="e-btn settings-btn settings-btn-violet settings-btn-small" />
+                            @if (!string.IsNullOrEmpty(_revealPersonaStatus))
+                            {
+                                <span class="settings-inline-status @(_revealPersonaFailed ? "settings-inline-status-bad" : "")" role="status">@_revealPersonaStatus</span>
+                            }
+                        </div>
                     </section>
 
                     <section class="settings-card settings-card-danger" id="stop">

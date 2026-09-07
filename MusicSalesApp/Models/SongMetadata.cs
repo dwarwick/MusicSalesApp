@@ -217,6 +217,24 @@ public class SongMetadata
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// When this song first became publicly visible, or null if it never has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Distinct from <see cref="CreatedAt"/>, which records when the row was written. A song can
+    /// exist while disabled, be enabled later, have its metadata or artwork edited afterwards, or
+    /// be pulled and restored - and only the first moment it became publicly visible is a release.
+    /// </para>
+    /// <para>
+    /// Stamped exactly once, by the release-notification job, and never re-stamped. That is what
+    /// makes "do not notify on a draft, a re-crop, or a metadata edit" fall out for free instead
+    /// of needing a rule per case. Existing rows were backfilled from CreatedAt by the migration
+    /// that added this column.
+    /// </para>
+    /// </remarks>
+    public DateTime? FirstPublishedAtUtc { get; set; }
+
+    /// <summary>
     /// When this record was last updated
     /// </summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

@@ -1,0 +1,106 @@
+@page "/admin/artist-messages"
+@rendermode InteractiveServer
+@inherits AdminArtistMessagesModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Services
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Reported artist messages</PageTitle>
+
+@*
+    A thank-you is the first creator-authored free text StreamTunes shows to another user, so this
+    queue ships with the feature rather than after it.
+
+    Note the reporter is a pseudonym here too. An admin who genuinely needs the account has the
+    database; a review screen does not, and every extra surface that renders an identity is another
+    one that can be screenshotted or logged.
+*@
+<div class="settings-page">
+    <div class="settings-main settings-main-wide">
+        <div class="settings-head">
+            <p class="settings-head-eyebrow">Admin</p>
+            <h1 class="settings-head-title">Reported artist messages</h1>
+            <p class="settings-head-note">
+                Messages a listener has reported. Accepting a report hides the message from the listener;
+                rejecting it leaves the message where it is. The row is kept either way.
+            </p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_statusMessage))
+        {
+            <div class="settings-alert settings-alert-info" role="status">@_statusMessage</div>
+        }
+
+        <section class="settings-card">
+            <div class="settings-section-head">
+                <div>
+                    <p class="settings-eyebrow">Queue</p>
+                    <h2 class="settings-title">@(_includeResolved ? "All reports" : "Open reports")</h2>
+                </div>
+                <div class="settings-actions">
+                    <SfButton CssClass="e-btn settings-btn settings-btn-small" OnClick="ToggleResolvedAsync">
+                        @(_includeResolved ? "Show open only" : "Include resolved")
+                    </SfButton>
+                </div>
+            </div>
+
+            @if (_loading)
+            {
+                <div class="settings-loading" role="status">
+                    <span class="settings-spinner" aria-hidden="true"></span>
+                    <span>Loading reports&hellip;</span>
+                </div>
+            }
+            else if (_reports.Count == 0)
+            {
+                <div class="settings-empty">
+                    <p class="settings-prose">Nothing reported.</p>
+                </div>
+            }
+            else
+            {
+                <SfGrid TValue="ReportedArtistMessageDto"
+                        DataSource="@_reports"
+                        AllowPaging="true"
+                        AllowSorting="true"
+                        AllowResizing="true">
+                    <GridPageSettings PageSize="15"></GridPageSettings>
+                    <GridColumns>
+                        <GridColumn Field="@nameof(ReportedArtistMessageDto.ArtistName)" HeaderText="Artist" Width="150"></GridColumn>
+                        <GridColumn Field="@nameof(ReportedArtistMessageDto.ReporterDisplayName)" HeaderText="Reported by" Width="140"></GridColumn>
+                        <GridColumn Field="@nameof(ReportedArtistMessageDto.MessageText)" HeaderText="Message" Width="260"></GridColumn>
+                        <GridColumn Field="@nameof(ReportedArtistMessageDto.ReportReason)" HeaderText="Reason" Width="170"></GridColumn>
+                        <GridColumn Field="@nameof(ReportedArtistMessageDto.ReportedAtUtc)" HeaderText="Reported" Format="MMM d, yyyy" Width="130"></GridColumn>
+                        <GridColumn HeaderText="Outcome" Width="220">
+                            <Template>
+                                @{
+                                    var report = (ReportedArtistMessageDto)context;
+                                }
+                                @if (report.ModerationResolvedAtUtc is null)
+                                {
+                                    <SfButton CssClass="e-btn settings-btn settings-btn-danger settings-btn-small"
+                                              Disabled="@(_resolvingMessageId == report.MessageId)"
+                                              OnClick="@(() => ResolveAsync(report.MessageId, true))">
+                                        Uphold
+                                    </SfButton>
+                                    <SfButton CssClass="e-btn settings-btn settings-btn-small"
+                                              Disabled="@(_resolvingMessageId == report.MessageId)"
+                                              OnClick="@(() => ResolveAsync(report.MessageId, false))">
+                                        Reject
+                                    </SfButton>
+                                }
+                                else
+                                {
+                                    <span class="status-pill @(report.ModerationAccepted == true ? "status-pill-warn" : "")">
+                                        @(report.ModerationAccepted == true ? "Upheld" : "Rejected")
+                                    </span>
+                                }
+                            </Template>
+                        </GridColumn>
+                    </GridColumns>
+                </SfGrid>
+            }
+        </section>
+    </div>
+</div>

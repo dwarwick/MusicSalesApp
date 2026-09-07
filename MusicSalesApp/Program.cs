@@ -426,6 +426,24 @@ try
     builder.Services.AddScoped<ICreatorPersonaService, CreatorPersonaService>();
     builder.Services.AddScoped<ITipService, TipService>();
     builder.Services.AddScoped<IReportedSongService, ReportedSongService>();
+
+    // Artist follow feature. The identity service is a singleton because it holds only a Random
+    // and no state per request; everything else is scoped like the rest of the data services.
+    builder.Services.AddSingleton<IArtistFollowerIdentityService, ArtistFollowerIdentityService>();
+    builder.Services.AddScoped<IArtistFollowService, ArtistFollowService>();
+    builder.Services.AddScoped<IArtistFollowerDirectoryService, ArtistFollowerDirectoryService>();
+    builder.Services.AddScoped<IArtistFollowerMessageService, ArtistFollowerMessageService>();
+    builder.Services.AddScoped<IArtistReleaseNotificationService, ArtistReleaseNotificationService>();
+    builder.Services.AddScoped<IArtistFollowerAnalyticsService, ArtistFollowerAnalyticsService>();
+    builder.Services.AddScoped<IArtistMessageModerationService, ArtistMessageModerationService>();
+    builder.Services.AddScoped<IArtistNotificationPreferenceService, ArtistNotificationPreferenceService>();
+
+    // Push. One transport for both platforms - FCM relays to APNs for iOS, so nothing here talks
+    // to Apple directly. A singleton because it caches the OAuth access token, which is the whole
+    // point of not minting one per send.
+    builder.Services.AddSingleton<IPushNotificationSender, FirebasePushNotificationSender>();
+    builder.Services.AddScoped<IPushDeviceTokenService, PushDeviceTokenService>();
+    builder.Services.AddScoped<IArtistPushDispatchService, ArtistPushDispatchService>();
     builder.Services.AddScoped<IContactRequestEmailService, ContactRequestEmailService>();
     builder.Services.AddScoped<IContactRequestRateLimitService, ContactRequestRateLimitService>();
     builder.Services.AddScoped<IContactRequestAdminService, ContactRequestAdminService>();

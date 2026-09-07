@@ -144,6 +144,17 @@ public interface IAppSettingsService
     Task SetDirectToStorageUploadEnabledAsync(bool enabled);
 
     /// <summary>
+    /// Whether push notifications are live. Defaults OFF - see
+    /// <see cref="AppSettingsService.PushNotificationsEnabledKey"/>.
+    /// </summary>
+    Task<bool> IsPushNotificationsEnabledAsync();
+
+    /// <summary>
+    /// Turns push notifications on or off.
+    /// </summary>
+    Task SetPushNotificationsEnabledAsync(bool enabled);
+
+    /// <summary>
     /// Checks if Tax Bandits is currently in a maintenance window.
     /// Returns true if maintenance is enabled and the current UTC time falls within the start/end range.
     /// </summary>

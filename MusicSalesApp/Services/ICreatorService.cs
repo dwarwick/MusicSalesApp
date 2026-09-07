@@ -81,6 +81,26 @@ public interface ICreatorService
     Task<bool> IsActiveCreatorAsync(int userId);
 
     /// <summary>
+    /// Whether this creator has consented to being named to artists they follow.
+    /// </summary>
+    Task<bool> GetRevealPersonaToFollowedArtistsAsync(int creatorId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets that consent.
+    /// </summary>
+    /// <remarks>
+    /// Switching it OFF also rotates the creator's anonymous listener numbers. Without that, an
+    /// artist who saw "Jane Echo" yesterday reads "Listener #4817" in the same row - same date,
+    /// same source song - and the mapping is obvious. Rotation costs the followed artist the
+    /// ability to tell repeat support apart for that person, which is exactly the trade the
+    /// listener asked for by withdrawing.
+    /// </remarks>
+    Task<bool> SetRevealPersonaToFollowedArtistsAsync(
+        int creatorId,
+        bool reveal,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets the creator id for a user, or null if they have no creator record or it is inactive.
     /// A projection rather than a full entity load, for callers on request-hot paths that need
     /// only the id and the active flag.

@@ -93,6 +93,12 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected int _songCount;
     protected List<PersonaAdminViewModel> _personas = new();
 
+    // Follow-identity consent. Off unless the creator has explicitly turned it on.
+    protected bool _revealPersonaToFollowedArtists;
+    protected bool _savingRevealPersona;
+    protected string _revealPersonaStatus = string.Empty;
+    protected bool _revealPersonaFailed;
+
     protected bool HasUploadedMusic => _songCount > 0;
 
     /// <summary>
@@ -243,6 +249,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             {
                 _creatorId = creator.Id;
                 _isActiveCreator = creator.IsActive;
+                _revealPersonaToFollowedArtists = creator.RevealPersonaToFollowedArtists;
                 _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
                 _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
                 _lastTaxFormErrorMessage = creator.LastTaxFormErrorMessage;
@@ -1055,6 +1062,56 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             WebhookStatusHubClient.OnWebhookStatusReceived -= _webhookStatusHandler;
         }
         _cooldownTimer?.Dispose();
+    }
+
+    /// <summary>
+    /// Saves the follow-identity consent.
+    /// </summary>
+    /// <remarks>
+    /// The status message says which way it went and what that means, rather than "Saved". This
+    /// control changes what other people can see about you, so a reader who has just switched it
+    /// off needs to know the change has already reached every artist - and equally that it cannot
+    /// retract what they have already seen.
+    /// </remarks>
+    protected async Task SaveRevealPersonaAsync()
+    {
+        if (_creatorId is null || _savingRevealPersona)
+        {
+            return;
+        }
+
+        _savingRevealPersona = true;
+        _revealPersonaStatus = string.Empty;
+        _revealPersonaFailed = false;
+
+        try
+        {
+            var saved = await CreatorService.SetRevealPersonaToFollowedArtistsAsync(
+                _creatorId.Value, _revealPersonaToFollowedArtists);
+
+            if (saved)
+            {
+                _revealPersonaStatus = _revealPersonaToFollowedArtists
+                    ? "Saved. Artists you follow from now on can see the persona you pick."
+                    : "Saved. Your name is hidden from every artist you follow, including ones you already followed.";
+            }
+            else
+            {
+                _revealPersonaFailed = true;
+                _revealPersonaStatus = "We could not save that.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to save the follow-identity consent for creator {CreatorId}.", _creatorId);
+            _revealPersonaFailed = true;
+            _revealPersonaStatus = "We could not save that.";
+        }
+        finally
+        {
+            _savingRevealPersona = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 }
 

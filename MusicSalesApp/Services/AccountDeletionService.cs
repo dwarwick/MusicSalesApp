@@ -83,6 +83,25 @@ public class AccountDeletionService : IAccountDeletionService
             .Where(r => r.ReportingUserId == userId)
             .ExecuteDeleteAsync();
 
+        // Follow-feature rows for this user as a LISTENER. ArtistFollower.ListenerUserId and
+        // ArtistReleaseNotification.ListenerUserId are both NoAction, so nothing removes these on
+        // their own - and leaving them would keep a deleted account present in creators' follower
+        // counts. Messages hang off ArtistFollower and go with it by cascade.
+        await dbContext.ArtistReleaseNotifications
+            .Where(notification => notification.ListenerUserId == user.Id)
+            .ExecuteDeleteAsync();
+
+        // Messages this user SENT as a creator. SenderUserId is NoAction, and these rows sit on
+        // other people's follow relationships, so the ArtistFollower delete below does not reach
+        // them and the user row cannot go until they do.
+        await dbContext.ArtistFollowerMessages
+            .Where(message => message.SenderUserId == user.Id)
+            .ExecuteDeleteAsync();
+
+        await dbContext.ArtistFollowers
+            .Where(follow => follow.ListenerUserId == user.Id)
+            .ExecuteDeleteAsync();
+
         // Delete any pending mobile verification codes for this user.
         await dbContext.MobileVerificationCodes
             .Where(code => code.UserId == userId)

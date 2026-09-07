@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
@@ -72,6 +72,7 @@ public class MobileSongMapper : IMobileSongMapper
             PersonaImageThumbUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileThumbWidth),
             PersonaImageHeroUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
             PersonaImageVersion = m.Persona?.ImageVariantVersion ?? 0,
+            PersonaId = ResolvePersonaId(m),
             PersonaBio = ResolvePersonaBio(m),
             PersonaWebsiteUrl = ResolvePersonaWebsiteUrl(m),
             LyricsTimingsPath = ResolveLyricsTimingsPath(lyrics),
@@ -109,6 +110,7 @@ public class MobileSongMapper : IMobileSongMapper
             PersonaImageThumbUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileThumbWidth),
             PersonaImageHeroUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
             PersonaImageVersion = m.Persona?.ImageVariantVersion ?? 0,
+            PersonaId = ResolvePersonaId(m),
             PersonaBio = ResolvePersonaBio(m),
             PersonaWebsiteUrl = ResolvePersonaWebsiteUrl(m),
             LyricsTimingsPath = ResolveLyricsTimingsPath(lyrics),
@@ -165,6 +167,18 @@ public class MobileSongMapper : IMobileSongMapper
             ? _creatorPersonaService.GetPersonaImageSasUrl(
                 ImageVariantPaths.Variant(m.Persona.ImageBlobPath, width), sasLifetime)
             : null;
+
+    /// <summary>
+    /// The persona id, but only when that persona is one a listener can actually act on.
+    /// </summary>
+    /// <remarks>
+    /// A DISABLED persona is reported as null, deliberately and for the same reason
+    /// <c>GetEffectiveArtistName</c> ignores it: the app must not offer a Follow button for an
+    /// artist the server will then refuse to follow. Anywhere the name has fallen back past the
+    /// persona, the id has to fall back with it.
+    /// </remarks>
+    private static int? ResolvePersonaId(SongMetadata m) =>
+        m.Persona is { IsEnabled: true } ? m.PersonaId : null;
 
     private static string? ResolvePersonaBio(SongMetadata m) =>
         m.Persona is { IsEnabled: true, Bio: not null and not "" }

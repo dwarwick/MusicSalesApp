@@ -44,6 +44,8 @@
             <a href="@SectionLink("account")" class="settings-nav-link">Account</a>
             <a href="@SectionLink("subscription")" class="settings-nav-link">Subscription</a>
             <a href="@SectionLink("email-preferences")" class="settings-nav-link">Email preferences</a>
+            <a href="@SectionLink(AppPageRoutes.ManageAccountFollowingSection)" class="settings-nav-link">Following</a>
+            <a href="@SectionLink(AppPageRoutes.ManageAccountArtistMessagesSection)" class="settings-nav-link">Artist messages</a>
             <a href="@SectionLink("passkeys")" class="settings-nav-link">Passkeys</a>
             <a href="@SectionLink("password")" class="settings-nav-link">Password</a>
             <a href="@SectionLink("close-account")" class="settings-nav-link settings-nav-link-danger">Close account</a>
@@ -246,6 +248,22 @@
                     <div class="settings-check">
                         <SfCheckBox @bind-Checked="_receiveNewSongEmails" TChecked="bool" Label="Receive email notifications when new music is added" />
                     </div>
+                    @* The two follow-feature switches. There is no in-app equivalent to switch off:
+                       the notification IS the record, and muting one artist is done per artist in
+                       the Following section rather than site-wide here. *@
+                    <div class="settings-check">
+                        <SfCheckBox @bind-Checked="_receiveArtistReleaseEmails" TChecked="bool" Label="Email me when artists I follow release new music" />
+                    </div>
+                    <div class="settings-check">
+                        <SfCheckBox @bind-Checked="_receiveArtistMessageEmails" TChecked="bool" Label="Email me when an artist I follow sends me a message" />
+                    </div>
+                    @* Push preferences are deliberately NOT here. They live in the StreamTunes
+                       app, under Config > Notifications, together with the OS permission they
+                       depend on - a phone toggle and a web toggle that can disagree is how someone
+                       ends up allowing notifications on their device and receiving nothing. The
+                       columns are still account-level and still set through
+                       api/mobile/follows/notification-preferences; this page just no longer offers
+                       a second, contradictory place to set them. *@
                     @* Never gated on the checkbox. Switching a notification OFF is a save like
                        any other - the terms checkbox on the subscription card gates its button
                        because agreement is a precondition, which is not the case here. *@
@@ -260,6 +278,13 @@
                         }
                     </div>
                 </section>
+
+                @* The unread counts in Following are produced by the section below it, so the
+                   two are wired together here rather than either reaching for the other. *@
+                <FollowedArtistsSection @ref="_followedArtistsSection" UserId="@CurrentUserId" />
+
+                <ArtistMessagesSection UserId="@CurrentUserId"
+                                       OnMessagesChanged="RefreshFollowedArtistsAsync" />
 
                 <section class="settings-card" id="passkeys">
                     <div class="settings-section-head">

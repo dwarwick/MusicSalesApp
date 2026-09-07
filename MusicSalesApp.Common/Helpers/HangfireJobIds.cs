@@ -45,4 +45,37 @@ public static class HangfireJobIds
     /// </para>
     /// </summary>
     public const string ReconcileStalledLyricsAlignment = "reconcile-stalled-lyrics-alignment";
+
+    /// <summary>
+    /// Turns newly-public songs into in-app release notifications for the artist's followers.
+    /// Cheap and database-only, so it runs hourly and the notification shows up the same day
+    /// rather than waiting for the overnight email pass.
+    /// </summary>
+    public const string CreateArtistReleaseNotifications = "create-artist-release-notifications";
+
+    /// <summary>
+    /// The slow SMTP half of the above. Separate because it sleeps between every message to stay
+    /// out of spam filters, which is not something an hourly job can afford to do.
+    /// </summary>
+    public const string SendArtistReleaseNotificationEmails = "send-artist-release-notification-emails";
+
+    /// <summary>
+    /// Emails the thank-you messages creators have sent to individual followers. Runs every
+    /// 15 minutes rather than nightly: a thank-you that lands 20 hours after the follow reads
+    /// as broken rather than as a reply.
+    /// </summary>
+    public const string SendArtistMessageEmails = "send-artist-message-emails";
+
+    /// <summary>
+    /// Sends the push notifications due for release notifications and artist messages, and retires
+    /// device tokens the platforms reject.
+    ///
+    /// <para>
+    /// One job for both, because the expensive part is the outbound HTTP call per device rather
+    /// than the query, and because a device is reached the same way whichever kind of notification
+    /// it carries. Every 5 minutes - push has no spam-filter spacing to observe, unlike the email
+    /// jobs, so it can afford to be the prompt channel.
+    /// </para>
+    /// </summary>
+    public const string DispatchArtistPushNotifications = "dispatch-artist-push-notifications";
 }

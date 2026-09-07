@@ -38,4 +38,10 @@ public static class UserHistoryEventTypes
     public const string SubscriberLoginClicked = "SubscriberLoginClicked";
     public const string SubscriberSubscribeClicked = "SubscriberSubscribeClicked";
     public const string SubscriberManageAccountViewed = "SubscriberManageAccountViewed";
+    public const string ArtistFollowed = "ArtistFollowed";
+    public const string ArtistUnfollowed = "ArtistUnfollowed";
+    public const string ArtistBlocked = "ArtistBlocked";
+    public const string ArtistUnblocked = "ArtistUnblocked";
+    public const string ArtistThankYouSent = "ArtistThankYouSent";
+    public const string ArtistMessageReported = "ArtistMessageReported";
 }

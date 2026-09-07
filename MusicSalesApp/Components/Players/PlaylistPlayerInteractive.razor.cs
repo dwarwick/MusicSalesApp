@@ -513,6 +513,24 @@ namespace MusicSalesApp.Components.Players
         /// The other three routes list many artists and keep the catalogue treatment.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// Whether the artist page being viewed is the signed-in creator's own, so the Follow
+        /// bell can be left off it.
+        /// </summary>
+        /// <remarks>
+        /// Compares creator ids rather than persona ids: a creator with several aliases is still
+        /// looking at themselves on any of their own artist pages.
+        /// </remarks>
+        protected bool IsOwnArtistPage()
+        {
+            if (!_currentUserCreatorId.HasValue)
+            {
+                return false;
+            }
+
+            return GetCurrentTrackPersona()?.CreatorId == _currentUserCreatorId.Value;
+        }
+
         protected bool IsArtistTreatment() => _isArtistMode || _isCreatorMode;
 
         /// <summary>The chip above the title, naming what kind of listing this is.</summary>

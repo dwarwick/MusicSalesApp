@@ -27,6 +27,30 @@ public class ApplicationUser : IdentityUser<int>
     // Email preferences - user opt-in to receive new song notification emails
     public bool ReceiveNewSongEmails { get; set; } = false;
 
+    // Follow-feature notification preferences, all four OFF by default - the same posture as
+    // ReceiveNewSongEmails beside them. Following an artist is consent to the in-app record, which
+    // is the row itself and has no switch; it is not consent to be mailed or to have a phone buzz.
+    // Each channel is asked for separately at /manage-account, and a per-artist mute lives on
+    // ArtistFollower for going quiet without unfollowing.
+    public bool ReceiveArtistReleaseEmails { get; set; }
+
+    public bool ReceiveArtistMessageEmails { get; set; }
+
+    // The push counterparts. Separate from the email flags because the channels are genuinely
+    // different: a listener may well want a phone alert for a new release but no mail about it,
+    // and collapsing the two would force one choice on both.
+    public bool ReceiveArtistReleasePush { get; set; }
+
+    public bool ReceiveArtistMessagePush { get; set; }
+
+    // How often the push channel may interrupt, as an ArtistPushFrequency. Instant (0) is the
+    // default and is what everyone had before this column existed, so an un-migrated row and an
+    // untouched preference mean the same thing. Enforced in ArtistPushDispatchService: anything
+    // other than Instant holds this listener's pending rows until the oldest has waited a full
+    // window, then sends one summary. It governs BOTH releases and artist messages - the two
+    // booleans above still decide whether each kind is sent at all.
+    public int ArtistPushFrequency { get; set; }
+
     // Last known browser timezone from the user, stored as an IANA timezone ID.
     [MaxLength(100)]
     public string TimeZoneId { get; set; }

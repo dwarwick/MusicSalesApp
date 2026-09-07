@@ -373,7 +373,8 @@
     }
 
     .music-cards-grid .card-ai-actions-row .like-button,
-    .music-cards-grid .card-ai-actions-row .dislike-button {
+    .music-cards-grid .card-ai-actions-row .dislike-button,
+    .music-cards-grid .card-ai-actions-row .follow-artist-bell {
         pointer-events: auto;
     }
 
@@ -422,13 +423,16 @@
     .music-cards-grid .card-ai-actions-row .like-button,
     .music-cards-grid .card-ai-actions-row .dislike-button,
     .music-cards-grid .card-ai-actions-row .like-button.active,
-    .music-cards-grid .card-ai-actions-row .dislike-button.active {
+    .music-cards-grid .card-ai-actions-row .dislike-button.active,
+    .music-cards-grid .card-ai-actions-row .follow-artist-bell,
+    .music-cards-grid .card-ai-actions-row .follow-artist-bell.is-following {
         color: #fff;                       /* 8.09:1 on the scrim over white artwork */
         text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
     }
 
     .music-cards-grid .card-ai-actions-row .like-button:hover,
-    .music-cards-grid .card-ai-actions-row .dislike-button:hover {
+    .music-cards-grid .card-ai-actions-row .dislike-button:hover,
+    .music-cards-grid .card-ai-actions-row .follow-artist-bell:hover {
         color: #c8eafd;                    /* 6.41:1, same worst case */
     }
 

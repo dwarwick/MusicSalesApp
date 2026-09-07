@@ -50,6 +50,8 @@ public class AdminSettingsModel : BlazorBase
     // on when it is not - or invite an admin to "turn off" something already off.
     protected bool _directToStorageUploadEnabled;
     protected bool _originalDirectToStorageUploadEnabled;
+    protected bool _pushNotificationsEnabled;
+    protected bool _originalPushNotificationsEnabled;
     protected string _appVersion = string.Empty;
     protected string _originalAppVersion = string.Empty;
 
@@ -116,6 +118,7 @@ public class AdminSettingsModel : BlazorBase
                                    || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB
                                    || _reducedStreamQualifyingEnabled != _originalReducedStreamQualifyingEnabled
                                    || _directToStorageUploadEnabled != _originalDirectToStorageUploadEnabled
+                                   || _pushNotificationsEnabled != _originalPushNotificationsEnabled
                                    || _lyricsConfidenceThresholdPercent != _originalLyricsConfidenceThresholdPercent
                                    || _lyricsCompletionEmailsEnabled != _originalLyricsCompletionEmailsEnabled
                                    || _appVersion != _originalAppVersion;
@@ -198,6 +201,9 @@ public class AdminSettingsModel : BlazorBase
 
         _directToStorageUploadEnabled = await AppSettingsService.IsDirectToStorageUploadEnabledAsync();
         _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;
+
+        _pushNotificationsEnabled = await AppSettingsService.IsPushNotificationsEnabledAsync();
+        _originalPushNotificationsEnabled = _pushNotificationsEnabled;
 
         _lyricsConfidenceThresholdPercent =
             (decimal)(await AppSettingsService.GetLyricsConfidenceThresholdAsync()) * 100m;
@@ -690,6 +696,7 @@ public class AdminSettingsModel : BlazorBase
         _maxImageUploadSizeMB = _originalMaxImageUploadSizeMB;
         _reducedStreamQualifyingEnabled = _originalReducedStreamQualifyingEnabled;
         _directToStorageUploadEnabled = _originalDirectToStorageUploadEnabled;
+        _pushNotificationsEnabled = _originalPushNotificationsEnabled;
         _lyricsConfidenceThresholdPercent = _originalLyricsConfidenceThresholdPercent;
         _lyricsCompletionEmailsEnabled = _originalLyricsCompletionEmailsEnabled;
         _appVersion = _originalAppVersion;
@@ -784,6 +791,15 @@ public class AdminSettingsModel : BlazorBase
             // Written only on a change, and logged loudly either way. This one is a rollout switch
             // rather than a tuning value: knowing when it was flipped is what makes a later "uploads
             // started failing at some point yesterday" answerable.
+            if (_pushNotificationsEnabled != _originalPushNotificationsEnabled)
+            {
+                await AppSettingsService.SetPushNotificationsEnabledAsync(_pushNotificationsEnabled);
+
+                Logger.LogWarning(
+                    "Push notifications switched {State} by an admin.",
+                    _pushNotificationsEnabled ? "ON" : "OFF");
+            }
+
             if (_directToStorageUploadEnabled != _originalDirectToStorageUploadEnabled)
             {
                 await AppSettingsService.SetDirectToStorageUploadEnabledAsync(_directToStorageUploadEnabled);
@@ -849,6 +865,7 @@ public class AdminSettingsModel : BlazorBase
             _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
             _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
             _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;
+            _originalPushNotificationsEnabled = _pushNotificationsEnabled;
             _originalAppVersion = _appVersion;
             _successMessage = $"Settings saved successfully. Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}, Max audio upload size: {_maxAudioUploadSizeMB} MB, Max image upload size: {_maxImageUploadSizeMB} MB, Browser-direct uploads: {(_directToStorageUploadEnabled ? "on" : "off")}";
 

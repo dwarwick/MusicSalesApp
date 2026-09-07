@@ -1,4 +1,4 @@
-﻿# Claude Instructions
+# Claude Instructions
 
 ## Working Branches
 
@@ -163,6 +163,7 @@ cache key at once and silently re-download every user's offline library.
 - **Playlists**: `Playlist` (`IsSystemGenerated` flags the auto "Liked Songs" playlist), `UserPlaylist` (references `SongMetadataId` directly), `RecommendedPlaylist`.
 - **Billing**: `Subscription` — multi-provider via `BillingSource` (PayPal / GooglePlay / Apple), each with its own ID fields (`PayPalSubscriptionId`, `GooglePlayPurchaseToken`, `AppStoreTransactionId`, etc.), plus trial fields and store-reported price fields (`StoreFormattedPrice`/`StorePriceCurrencyCode`).
 - **Payouts**: `StreamPayout` (per-creator stream-royalty batches), `Tip` (listener→creator, 7-day hold before payout, fraud-limited via `BlockedTipAttempt`, `ChargebackLog`).
+- **Following**: `ArtistFollower` (listener -> `CreatorPersona`, soft-deleted on unfollow), `ArtistFollowerMessage` (the artist's thank-you), `ArtistReleaseNotification`, `PushDeviceToken`. See "Artist follow" below.
 - **Admin/ops**: `AppSettings` (single-row config, e.g. active PayPal plan selection), `AdminMessage`/`AdminMessageRecipient`, `MediaIntegrityAuditRun`/`Item`/`Notification` (background blob/DB integrity audits).
 
 **Important — subscription-only model (no more purchases):** `CartItem` and `OwnedSong` tables, and `SongMetadata.AlbumPrice`/`SongPrice` columns, were **dropped** by migration `Migrations/20260108000000_RemoveCartAndOwnedSongsTables.cs`. There is no more permanent per-song/album ownership — access is gated entirely on active subscription status. `Controllers/CartController.cs` is an intentional dead shim now: every mutating endpoint returns 400 with "Individual song purchases have been removed." **Do not extend it.** A later migration (`20260713020755_RemoveSubscriptionPriceSetting`) also removed the admin-configurable global subscription price setting — the store (PayPal plan price, or the Google Play/Apple StoreKit-reported price) is now the source of truth for what's charged/shown, not an app-level setting.
@@ -188,6 +189,8 @@ Controllers under `Controllers/` gated by `[RequireMobileApiKey]` (header `X-Api
   `ApplicationUser.AppleRefreshToken` exists solely so `AccountDeletionService` can revoke the user's Apple grant on deletion, which Apple requires. It is obtained by exchanging the sheet's authorization code — immediately, because that code is single-use and expires in five minutes, which is why a new user's token is parked in `MobilePendingExternalRegistrationTokenPayload.ExternalRefreshToken` until there is a row to attach it to. All of this is inert until `Authentication:Apple:TeamId`/`KeyId`/`PrivateKey*` are set (a **Sign in with Apple** key, a different key from the App Store Connect one beside it in `App_Data/Secrets`); sign-in works without them, only revocation is skipped.
 - `MobilePlaylistController` (`api/mobile/playlists`) — home playlists, custom playlist CRUD, subscription-gated song access.
 - `MobileAdminMessageController`, `MobileContactController`, `MobileSettingsController`, `MobileTipController` — supporting mobile features.
+- `MobilePushController` (`api/mobile/push`) — device-token registration for push notifications. Idempotent by design: the client re-registers on every launch and auth change, because a token can rotate at any time.
+- `MobileFollowController` (`api/mobile/follows`) — the artist follow feature's client surface. Built ahead of the MAUI client, which does not consume it yet. `PUT api/mobile/follows/{personaId}` is idempotent for the same reason `like-state` is, and answers **400 for every domain refusal** — see "Artist follow" below.
 - `GooglePlaySubscriptionController` (`api/subscription/google-play`) + `GooglePlayWebhookController` — Google Play purchase verification + real-time developer notifications.
 - `AppleAppStoreSubscriptionController` + `AppleAppStoreNotificationsController` (`api/subscription/app-store`) — StoreKit transaction verification + App Store Server Notifications v2.
 - `SubscriptionController` (`api/subscription`) — shared web+mobile subscription status/management.
@@ -210,6 +213,333 @@ loosening either.
   - That exception maps to **400, not 404 and never a 500** — deliberately, on all three routes. The MAUI client reads a 404 on `like-state` as "this server predates the endpoint" and falls back to the toggles; it retries any 5xx forever, and its flush stops at the first failure, so a permanent error dressed as a transient one strands every intent queued behind it. 400 is in the client's drop set.
 
 **Known wart**: route naming is inconsistent (`api/mobile/...` vs `api/mobile-auth` vs `api/mobile-settings`) with no versioning scheme anywhere.
+
+## Artist follow & listener engagement
+
+Listeners follow artists; StreamTunes tells followers about new releases; an artist may send each
+follower one short thank-you. Phase 1 (schema, services, API, web UI) is done. The MAUI client is
+phase 2 and consumes nothing yet.
+
+**The follow target is `CreatorPersona`, not `Creator` and not a name.** It is the only stable
+artist identity the app has — `SongMetadata.GetEffectiveArtistName()` falls back through free text
+to a creator display name, and `/artist/{ArtistName}` is keyed on the *string*.
+`SongMetadata.PersonaId` is nullable, so **a song whose artist is only free text gets no Follow
+button at all**, on any surface. That is correct rather than a gap, but it means coverage tracks how
+many songs have personas attached.
+
+### The privacy rule runs in both directions
+
+A creator sees `Listener #4817` and nothing else. A listener sees the persona name and nothing about
+the account behind it. Both halves are structural rather than remembered:
+
+- `ArtistFollowerSummaryDto` (creator-facing) has **no field able to hold** an email, username or
+  listener id, and `ArtistFollowerDirectoryService` projects field-by-field so `ListenerUserId` is
+  never selected. A query that tried to leak one would not compile.
+- `ArtistMessageDto` (listener-facing) has nowhere to put `ArtistFollowerMessage.SenderUserId`,
+  which is stored for audit and moderation only.
+
+> **`AnonymousListenerNumber` is random within the persona, never derived from the user id.** A
+> keyed hash would give the same stability while remaining a function of the identity it hides —
+> one leaked key and every pseudonym resolves at once, and any two creators can tell they share a
+> follower. A *sequential* number would additionally leak follow order, which sits next to a
+> visible "Following Since" column. It is assigned once and stored, so it survives an
+> unfollow/re-follow cycle: that is the whole point of unfollow being a **soft delete**.
+
+### Consent: letting a fellow artist see who you are
+
+A listener who is *also* a creator can choose to be named to the artists they follow, so those
+artists can follow back. It is off by default and lives on `Creator.RevealPersonaToFollowedArtists`,
+set from Creator Settings.
+
+The mechanics are three pieces, and the shape of each is load-bearing:
+
+- **`ArtistFollower.FollowAsPersonaId`** records which persona they chose to appear as. A creator
+  with several personas gets a "Follow as" dialog; one with a single persona is not asked; one who
+  has not consented never sees the dialog and follows anonymously.
+- **Resolution happens at display time**, in two correlated subqueries inside
+  `ArtistFollowerDirectoryService`, gated on the persona still matching, being enabled, its creator
+  being active, unsuspended, and *still consenting*. Nothing is denormalised onto the follower row.
+  That is what makes withdrawal immediate and retroactive: untick the box and every artist they ever
+  followed goes back to seeing a pseudonym, including on follows made while consent was given.
+- **Withdrawing rotates the pseudonyms.** `CreatorService.RotateAnonymousNumbersAsync` reassigns
+  every `AnonymousListenerNumber` belonging to that user. Without it the artist has already seen that
+  `Listener #4817` is a particular persona, and the number staying put after withdrawal keeps the
+  association alive in their own notes. `StopBeingCreatorAsync` clears consent for the same reason,
+  so an ex-creator reverts to a pseudonym everywhere.
+
+> `ResolveFollowerArtistName` deliberately stops short of the last step of
+> `SongMetadata.GetEffectiveArtistName()`. That fallback chain ends at a creator display name
+> derived from the account, which is exactly the identity this feature exists to withhold. A name is
+> shown only when a persona resolves.
+
+`FollowAsPersonaId` is **deliberately not a foreign key**. `ArtistFollower` already cascades from
+`CreatorPersona` through `CreatorPersonaId`, and a second relationship to the same table is a second
+cascade path, which SQL Server refuses.
+
+**Following yourself is refused** — `ArtistFollowOutcome.CannotFollowSelf`, and `FollowArtistButton`
+renders nothing on your own songs. The button was reachable there because a creator browsing the
+library sees their own catalogue like anyone else.
+
+> **The mobile API is half-wired for this.** `PUT api/mobile/follows/{personaId}` accepts
+> `followAsPersonaId`, but nothing exposes `GetFollowAsOptionsAsync`, so a client has no way to ask
+> what the choices are. Adding that endpoint is a prerequisite for the picker on mobile; a client
+> that sends nothing follows anonymously, which fails in the safe direction.
+
+### Notifications: in-app, email and push
+
+Three channels. In-app is the row itself — an `ArtistReleaseNotification` or
+`ArtistFollowerMessage` — and has no on/off switch, because the per-artist mute on
+`ArtistFollower` already silences it and a switch that suppressed the row would let a listener mute
+an artist so thoroughly they could never discover they had. Email and push each have two
+account-level flags on `ApplicationUser`, per notification kind, **all four defaulting off**, the
+same posture as `ReceiveNewSongEmails` beside them.
+
+> They shipped defaulting *on*, and `DefaultFollowNotificationsOff` reversed it. Following an artist
+> is consent to the in-app record — which is the row itself, and has no switch — not consent to be
+> mailed or to have a phone buzz. Those are separate asks and now have to be made separately.
+
+Two things about that migration are worth knowing before writing another like it:
+
+> **EF only scaffolded the two seeded users.** The column defaults were set by hand in
+> `AddArtistFollowFeature`/`AddPushNotifications` rather than through the model, so the model diff
+> cannot see them and generates nothing for them. The eight `AlterColumn<bool>` calls are hand-added,
+> both directions.
+
+> It also `UPDATE`s the rows that already exist, which is only safe because these columns arrived on
+> the same unshipped branch — no listener had expressed a preference for it to overwrite. **Had the
+> feature shipped, only the default should change**, because clearing the rows would silently
+> unsubscribe people who had asked to be notified.
+
+None of the four is declared `HasDefaultValue` in the model, and that stays true now the default is
+off. EF's sentinel for a `bool` is `false`, so a model-level default of `true` makes EF skip writing
+an explicit `false` — a listener unchecking the box would silently keep receiving. If one of these is
+ever defaulted on again, set the column default in a migration, not in the model.
+
+**Push is Firebase Cloud Messaging for BOTH platforms.** The server never talks to APNs; FCM
+relays to it, and the APNs auth key is uploaded to the Firebase console rather than living on this
+server. There is therefore no Apple section in config and no sandbox/production switch.
+
+That last part is the reason for the choice. **FCM records the APNs environment against each token
+at registration**, so a development-signed build and a TestFlight build can both be delivered to
+without the server knowing which is which. Talking to APNs directly means owning that distinction
+forever, and getting it wrong produces an unhelpful `BadDeviceToken` in both directions.
+
+The cost is the Firebase SDK in the iOS app head, which carries documented App Store launch-crash
+workarounds (`MtouchRegistrar=static`, LLVM AOT). Run `test_device.sh` before submitting.
+
+**Test and Production are SEPARATE Firebase projects**, so a test broadcast can never reach a
+production device. Each environment names its own service-account file
+(`firebase-service-account.test.json` / `.production.json`), and the app selects
+`google-services.{Test,Production}.json` by the `FirebaseEnvironment` MSBuild property.
+
+**Everything is inert without credentials**, the same posture Apple revocation takes: the site
+starts, the feature runs, push is skipped. What it must *not* do is consume the notification —
+`DispatchPendingAsync` treats "unconfigured" as a transport failure, so configuring credentials
+later delivers the backlog rather than silently having dropped it.
+
+#### The admin kill switch
+
+`AppSettingsService.PushNotificationsEnabledKey` ("Phone Notifications" on `/admin/settings`) is
+**off by default**, and an absent *or unparseable* row reads as off. It gates two things at once:
+
+- `ArtistPushDispatchService.DispatchPendingAsync` returns 0 before it looks at anything else;
+- the two phone checkboxes **and their hint label** disappear from `/manage-account`.
+
+The label goes with the checkboxes deliberately. "Phone notifications need the StreamTunes app"
+sitting above nothing at all reads worse than either state on its own.
+
+It exists because the apps carrying the registration code are not in the stores yet, so nothing can
+arrive on a phone regardless — and a preference that quietly does nothing is worse than no
+preference. Two rules follow:
+
+> **Off leaves every row unstamped**, exactly like an unconfigured transport. Turning push on later
+> delivers what is still pending rather than having silently consumed it while the flag was off.
+
+> **Device registration keeps working while it is off.** That is not an oversight — registering is
+> how you prove the round trip before switching delivery on.
+
+Tests that expect a delivery therefore have to say so twice: the flag on *and* the listener opted
+in. Both used to be inherited from defaults and are now stated explicitly, via
+`ArtistFollowTestHarness.OptListenerIntoEmailsAsync` and the equivalent inside
+`ArtistPushDispatchServiceTests`.
+
+#### The three delivery outcomes are the whole design
+
+`PushDeliveryOutcome` separates them because the caller has to act differently per device:
+
+| Outcome | Row is | Token is |
+|---|---|---|
+| `Delivered` | settled | kept |
+| `TokenRejected` — unregistered, bad token | settled | **retired** |
+| `PermanentFailure` — bad payload, unexpected 4xx | settled | kept |
+| `TransportFailure` — offline, 5xx, throttled, no credentials | **left pending** | kept |
+
+Two failures follow from collapsing any of these. Treating a transport failure as settled drops
+notifications whenever Firebase has a bad minute. Treating a rejected token as retryable means the
+dispatcher spends every run failing against phones that were uninstalled months ago.
+
+Classification is not by status code alone. An FCM `400` can be a dead token *or* our own malformed
+payload, and only the `errorCode` in the body separates them — treating every 400 as a dead token
+would unregister every device the first time a payload bug shipped. On APNs, `ExpiredProviderToken`
+looks like an auth failure but is ours to fix by re-minting, so it stays retryable.
+
+#### Device tokens
+
+`PushDeviceToken` is a **(device, user) pairing, not a device**. `Token` is uniquely indexed, so
+registering an existing token REASSIGNS it rather than adding a row — phones get handed on and
+accounts get signed out of, and a token left attached to the previous account is the one failure
+mode of this feature that is a privacy breach rather than an inconvenience.
+
+The client re-registers on every launch and auth change, because a token can rotate at any moment
+and re-registering is the only way to notice. `DeviceId` — a random per-install value, never a
+hardware identifier — lets a rotated token replace its predecessor instead of leaving a dead row.
+
+#### The job
+
+`dispatch-artist-push-notifications`, every 5 minutes, covering both tables in one pass. More often
+than either email job because push has no spam-filter spacing to observe; it carries
+`[DisableConcurrentExecution]` + `[AutomaticRetry(0)]` on the interface like the rest.
+
+`AddPushNotifications` **settles every pre-existing notification row** in its backfill. Without it,
+everything created between the follow feature shipping and push shipping becomes eligible the moment
+the first device registers — so a listener installing the update gets a burst of alerts about
+releases they already know about, some weeks old.
+
+#### What has to be done in the consoles
+
+Nothing here can be configured from the repo. Push stays inert until:
+
+| Where | What |
+|---|---|
+| Firebase Console | A project; add the Android app with package `net.streamtunes.musicsalesapp.maui`; download `google-services.json` into `Platforms/Android/` in the MAUI repo |
+| Google Cloud | A service account with the Firebase Messaging role; its JSON key on the server |
+| Apple Developer | Enable Push Notifications on the App ID, **regenerate the provisioning profile**, create an APNs Auth Key (.p8), and **upload that key to the Firebase console** under Cloud Messaging with its Key ID and Team ID |
+| Server config | `Push:Firebase:ProjectId` and `Push:Firebase:ServiceAccountKeyPath` (or `...KeyJson`), per environment. No Apple section - the APNs key lives in Firebase, not here. |
+
+`aps-environment` governs how the DEVICE registers, and FCM cannot paper over it - but the MAUI repo
+now supplies it as a per-configuration `CustomEntitlements` item rather than a literal in
+`Entitlements.plist`, so Release (TestFlight *and* App Store) gets `production` automatically. What
+FCM removes is the server-side half: there is no APNs host to pick and no sandbox flag to get wrong.
+
+The APNs Auth Key is a **third** Apple .p8, separate from the Sign in with Apple and App Store
+Connect keys in `App_Data/Secrets` - but it is uploaded to Firebase rather than deployed here.
+
+### `SongMetadata.FirstPublishedAtUtc` is what makes the release rules fall out
+
+Stamped **once**, by the hourly job, and never re-stamped. Every "do not notify" case in the spec —
+a draft, a song still processing, a metadata edit, a replaced cover, a song pulled and restored —
+is then automatic rather than a rule per case. Two consequences:
+
+- A follower is notified only when `FollowedDateUtc <= FirstPublishedAtUtc`, so nobody is greeted
+  with a backlog. It is also why deploying this onto the live catalogue is silent: the migration
+  backfills the column from `CreatedAt`, so every existing song is already published in the past.
+  **Without that backfill the first job run would have stamped the entire back catalogue as
+  released today.**
+- A song uploaded while its persona is disabled **is still stamped**. Not stamping it would leave it
+  eligible forever, so re-enabling a persona months later would notify everyone about a back
+  catalogue all at once.
+
+### Three Hangfire jobs, split by cost
+
+| Job | Cron | Why |
+|---|---|---|
+| `create-artist-release-notifications` | hourly :40 | Pure DB work, so the in-app notification lands the same day |
+| `send-artist-release-notification-emails` | daily 04:30 | Sleeps 5s per email to stay out of spam filters |
+| `send-artist-message-emails` | every 15 min | A thank-you arriving next morning reads as broken |
+| `dispatch-artist-push-notifications` | every 5 min | Both tables in one pass; push has no spacing to observe |
+
+All three carry `[DisableConcurrentExecution]` **and** `[AutomaticRetry(Attempts = 0)]`, on the
+**interface** — Hangfire resolves filters from `Job.Method`, and the same attribute on the
+implementation is silently ignored. The pair is mandatory: the lock throws on timeout rather than
+swallowing it, so without a retry policy one harmless overlap becomes ten retries.
+
+Both email jobs stamp `EmailSentDateUtc` even when they deliberately skip a row (opted out,
+unconfirmed, suspended, muted, or the song was withdrawn). Otherwise the job reconsiders the same
+dead rows forever. The in-app copy is unaffected — it is the row.
+
+### Anti-spam and abuse
+
+One thank-you per follower **ever**, enforced by a filtered unique index
+(`WHERE MessageKind = 'ThankYou'`), not by the service check that merely gives a cleaner answer
+first. Plus 100 per persona per rolling 24 hours. There is no "message all followers" action and no
+route that could become one — release notifications are generated by the platform, so a creator's
+only lever is publishing music.
+
+`ArtistMessageContentPolicy` (in `Common`, so the mobile client inherits it) guards the one place a
+creator can type text a listener will read. It strips zero-width characters *first* — that is the
+standard evasion — then rejects emails, spelled-out addresses, links, phone-shaped digit runs,
+`@handles`, platform names and "email me"-style solicitations. **Enforced server-side in the
+service**, so no client can bypass it. Its domain pattern requires a tight dot on purpose: allowing
+`word . tld` turns "Thanks. me too" into a rejected link, because `me` is a real TLD.
+
+Listeners can mute per artist, block (which also unfollows, and survives a re-follow attempt), hide
+and report. Reports land at `/admin/artist-messages`, the first moderation queue this app has for
+creator-authored free text.
+
+> **Blocking sets `IsActive = false`, so `GetFollowedArtistsAsync` must include blocked rows
+> explicitly** (`IsActive || IsBlockedByListener`). That list is the only place on the web a block
+> can be undone, so an `IsActive`-only filter drops the row, takes the Unblock button with it and
+> strands the block permanently — which is exactly how it shipped once. Every service test passed:
+> none of them asserted the row stayed *listed*.
+> `GetFollowedArtists_KeepsABlockedArtistSoTheBlockCanBeUndone` and its unfollow counterpart pin
+> both halves now.
+
+**Blocking is one-directional, and the UI does not claim otherwise.** It governs what reaches the
+listener — messages, release notifications, follower-list membership. It does *not* stop the creator
+following that listener's own persona back, and it does not touch the catalogue: a blocked artist's
+music still plays, likes and adds to playlists. If reciprocal blocking is ever wanted it is a new
+guard in `SetFollowStateAsync`, not a change to this one.
+
+`FollowedArtistsSection` carries a plain-English `<details>` explainer, because three of blocking's
+consequences cannot be guessed from the word: it also unfollows, the artist is never told, and the
+music is deliberately left alone. A blocked row hides Unfollow — blocking already unfollowed, so the
+button would answer "you are not following this artist" to someone looking straight at the row.
+
+### Version 1 is deliberately one-way
+
+A listener **cannot reply**. `ArtistFollowerMessage.MessageKind` exists so that adding replies later
+is a new value rather than a dropped constraint, and `ArtistMessageKinds` already names them — but
+nothing sends one, and `ArtistMessagesSection` renders no reply control. A two-way channel needs its
+own moderation and abuse handling on both ends, which is a larger feature than acknowledging support.
+
+### Where the pieces are
+
+| Piece | Path |
+|---|---|
+| Entities | `Models/ArtistFollower.cs`, `ArtistFollowerMessage.cs`, `ArtistReleaseNotification.cs`, `ArtistFollowDtos.cs` |
+| Services | `Services/ArtistFollow*.cs`, `ArtistReleaseNotificationService.cs`, `ArtistMessageModerationService.cs`, `ArtistNotificationPreferenceService.cs` |
+| Shared filters | `Services/ArtistFollowQueryExtensions.cs` — `WherePubliclyActive` is the single definition of "this artist may reach listeners", used by follow, messaging and the release job alike, so a suspended creator goes silent everywhere at once |
+| Web | `Components/Shared/FollowArtistButton.razor`, `FollowedArtistsSection.razor`, `ArtistMessagesSection.razor`, `Components/Pages/Creator/CreatorFollowers.razor`, `Components/Pages/Admin/AdminArtistMessages.razor` |
+| Validator | `MusicSalesApp.Common/Helpers/ArtistMessageContentPolicy.cs` |
+
+`FollowArtistButton.KnownIsFollowing` mirrors `LikeDislikeButtons.KnownHasStreamed` and exists for
+the same reason: the music library renders one per card, and self-resolving instances would mean one
+database round trip per card on every load. `MusicLibrary` resolves the whole set in a single
+`GetFollowedPersonaIdsAsync` call.
+
+**Cross-card agreement is a parent callback, not SignalR.** One artist can own many cards on screen,
+so following from one has to move all of them. `OnFollowStateChanged` updates the parent's
+`_followedPersonaIds`, and returning from an `EventCallback` re-renders the parent on its own — every
+button reads `KnownIsFollowing` again and agrees. Likes never needed this because a like is
+per-*song*, i.e. one card. SignalR would be the wrong tool twice over: this is one circuit's own
+state, and `LikeCountHub` broadcasts public counts, never a viewer's own follow state.
+
+> **The bell has no CSS of its own.** `.follow-artist-bell` is added to *every* existing
+> `.like-button` selector group across `app.css`, `light.css`, `dark.css`, `sm_app.css` and
+> `xs_app.css` (with `.active` becoming `.is-following`). Bespoke rules were tried first and produced
+> a visible square, because `.card-ai-actions-row` overrides in those sheets applied to the
+> like buttons and not to the newcomer. `FollowBellCssTests` reads the stylesheets as text and fails
+> if a group is missed.
+
+`FollowArtistButton` renders its two `SfDialog`s only once `_dialogsRequested` is set. The library
+puts one button on every card, and a dialog pair per card is hundreds of hidden component trees for
+an interaction almost nobody performs on that page.
+
+There is deliberately **no** `DeactivateFollowsForPersona`/`ForCreator` service method. A persona
+being *deleted* already takes its follows with it by cascade, and a persona being *disabled* (or its
+creator suspended) is handled by `WherePubliclyActive` without touching a row. Such a method would
+have no correct caller and one tempting incorrect one — disabling is reversible, so tearing down the
+follower base on a disable would destroy something re-enabling cannot restore.
 
 ## Environment configuration
 
@@ -277,6 +607,8 @@ Two consequences worth knowing before writing one:
 | `MusicSalesApp/Controllers/MobileAuthController.cs`, `MobilePlaylistController.cs` | Best reference examples for the mobile API pattern (API key + JWT + DTOs + subscription gating). |
 | `MusicSalesApp/Controllers/StreamController.cs`, `Services/HlsManifestBuilder.cs`, `Services/HlsContentKeyProtector.cs` | The whole audio security boundary. The manifest is generated per listener and the key is gated by a ~60-second token; everything else about encrypted delivery follows from these three. |
 | `MusicSalesApp/Controllers/CartController.cs` | Intentionally dead shim — read before touching, don't extend. |
+| `MusicSalesApp/Services/ArtistFollowQueryExtensions.cs` | The single definition of "this artist may reach listeners". Follow, messaging and the release job all filter through it, which is what makes a suspended creator go silent everywhere at once. |
+| `MusicSalesApp.Common/Helpers/ArtistMessageContentPolicy.cs` | The only guard on creator-authored text a listener will read. Server-side enforced; read § "Artist follow" before loosening a pattern. |
 | `MusicSalesApp.Functions/CLAUDE.md` | **Read first for anything audio-processing.** End-to-end upload flow across the three processes, the throw-vs-report invariant, progress monotonicity, and the traps (read-only package mount, `batchSize: 1`, 10-min ceiling). |
 | `MusicSalesApp.Functions/README.md` | The operational half: settings, provisioning, deploying, running locally, tearing an environment down. |
 | `MusicSalesApp.Common/Contracts/AudioProcessingProgressCalculator.cs` | The single definition of the upload progress bar's bands, shared by the upload page, the Function and the API. |

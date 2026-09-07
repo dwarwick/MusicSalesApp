@@ -146,6 +146,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private HashSet<int> _streamedSongIds = new();
 
+    // Resolved once per load, for the same reason _streamedSongIds is: the library renders
+    // hundreds of cards, and a self-resolving Follow button on each would be one query per card.
+    private HashSet<int> _followedPersonaIds = new();
+
     private Dictionary<int, int?> _creatorUserIdMap = new Dictionary<int, int?>();
     private Dictionary<string, int?> _creatorIdMap = new Dictionary<string, int?>();
     protected TipDialogModel _tipDialog;
@@ -177,6 +181,17 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         /// Null if no persona or no persona image.
         /// </summary>
         public string PersonaImageUrl { get; set; }
+
+        /// <summary>
+        /// The persona behind <see cref="DisplayName"/>, or null when the name came from free
+        /// text or a creator display name rather than a persona.
+        /// </summary>
+        /// <remarks>
+        /// Null is the normal case for plenty of songs, and it is what decides whether a card gets
+        /// a Follow button at all - following is artist-level, and without a persona there is no
+        /// artist entity to follow.
+        /// </remarks>
+        public int? PersonaId { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -666,6 +681,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             return new ArtistDisplayInfo
             {
                 DisplayName = songMeta.Persona.Name,
+                PersonaId = songMeta.PersonaId,
                 LinkUrl = $"/artist/{Uri.EscapeDataString(songMeta.Persona.Name)}",
                 PersonaImageUrl = string.IsNullOrEmpty(songMeta.Persona.ImageBlobPath)
                     ? null
@@ -718,6 +734,72 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected ArtistDisplayInfo GetArtistInfo(string fileName)
     {
         return _artistInfoMap.TryGetValue(fileName, out var info) ? info : new ArtistDisplayInfo();
+    }
+
+    /// <summary>
+    /// Whether this visitor already follows the given persona, from the set resolved in bulk at
+    /// load. Null when there is no persona, which is what keeps the card's Follow button off.
+    /// </summary>
+    /// <summary>
+    /// Whether this song is the signed-in user's own, so the Follow bell can be left off it.
+    /// </summary>
+    /// <remarks>
+    /// Reuses the creator-user-id map the stream guard already builds, rather than asking again.
+    /// Anonymous visitors own nothing, so this is false for them and the bell shows as normal.
+    /// </remarks>
+    protected bool IsOwnSong(string fileName)
+    {
+        if (_currentUserId is not int userId)
+        {
+            return false;
+        }
+
+        var songMetadataId = GetSongMetadataId(fileName);
+
+        return songMetadataId > 0
+               && _creatorUserIdMap.TryGetValue(songMetadataId, out var creatorUserId)
+               && creatorUserId == userId;
+    }
+
+    protected bool? IsFollowingArtist(int? personaId) =>
+        personaId.HasValue ? _followedPersonaIds.Contains(personaId.Value) : null;
+
+    /// <summary>
+    /// One card changed its follow state, so bring every other card by the same artist with it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Following is artist-level while a card is song-level, so a library page routinely shows a
+    /// dozen buttons for one artist. Without this they disagree until the page is reloaded - the
+    /// clicked card says Following and the rest still say Follow.
+    /// </para>
+    /// <para>
+    /// Deliberately local, and deliberately not SignalR. Every card that needs to know is in this
+    /// circuit, so a broadcast would be a round trip to learn something the page already knows -
+    /// and follow state is per-user, where a like COUNT is public. LikeDislikeButtons draws the
+    /// same line: LikeCountHub carries counts, and _userLikeStatus never leaves the circuit.
+    /// </para>
+    /// <para>
+    /// Updating the shared set is the whole mechanism. Each button reads KnownIsFollowing on every
+    /// render, so re-rendering the parent - which returning from an EventCallback does on its own -
+    /// is what makes the others agree.
+    /// </para>
+    /// </remarks>
+    protected void OnArtistFollowStateChanged(int? personaId, bool isFollowing)
+    {
+        if (personaId is not int id)
+        {
+            return;
+        }
+
+        if (isFollowing)
+        {
+            _followedPersonaIds.Add(id);
+        }
+        else
+        {
+            _followedPersonaIds.Remove(id);
+        }
     }
 
     /// <summary>
@@ -1092,6 +1174,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _streamedSongIds = await StreamCountService.GetUserStreamedSongIdsAsync(
                 _currentUserId.Value, _songMetadataIds.Values);
+
+            var personaIds = _artistInfoMap.Values
+                .Where(info => info.PersonaId.HasValue)
+                .Select(info => info.PersonaId!.Value)
+                .Distinct()
+                .ToList();
+
+            if (personaIds.Count > 0)
+            {
+                _followedPersonaIds = (await ArtistFollowService.GetFollowedPersonaIdsAsync(
+                    personaIds, _currentUserId.Value)).ToHashSet();
+            }
         }
         catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
         {

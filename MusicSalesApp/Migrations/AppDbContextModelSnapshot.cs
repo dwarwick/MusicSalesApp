@@ -440,6 +440,9 @@ namespace MusicSalesApp.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
 
+                    b.Property<int>("ArtistPushFrequency")
+                        .HasColumnType("int");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
@@ -484,6 +487,18 @@ namespace MusicSalesApp.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("PhoneNumberConfirmed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ReceiveArtistMessageEmails")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ReceiveArtistMessagePush")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ReceiveArtistReleaseEmails")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ReceiveArtistReleasePush")
                         .HasColumnType("bit");
 
                     b.Property<bool>("ReceiveNewSongEmails")
@@ -533,6 +548,7 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 1,
                             AccessFailedCount = 0,
+                            ArtistPushFrequency = 0,
                             ConcurrencyStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a",
                             Email = "admin@app.com",
                             EmailConfirmed = true,
@@ -544,6 +560,10 @@ namespace MusicSalesApp.Migrations
                             NormalizedUserName = "ADMIN@APP.COM",
                             PasswordHash = "AQAAAAIAAYagAAAAEIJK1BY5bzMovp+I46WIyfIQZfjRi3dpeb5PN5FeKO9NskZ9RDffZtfBMzhiR/uWsw==",
                             PhoneNumberConfirmed = false,
+                            ReceiveArtistMessageEmails = false,
+                            ReceiveArtistMessagePush = false,
+                            ReceiveArtistReleaseEmails = false,
+                            ReceiveArtistReleasePush = false,
                             ReceiveNewSongEmails = false,
                             SecurityStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f",
                             Theme = "Light",
@@ -554,6 +574,7 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 2,
                             AccessFailedCount = 0,
+                            ArtistPushFrequency = 0,
                             ConcurrencyStamp = "e5f6a7b8-c9d0-8e9f-2a3b-4c5d6e7f8a9b",
                             Email = "user@app.com",
                             EmailConfirmed = true,
@@ -565,12 +586,199 @@ namespace MusicSalesApp.Migrations
                             NormalizedUserName = "USER@APP.COM",
                             PasswordHash = "AQAAAAIAAYagAAAAELfX5sMWJgJQ48czQFh5cJAw8+ZZxj6EMiY1gN/ib1tlG8zPGBefyjVfv+0r/5ER/g==",
                             PhoneNumberConfirmed = false,
+                            ReceiveArtistMessageEmails = false,
+                            ReceiveArtistMessagePush = false,
+                            ReceiveArtistReleaseEmails = false,
+                            ReceiveArtistReleasePush = false,
                             ReceiveNewSongEmails = false,
                             SecurityStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a",
                             Theme = "Light",
                             TwoFactorEnabled = false,
                             UserName = "user@app.com"
                         });
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ArtistFollower", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AnonymousListenerNumber")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ArtistMessagesEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("BlockedDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatorPersonaId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("FollowAsPersonaId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("FollowedDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsBlockedByListener")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ListenerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ReleaseNotificationsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("SourceSongMetadataId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UnfollowedDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorPersonaId");
+
+                    b.HasIndex("ListenerUserId");
+
+                    b.HasIndex("SourceSongMetadataId");
+
+                    b.HasIndex("CreatorPersonaId", "AnonymousListenerNumber")
+                        .IsUnique();
+
+                    b.HasIndex("CreatorPersonaId", "ListenerUserId")
+                        .IsUnique();
+
+                    b.ToTable("ArtistFollowers");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ArtistFollowerMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ArtistFollowerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EmailSentDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsHiddenByListener")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsReported")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MessageKind")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("MessageText")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool?>("ModerationAccepted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModerationResolvedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PushSentDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReadDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RelatedSongMetadataId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReportReason")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("ReportedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("SenderUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArtistFollowerId")
+                        .IsUnique()
+                        .HasFilter("[MessageKind] = 'ThankYou'");
+
+                    b.HasIndex("EmailSentDateUtc");
+
+                    b.HasIndex("PushSentDateUtc");
+
+                    b.HasIndex("RelatedSongMetadataId");
+
+                    b.HasIndex("SenderUserId");
+
+                    b.HasIndex("IsReported", "ModerationResolvedAtUtc");
+
+                    b.ToTable("ArtistFollowerMessages");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ArtistReleaseNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatorPersonaId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("EmailSentDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ListenerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PushSentDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReadDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("SongMetadataId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorPersonaId");
+
+                    b.HasIndex("EmailSentDateUtc");
+
+                    b.HasIndex("PushSentDateUtc");
+
+                    b.HasIndex("ListenerUserId", "CreatedDateUtc");
+
+                    b.HasIndex("SongMetadataId", "ListenerUserId")
+                        .IsUnique();
+
+                    b.ToTable("ArtistReleaseNotifications");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.BlockedTipAttempt", b =>
@@ -818,6 +1026,9 @@ namespace MusicSalesApp.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("PrimaryEmailConfirmed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("RevealPersonaToFollowedArtists")
                         .HasColumnType("bit");
 
                     b.Property<decimal>("StreamPayRate")
@@ -1836,6 +2047,57 @@ namespace MusicSalesApp.Migrations
                     b.ToTable("Playlists");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.PushDeviceToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeactivatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("LastSeenAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "IsActive");
+
+                    b.ToTable("PushDeviceTokens");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.RecommendedPlaylist", b =>
                 {
                     b.Property<int>("Id")
@@ -2064,6 +2326,9 @@ namespace MusicSalesApp.Migrations
                     b.Property<string>("FileExtension")
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTime?>("FirstPublishedAtUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Genre")
                         .HasMaxLength(50)
@@ -3118,6 +3383,85 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("AdminMessage");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.ArtistFollower", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.CreatorPersona", "CreatorPersona")
+                        .WithMany()
+                        .HasForeignKey("CreatorPersonaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MusicSalesApp.Models.ApplicationUser", "ListenerUser")
+                        .WithMany()
+                        .HasForeignKey("ListenerUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("MusicSalesApp.Models.SongMetadata", "SourceSongMetadata")
+                        .WithMany()
+                        .HasForeignKey("SourceSongMetadataId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CreatorPersona");
+
+                    b.Navigation("ListenerUser");
+
+                    b.Navigation("SourceSongMetadata");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ArtistFollowerMessage", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.ArtistFollower", "ArtistFollower")
+                        .WithMany()
+                        .HasForeignKey("ArtistFollowerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MusicSalesApp.Models.SongMetadata", "RelatedSongMetadata")
+                        .WithMany()
+                        .HasForeignKey("RelatedSongMetadataId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("MusicSalesApp.Models.ApplicationUser", "SenderUser")
+                        .WithMany()
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("ArtistFollower");
+
+                    b.Navigation("RelatedSongMetadata");
+
+                    b.Navigation("SenderUser");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ArtistReleaseNotification", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.CreatorPersona", "CreatorPersona")
+                        .WithMany()
+                        .HasForeignKey("CreatorPersonaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MusicSalesApp.Models.ApplicationUser", "ListenerUser")
+                        .WithMany()
+                        .HasForeignKey("ListenerUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("MusicSalesApp.Models.SongMetadata", "SongMetadata")
+                        .WithMany()
+                        .HasForeignKey("SongMetadataId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("CreatorPersona");
+
+                    b.Navigation("ListenerUser");
+
+                    b.Navigation("SongMetadata");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.BlockedTipAttempt", b =>
                 {
                     b.HasOne("MusicSalesApp.Models.Creator", "Creator")
@@ -3279,6 +3623,17 @@ namespace MusicSalesApp.Migrations
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Playlist", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.PushDeviceToken", b =>
                 {
                     b.HasOne("MusicSalesApp.Models.ApplicationUser", "User")
                         .WithMany()
