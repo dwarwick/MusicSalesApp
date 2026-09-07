@@ -416,10 +416,10 @@ Nothing here can be configured from the repo. Push stays inert until:
 | Apple Developer | Enable Push Notifications on the App ID, **regenerate the provisioning profile**, create an APNs Auth Key (.p8), and **upload that key to the Firebase console** under Cloud Messaging with its Key ID and Team ID |
 | Server config | `Push:Firebase:ProjectId` and `Push:Firebase:ServiceAccountKeyPath` (or `...KeyJson`), per environment. No Apple section - the APNs key lives in Firebase, not here. |
 
-`aps-environment` in `Platforms/iOS/Entitlements.plist` still ships as `development` and still
-needs `production` for an App Store build - that entitlement governs how the DEVICE registers, and
-FCM cannot paper over it. What FCM does remove is the server-side half: there is no APNs host to
-pick and no sandbox flag to get wrong.
+`aps-environment` governs how the DEVICE registers, and FCM cannot paper over it - but the MAUI repo
+now supplies it as a per-configuration `CustomEntitlements` item rather than a literal in
+`Entitlements.plist`, so Release (TestFlight *and* App Store) gets `production` automatically. What
+FCM removes is the server-side half: there is no APNs host to pick and no sandbox flag to get wrong.
 
 The APNs Auth Key is a **third** Apple .p8, separate from the Sign in with Apple and App Store
 Connect keys in `App_Data/Secrets` - but it is uploaded to Firebase rather than deployed here.

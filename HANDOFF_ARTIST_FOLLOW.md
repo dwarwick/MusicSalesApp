@@ -86,7 +86,8 @@ Both were green at `dcf9b44` / `01a8248`.
 - Push dispatch to FCM, covering Android end to end.
 - Mobile API at `api/mobile/follows` — built, unconsumed.
 
-**MAUI:** push *registration* only (Android). No follow UI of any kind.
+**MAUI:** push *registration*, on Android **and iOS** — both deliver to a device. No follow UI of
+any kind.
 
 ---
 
@@ -162,7 +163,7 @@ it was offered and not yet decided.
 
 ## 4. Open work
 
-### 4.1 iOS push — four things missing
+### 4.1 iOS push — DONE (was: four things missing)
 
 The APNs half is complete: `AppDelegate` binds both selectors and hands the raw token to
 `ApplePushTokenBroker`, authorization and `RegisterForRemoteNotifications` are correct, and the
@@ -170,45 +171,37 @@ entitlement is in `Platforms/iOS/Entitlements.plist` wired via `CodesignEntitlem
 
 What is missing:
 
-1. **The Firebase iOS SDK is not referenced at all.** `Xamarin.Firebase.Messaging` sits inside the
-   `== 'android'` ItemGroup. This is the actual blocker: FCM on iOS is a *relay*, so the device
-   gets an APNs token — which it does — but Firebase must exchange that for an FCM registration
-   token, and the FCM token is what the server stores.
-2. **`ApplePushRegistrationService.IsSupported` is hard-coded `false`**, deliberately. Flipping it
-   today would register raw APNs tokens that FCM rejects on every send, which look exactly like
-   uninstalled devices from the dispatcher's side. Once the binding lands this becomes: set
-   `Messaging.SharedInstance.ApnsToken` from the AppDelegate callback, and return
-   `Messaging.SharedInstance.FcmToken` from `GetTokenAsync`.
-3. ~~The iOS plists do not exist.~~ **Done 2026-09-06** — both
-   `Platforms/iOS/GoogleService-Info.{Test,Production}.plist` are now in place. They are gitignored,
-   so they still have to be restored per machine (see §1). Nothing consumes them until item 1
-   lands.
-4. **Console configuration** — the App ID needs "Push Notifications" enabled and the provisioning
-   profile **regenerated afterwards**; the APNs auth key (Key ID `9RTLMRH4GX`, Team ID
-   `K7ZGP97YV6`) must be uploaded under Cloud Messaging in **both** Firebase projects. A missing
-   key fails silently, on iOS only.
+**Done — push has been received on an iOS device.** `AdamE.Firebase.iOS.CloudMessaging` 12.10.0
+supplies the native SDK, `IsSupported` is `true`, `Firebase.Core.App.Configure()` runs once behind a
+guard, the APNs token is handed to Firebase, and `GetTokenAsync` returns
+`Messaging.SharedInstance.FcmToken` — which is what this server stores. Both
+`GoogleService-Info.{Test,Production}.plist` are in place (gitignored; see §1).
 
-### 4.2 `aps-environment` is never rewritten — decision needed
+The console side is also done: "Push Notifications" on the App ID with the provisioning profile
+regenerated afterwards, and the APNs auth key (Key ID `9RTLMRH4GX`, Team ID `K7ZGP97YV6`) uploaded
+under Cloud Messaging in **both** Firebase projects. That last one fails silently and on iOS only,
+so it is worth re-checking if iOS delivery ever stops.
 
-`Platforms/iOS/Entitlements.plist` carries a comment saying the value "is rewritten per
-configuration rather than being switched by hand". **No such rewrite exists** — the csproj,
-targets and publish scripts were searched and nothing touches it. The file ships a literal
-`development`.
+### 4.2 `aps-environment` — resolved
 
-Harmless for Debug and TestFlight, and harmless today because iOS registration is off. It bites
-the moment iOS push ships: an App Store build carrying `development` gets tokens APNs rejects as
-`BadDeviceToken`, which reads as a server misconfiguration rather than a build one.
+It is now a per-configuration `CustomEntitlements` item in the MAUI csproj (`production` for
+Release, `development` otherwise), merged into the compiled entitlements by the SDK, and
+deliberately absent from `Entitlements.plist` so there is only one source for it.
 
-Either add the MSBuild rewrite keyed on configuration, or correct the comment to say it is manual.
-Do not leave the comment claiming something the build does not do.
+Worth knowing because the failure is misleading: **Release covers TestFlight as well as the App
+Store** — TestFlight is not sandbox — and a Release build carrying `development` gets tokens APNs
+rejects as `BadDeviceToken`, which reads as a server misconfiguration rather than a build one.
 
 ### 4.3 The MAUI follow client — not started
 
-Nothing exists: `SongDto` has no `PersonaId`, there is no `IFollowService`, no follow button, no
-Following page, no Artist Messages page, no in-app preference toggles, and no deep-link routing
-for a notification tap. The push payload already carries `PushDataKeys.Kind` / `PersonaId` /
-`SongId` / `EntityId`, and `StreamTunesFirebaseMessagingService` puts them on the launch intent,
-so the routing has everything it needs.
+`SongDto` has no `PersonaId`, there is no `IFollowService`, no follow button, no Following page and
+no Artist Messages page.
+
+Two things that were listed here as missing are now built: the in-app push preferences (all on
+`ConfigPage`) and tap routing — `PushNotificationRouter` opens the song for a Release notification
+and the playlist for a Digest, from a cold launch or a backgrounded tap. The payload carries
+`PushDataKeys.Kind` / `PersonaId` / `SongId` / `EntityId`, so a follow-specific route has what it
+needs whenever those pages exist.
 
 Three server rules the client has to mirror rather than rediscover:
 
