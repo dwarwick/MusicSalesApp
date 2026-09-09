@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Popups;
 
@@ -58,7 +59,7 @@ public partial class FollowArtistButtonModel : BlazorBase
     protected bool _isFollowing;
     protected bool _isProcessing;
     protected int _followerCount;
-    protected SfDialog? _loginDialog;
+    protected bool _showLoginDialog;
 
     private int? _currentUserId;
     private int _loadedPersonaId;
@@ -95,6 +96,14 @@ public partial class FollowArtistButtonModel : BlazorBase
         try
         {
             await LoadStateAsync();
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // The visitor left while this card was still loading. One bell per song card means
+            // hundreds of these at once on the library page. An ordinary navigate-away is not an
+            // error, and there is nobody left to tell. It must not reach the Error sink - that is
+            // what emails the admin.
+            Logger.LogDebug(ex, "Follow state load stopped because the circuit went away.");
         }
         catch (Exception ex)
         {
@@ -147,7 +156,7 @@ public partial class FollowArtistButtonModel : BlazorBase
         if (!_currentUserId.HasValue)
         {
             // Authorized but no id claim: the circuit is in a state this component cannot act on.
-            await ShowLoginDialogAsync();
+            ShowLoginDialog();
             return;
         }
 
@@ -178,6 +187,13 @@ public partial class FollowArtistButtonModel : BlazorBase
                 // One persona, or none, or no consent - nothing to ask.
                 await ApplyFollowStateAsync(true, options.DefaultPersonaId);
                 return;
+            }
+            catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+            {
+                // They navigated away between clicking the bell and the options coming back. An
+                // ordinary navigate-away is not an error, and there is nobody left to tell. It must
+                // not reach the Error sink - that is what emails the admin.
+                Logger.LogDebug(ex, "Follow-as options load stopped because the circuit went away.");
             }
             catch (Exception ex)
             {
@@ -240,6 +256,14 @@ public partial class FollowArtistButtonModel : BlazorBase
                 await OnFollowStateChanged.InvokeAsync(_isFollowing);
             }
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // They navigated away mid-toggle. The server call either landed or it did not; either
+            // way there is no longer anyone to tell. An ordinary navigate-away is not an error, and
+            // there is nobody left to tell. It must not reach the Error sink - that is what emails
+            // the admin.
+            Logger.LogDebug(ex, "Follow toggle stopped because the circuit went away.");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to change follow state for persona {PersonaId}.", CreatorPersonaId);
@@ -266,33 +290,26 @@ public partial class FollowArtistButtonModel : BlazorBase
             ? $"Following {PersonaName} - click to stop"
             : $"Follow {PersonaName} for new releases";
 
-    protected async Task ShowLoginDialogAsync()
+    protected void ShowLoginDialog()
     {
-        // The dialogs are absent from the render tree until now, so ask for them and let the
-        // component render once before reaching for the reference.
-        if (!_dialogsRequested)
-        {
-            _dialogsRequested = true;
-            await InvokeAsync(StateHasChanged);
-        }
-
-        if (_loginDialog is not null)
-        {
-            await _loginDialog.ShowAsync();
-        }
+        // Both flags in one go, so the dialog is added to the render tree already visible.
+        //
+        // This used to set _dialogsRequested, await InvokeAsync(StateHasChanged), then call
+        // ShowAsync on the @ref - which never worked on the first click. Inside an event handler
+        // the renderer is mid-batch, so StateHasChanged only QUEUES a render, and InvokeAsync on
+        // the renderer's own dispatcher returns an already-completed task; the await therefore
+        // resumes with no render having happened and the reference still null. The guarded call was
+        // skipped and the click did nothing. A second click worked, because by then the first one
+        // had caused the render. Binding a flag has no such ordering to get wrong.
+        _dialogsRequested = true;
+        _showLoginDialog = true;
     }
 
-    protected async Task NavigateToLoginAsync()
+    protected void NavigateToLogin()
     {
-        await CloseLoginDialogAsync();
+        CloseLoginDialog();
         NavigationManager.NavigateTo(AppPageRoutes.Login, forceLoad: true);
     }
 
-    protected async Task CloseLoginDialogAsync()
-    {
-        if (_loginDialog is not null)
-        {
-            await _loginDialog.HideAsync();
-        }
-    }
+    protected void CloseLoginDialog() => _showLoginDialog = false;
 }

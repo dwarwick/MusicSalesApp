@@ -46,12 +46,21 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
 
         var now = DateTime.UtcNow;
 
-        // Step 1: stamp anything that has become publicly visible since the last run.
+        // Step 1: a BACKSTOP, not the normal path. SongPublicationStampInterceptor stamps
+        // FirstPublishedAtUtc at the instant a song starts satisfying WherePubliclyReleased, so by
+        // the time this runs almost nothing is left. What is left is anything that reached the
+        // column without a tracked SaveChanges - a bulk ExecuteUpdate, a hand-run script - and
+        // those still need a timestamp or they would stay eligible forever.
         //
-        // This happens whether or not the persona is currently available, and that is deliberate:
-        // a song uploaded while its persona is disabled is still "published" the moment it goes
-        // live. Not stamping it would leave it eligible forever, so re-enabling a persona months
-        // later would notify every follower about a back catalogue all at once.
+        // This used to be the ONLY writer, and the hour-wide gap it left was a real bug: a listener
+        // who discovered a song at 12:20 and followed because of it counted as having followed
+        // before the 12:40 stamp, so the first thing that happened to them was a notification about
+        // the song they had just followed for.
+        //
+        // Stamping happens whether or not the persona is currently available, and that is
+        // deliberate: a song uploaded while its persona is disabled is still "published" the moment
+        // it goes live. Not stamping it would leave it eligible forever, so re-enabling a persona
+        // months later would notify every follower about a back catalogue all at once.
         var stamped = await context.SongMetadata
             .WherePubliclyReleased()
             .Where(song => song.FirstPublishedAtUtc == null)
@@ -59,7 +68,11 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
 
         if (stamped > 0)
         {
-            _logger.LogInformation("Stamped {Count} songs as first published.", stamped);
+            // Warning, not Information: the interceptor should have caught these, so a non-zero
+            // count here means something is writing this column behind EF's back.
+            _logger.LogWarning(
+                "Stamped {Count} songs as first published that the publication interceptor missed.",
+                stamped);
         }
 
         // Step 2: notify. Only songs still inside the window, and only from artists a listener
@@ -95,34 +108,61 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
 
         var created = 0;
 
+        // Both of these used to sit INSIDE the loop, which made the job O(releases) round trips
+        // for a question that is really per-ARTIST: a label publishing a twelve-track record
+        // re-fetched the identical follower list twelve times.
+        var personaIds = releases.Select(release => release.PersonaId).Distinct().ToList();
+        var songIds = releases.Select(release => release.SongMetadataId).Distinct().ToList();
+
+        var followers = await context.ArtistFollowers
+            .AsNoTracking()
+            .WhereActiveFollow()
+            .Where(follow => personaIds.Contains(follow.CreatorPersonaId)
+                             && follow.ReleaseNotificationsEnabled)
+            .Select(follow => new
+            {
+                follow.CreatorPersonaId,
+                follow.ListenerUserId,
+                // The later of following and coming back. FollowedDateUtc alone told a returning
+                // listener about everything released while they were away, because it deliberately
+                // survives an unfollow.
+                FollowingSince = follow.ResumedFollowingDateUtc ?? follow.FollowedDateUtc,
+            })
+            .ToListAsync();
+
+        var followersByPersona = followers
+            .GroupBy(follow => follow.CreatorPersonaId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var notifiedBySong = (await context.ArtistReleaseNotifications
+                .AsNoTracking()
+                .Where(notification => songIds.Contains(notification.SongMetadataId))
+                .Select(notification => new { notification.SongMetadataId, notification.ListenerUserId })
+                .ToListAsync())
+            .GroupBy(row => row.SongMetadataId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => row.ListenerUserId).ToHashSet());
+
         foreach (var release in releases)
         {
-            // "Followed before it was published" is the rule that stops a new follower being sent
-            // a notification about music that was already out when they arrived. It is also what
-            // makes deploying this feature onto a live catalogue safe: on day one no follow row
-            // predates any release, so nothing is sent.
-            var recipients = await context.ArtistFollowers
-                .AsNoTracking()
-                .WhereActiveFollow()
-                .Where(follow => follow.CreatorPersonaId == release.PersonaId
-                                 && follow.ReleaseNotificationsEnabled
-                                 && follow.FollowedDateUtc <= release.PublishedAtUtc)
-                .Select(follow => follow.ListenerUserId)
-                .ToListAsync();
-
-            if (recipients.Count == 0)
+            if (!followersByPersona.TryGetValue(release.PersonaId, out var candidates))
             {
                 continue;
             }
 
-            var alreadyNotified = await context.ArtistReleaseNotifications
-                .AsNoTracking()
-                .Where(notification => notification.SongMetadataId == release.SongMetadataId
-                                       && recipients.Contains(notification.ListenerUserId))
-                .Select(notification => notification.ListenerUserId)
-                .ToListAsync();
+            notifiedBySong.TryGetValue(release.SongMetadataId, out var already);
 
-            var pending = recipients.Except(alreadyNotified).ToList();
+            // "Followed before it was published" is the rule that stops a new follower being sent
+            // a notification about music that was already out when they arrived. It is also what
+            // makes deploying this feature onto a live catalogue safe: on day one no follow row
+            // predates any release, so nothing is sent.
+            var pending = candidates
+                .Where(follow => follow.FollowingSince <= release.PublishedAtUtc)
+                .Select(follow => follow.ListenerUserId)
+                .Where(listenerUserId => already is null || !already.Contains(listenerUserId))
+                .ToList();
+
             if (pending.Count == 0)
             {
                 continue;
@@ -151,11 +191,13 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
                     ex,
                     "Release notifications for song {SongMetadataId} collided with a concurrent run.",
                     release.SongMetadataId);
-
-                foreach (var entry in context.ChangeTracker.Entries<ArtistReleaseNotification>().ToList())
-                {
-                    entry.State = EntityState.Detached;
-                }
+            }
+            finally
+            {
+                // Whether the save landed or not, these rows are done with. Left tracked, every
+                // later SaveChanges in this run would walk them again, making the job quadratic in
+                // the rows it writes - and the catch above would detach rows already committed.
+                context.ChangeTracker.Clear();
             }
         }
 
@@ -189,6 +231,16 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
                 WantsEmail = notification.ListenerUser.ReceiveArtistReleaseEmails,
                 EmailConfirmed = notification.ListenerUser.EmailConfirmed,
                 IsSuspended = notification.ListenerUser.IsSuspended,
+                // Rows are written hourly and this pass runs once a night, so up to a day passes in
+                // between - and that is the whole window in which someone blocks, mutes or
+                // unfollows. Without this the mail still went, over a body that reads "You are
+                // getting this because you follow X", which by then is not true.
+                FollowPermits = context.ArtistFollowers.Any(follow =>
+                    follow.CreatorPersonaId == notification.CreatorPersonaId
+                    && follow.ListenerUserId == notification.ListenerUserId
+                    && follow.IsActive
+                    && !follow.IsBlockedByListener
+                    && follow.ReleaseNotificationsEnabled),
             })
             .ToListAsync();
 
@@ -241,17 +293,37 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
                 {
                     _logger.LogWarning("Failed to email release notification {NotificationId}.", item.NotificationId);
                 }
-
-                // Stamped either way: a permanently undeliverable address would otherwise be
-                // retried every night forever, and the listener has the notification in-app.
-                await context.ArtistReleaseNotifications
-                    .Where(notification => notification.Id == item.NotificationId)
-                    .ExecuteUpdateAsync(setters =>
-                        setters.SetProperty(notification => notification.EmailSentDateUtc, DateTime.UtcNow));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error emailing release notification {NotificationId}.", item.NotificationId);
+            }
+            finally
+            {
+                // Stamped in a finally, and stamped whatever happened. Either way is deliberate: a
+                // permanently undeliverable address would otherwise be retried every night forever,
+                // and the listener still has the notification in-app.
+                //
+                // The finally is what makes "whatever happened" true. Inside the try, a stamp that
+                // threw AFTER the mail had gone left the row unstamped, so the same listener was
+                // re-sent the identical email on every subsequent run until an update happened to
+                // succeed.
+                try
+                {
+                    await context.ArtistReleaseNotifications
+                        .Where(notification => notification.Id == item.NotificationId)
+                        .ExecuteUpdateAsync(setters =>
+                            setters.SetProperty(notification => notification.EmailSentDateUtc, DateTime.UtcNow));
+                }
+                catch (Exception ex)
+                {
+                    // Above Warning: an unstamped row is a duplicate email next run, so this is the
+                    // line that explains one if it is ever reported.
+                    _logger.LogError(
+                        ex,
+                        "Could not stamp release notification {NotificationId} as emailed; it may be re-sent.",
+                        item.NotificationId);
+                }
             }
 
             if (index == sendable.Count - 1)
@@ -388,11 +460,18 @@ public class ArtistReleaseNotificationService : IArtistReleaseNotificationServic
         public bool EmailConfirmed { get; init; }
         public bool IsSuspended { get; init; }
 
+        /// <summary>
+        /// Whether the follow still allows a release email: followed, not blocked, not muted for
+        /// releases. Read here rather than trusted from when the row was written.
+        /// </summary>
+        public bool FollowPermits { get; init; }
+
         public bool ShouldSend =>
             WantsEmail
             && EmailConfirmed
             && !IsSuspended
             && SongIsAvailable
+            && FollowPermits
             && !string.IsNullOrWhiteSpace(RecipientEmail);
     }
 }

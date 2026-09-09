@@ -689,6 +689,12 @@ namespace MusicSalesApp.Controllers
                 albumArtThumbUrl = mappedSong.AlbumArtThumbUrl,
                 albumArtHeroUrl = mappedSong.AlbumArtHeroUrl,
                 albumArtVersion = mappedSong.AlbumArtVersion,
+                // Every field the mapper produces has to be listed by hand here, which is exactly
+                // how personaId came to be missing while its six neighbours were present: the
+                // library returns the DTO itself and so carried it, this route re-projects and did
+                // not. The app reads personaId to decide whether to offer the Follow bell, so the
+                // control was absent on precisely the surface a shared link lands on.
+                personaId = mappedSong.PersonaId,
                 personaImageUrl = mappedSong.PersonaImageUrl,
                 personaImageThumbUrl = mappedSong.PersonaImageThumbUrl,
                 personaImageHeroUrl = mappedSong.PersonaImageHeroUrl,

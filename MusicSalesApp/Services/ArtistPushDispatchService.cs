@@ -7,6 +7,29 @@ using MusicSalesApp.Models;
 namespace MusicSalesApp.Services;
 
 /// <inheritdoc />
+/// <remarks>
+/// <para>
+/// <b>Two ways not to send, and they are not interchangeable.</b> A REVERSIBLE gate - the admin
+/// kill switch, an unconfigured transport, and the listener's own ReceiveArtist*Push preference -
+/// must leave the row pending, so switching it on later delivers the backlog rather than a silence
+/// that has already been eaten. A STANDING refusal - the listener unfollowed, muted or blocked this
+/// artist, the account is suspended, the song was withdrawn, the artist is no longer publicly
+/// active, or no device is registered - settles the row, because there is nothing left to wait for.
+/// </para>
+/// <para>
+/// The distinction is structural rather than remembered: a reversible gate is a WHERE clause, so
+/// those rows are never loaded and so cannot be stamped, while a standing refusal is a property on
+/// <c>PendingPush</c> that <c>ShouldPush</c> reads. The push preference used to be the latter, which
+/// settled every row belonging to the opted-out listener that every account is by default.
+/// </para>
+/// <para>
+/// <b>Known limit.</b> Rows held for an unelapsed frequency window stay unstamped, so they stay the
+/// oldest and keep re-filling <see cref="BatchSize"/>. Once 500 held rows exist, nothing newer is
+/// reachable until one of those windows expires - self-clearing within a day, but real. Fixing it
+/// properly wants a per-listener "next push due" column so the wait becomes a WHERE clause like the
+/// gates above; until then <c>DeliverAsync</c> logs a Warning when it happens.
+/// </para>
+/// </remarks>
 public class ArtistPushDispatchService : IArtistPushDispatchService
 {
     /// <summary>
@@ -72,6 +95,9 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         return await context.ArtistReleaseNotifications
             .AsNoTracking()
             .Where(notification => notification.PushSentDateUtc == null)
+            // The listener's own push preference is a FILTER, not a skip - see the class remarks.
+            // It also has to come before Take, or rows nobody wants would fill the cap.
+            .Where(notification => notification.ListenerUser.ReceiveArtistReleasePush)
             .OrderBy(notification => notification.CreatedDateUtc)
             .Take(BatchSize)
             .Select(notification => new PendingPush
@@ -85,12 +111,25 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
                 SongTitle = notification.SongMetadata.SongTitle,
                 Mp3BlobPath = notification.SongMetadata.Mp3BlobPath,
                 BlobPath = notification.SongMetadata.BlobPath,
-                WantsPush = notification.ListenerUser.ReceiveArtistReleasePush,
                 IsSuspended = notification.ListenerUser.IsSuspended,
-                // A song pulled between the notification and this run must not be announced.
-                SubjectIsAvailable = notification.SongMetadata.IsActive && notification.SongMetadata.IsEnabled,
-                Muted = false,
-                IsBlocked = false,
+                // A song pulled between the notification and this run must not be announced, and
+                // neither must one whose artist has since been suspended or deactivated.
+                SubjectIsAvailable = notification.SongMetadata.IsActive
+                                     && notification.SongMetadata.IsEnabled
+                                     && context.CreatorPersonas
+                                         .WherePubliclyActive()
+                                         .Any(persona => persona.Id == notification.CreatorPersonaId),
+                // Re-read from the follow row rather than assumed. Everything between the hourly job
+                // that wrote this row and this run is exactly when a listener unfollows, mutes or
+                // blocks, and none of that is denormalised onto the notification - so it is a join
+                // or it is nothing. The unique (CreatorPersonaId, ListenerUserId) index makes it a
+                // seek.
+                FollowPermits = context.ArtistFollowers.Any(follow =>
+                    follow.CreatorPersonaId == notification.CreatorPersonaId
+                    && follow.ListenerUserId == notification.ListenerUserId
+                    && follow.IsActive
+                    && !follow.IsBlockedByListener
+                    && follow.ReleaseNotificationsEnabled),
                 CreatedDateUtc = notification.CreatedDateUtc,
                 FrequencyValue = notification.ListenerUser.ArtistPushFrequency,
             })
@@ -104,6 +143,7 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         return await context.ArtistFollowerMessages
             .AsNoTracking()
             .Where(message => message.PushSentDateUtc == null && !message.IsHiddenByListener)
+            .Where(message => message.ArtistFollower.ListenerUser.ReceiveArtistMessagePush)
             .OrderBy(message => message.CreatedDateUtc)
             .Take(BatchSize)
             .Select(message => new PendingPush
@@ -114,11 +154,17 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
                 CreatorPersonaId = message.ArtistFollower.CreatorPersonaId,
                 ArtistName = message.ArtistFollower.CreatorPersona.Name,
                 MessageText = message.MessageText,
-                WantsPush = message.ArtistFollower.ListenerUser.ReceiveArtistMessagePush,
                 IsSuspended = message.ArtistFollower.ListenerUser.IsSuspended,
-                SubjectIsAvailable = true,
-                Muted = !message.ArtistFollower.ArtistMessagesEnabled,
-                IsBlocked = message.ArtistFollower.IsBlockedByListener,
+                // Was hardcoded true, so a creator suspended AFTER writing the message still had it
+                // delivered - which is the one case where suspension most needs to bite.
+                SubjectIsAvailable = context.CreatorPersonas
+                    .WherePubliclyActive()
+                    .Any(persona => persona.Id == message.ArtistFollower.CreatorPersonaId),
+                // IsActive as well as the mute and the block: a plain unfollow left a queued message
+                // deliverable, because unfollowing clears IsActive without setting IsBlockedByListener.
+                FollowPermits = message.ArtistFollower.IsActive
+                                && !message.ArtistFollower.IsBlockedByListener
+                                && message.ArtistFollower.ArtistMessagesEnabled,
                 CreatedDateUtc = message.CreatedDateUtc,
                 FrequencyValue = message.ArtistFollower.ListenerUser.ArtistPushFrequency,
             })
@@ -182,17 +228,31 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         {
             await StampAsync(skipped);
             _logger.LogInformation(
-                "Skipped {Count} pushes (opted out, suspended, muted, blocked or subject withdrawn).",
+                "Settled {Count} pushes without sending (suspended, unfollowed, muted, blocked or subject withdrawn).",
                 skipped.Count);
         }
 
         // One outgoing push per group. A listener on Instant gets a group per notification, which
         // is exactly the old behaviour; a listener on a window gets at most one group covering
         // everything that has waited long enough.
-        var groups = BuildSendGroups(pending.Where(item => item.ShouldPush));
+        var eligible = pending.Where(item => item.ShouldPush).ToList();
+        var groups = BuildSendGroups(eligible);
 
         if (groups.Count == 0)
         {
+            if (eligible.Count >= BatchSize)
+            {
+                // Held rows stay unstamped, so they stay the oldest and keep re-filling the cap.
+                // Self-clearing once the oldest window elapses, but until then nothing newer is
+                // reachable - so say so rather than logging a silent zero. See the class remarks.
+                _logger.LogWarning(
+                    "Every one of the {Count} eligible rows is inside an unelapsed push-frequency window "
+                    + "and the batch is at its cap of {BatchSize}, so newer rows cannot be reached until "
+                    + "one of those windows expires.",
+                    eligible.Count,
+                    BatchSize);
+            }
+
             return 0;
         }
 
@@ -204,6 +264,7 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         var settled = new List<PendingPush>();
         var rejectedTokens = new List<string>();
         var delivered = 0;
+        var permanentFailures = 0;
 
         foreach (var group in groups)
         {
@@ -239,6 +300,13 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
                     case PushDeliveryOutcome.TransportFailure:
                         anyDeferred = true;
                         break;
+
+                    case PushDeliveryOutcome.PermanentFailure:
+                        // Settled, and the token kept - which is the documented outcome. Named
+                        // rather than reached by falling out of the switch, and counted, because a
+                        // shipped payload bug settles every row while the run logs a cheerful zero.
+                        permanentFailures++;
+                        break;
                 }
             }
 
@@ -260,13 +328,24 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
             await StampAsync(settled);
         }
 
+        if (permanentFailures > 0)
+        {
+            // Above Information deliberately: this is the shape a shipped payload bug takes, and it
+            // is otherwise indistinguishable from a quiet, successful run.
+            _logger.LogWarning(
+                "{Count} pushes were refused outright and will not be retried.",
+                permanentFailures);
+        }
+
         _logger.LogInformation(
-            "Pushed to {Delivered} devices in {Groups} notifications; settled {Settled} of {Total} rows, retired {Rejected} tokens.",
+            "Pushed to {Delivered} devices in {Groups} notifications; settled {Settled} of {Total} rows, "
+            + "retired {Rejected} tokens, {Refused} refused outright.",
             delivered,
             groups.Count,
             settled.Count,
             sendable.Count,
-            rejectedTokens.Count);
+            rejectedTokens.Count,
+            permanentFailures);
 
         return delivered;
     }
@@ -333,12 +412,10 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
     /// </remarks>
     private static PushMessage BuildDigestMessage(List<PendingPush> group)
     {
-        var artists = group
-            .Select(item => string.IsNullOrWhiteSpace(item.ArtistName)
-                ? ArtistDisplayNames.UnknownArtist
-                : item.ArtistName!)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+        // By persona id, not by display name. CreatorPersona.Name carries no unique index, so
+        // deduping on it let two different artists collapse into one - and the payload would then
+        // deep-link to whichever came first, promising songs that artist does not have.
+        var personaIds = group.Select(item => item.CreatorPersonaId).Distinct().ToList();
 
         var data = new Dictionary<string, string>
         {
@@ -346,17 +423,20 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
             [PushDataKeys.Count] = group.Count.ToString(),
         };
 
-        if (artists.Count > 1)
+        if (personaIds.Count > 1)
         {
             return new PushMessage(
                 "Artists you follow",
-                $"{group.Count} new updates from {artists.Count} artists you follow.",
+                $"{group.Count} new updates from {personaIds.Count} artists you follow.",
                 data);
         }
 
-        var artist = artists[0];
+        var artist = string.IsNullOrWhiteSpace(group[0].ArtistName)
+            ? ArtistDisplayNames.UnknownArtist
+            : group[0].ArtistName!;
+
         data[PushDataKeys.ArtistName] = artist;
-        data[PushDataKeys.PersonaId] = group[0].CreatorPersonaId.ToString();
+        data[PushDataKeys.PersonaId] = personaIds[0].ToString();
 
         var releases = group.Count(item => item.Kind == PushNotificationKinds.Release);
 
@@ -414,11 +494,19 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         public string? Mp3BlobPath { get; init; }
         public string? BlobPath { get; init; }
         public string? MessageText { get; init; }
-        public bool WantsPush { get; init; }
         public bool IsSuspended { get; init; }
+
+        /// <summary>
+        /// Whether the thing being announced can still be announced: for a release the song is
+        /// live and its artist is publicly active, for a message the artist is publicly active.
+        /// </summary>
         public bool SubjectIsAvailable { get; init; }
-        public bool Muted { get; init; }
-        public bool IsBlocked { get; init; }
+
+        /// <summary>
+        /// Whether the follow relationship still allows this delivery - followed, not blocked, and
+        /// this kind not muted - read at dispatch rather than trusted from row-creation time.
+        /// </summary>
+        public bool FollowPermits { get; init; }
 
         /// <summary>When the notification happened - what the frequency window is measured from.</summary>
         public DateTime CreatedDateUtc { get; init; }
@@ -426,7 +514,10 @@ public class ArtistPushDispatchService : IArtistPushDispatchService
         /// <summary>The listener's ArtistPushFrequency, raw, because the column is an int.</summary>
         public int FrequencyValue { get; init; }
 
-        public bool ShouldPush =>
-            WantsPush && !IsSuspended && SubjectIsAvailable && !Muted && !IsBlocked;
+        /// <summary>
+        /// Whether this row goes out now. Everything here is a STANDING refusal, so a false settles
+        /// the row; the reversible gates never reach this far (see the class remarks).
+        /// </summary>
+        public bool ShouldPush => !IsSuspended && SubjectIsAvailable && FollowPermits;
     }
 }

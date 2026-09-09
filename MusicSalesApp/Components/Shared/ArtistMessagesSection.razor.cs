@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Shared;
@@ -58,6 +59,13 @@ public partial class ArtistMessagesSectionModel : BlazorBase
         try
         {
             _messages = (await ArtistFollowerMessageService.GetMessagesForListenerAsync(UserId.Value)).ToList();
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // They left the account page while this section was still loading. An ordinary navigate-
+            // away is not an error, and there is nobody left to tell. It must not reach the Error
+            // sink - that is what emails the admin.
+            Logger.LogDebug(ex, "Artist messages load stopped because the circuit went away.");
         }
         catch (Exception ex)
         {
@@ -133,6 +141,12 @@ public partial class ArtistMessagesSectionModel : BlazorBase
         {
             var applied = await change();
             _statusMessage = applied ? successMessage : "That change could not be saved.";
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // They left mid-change. An ordinary navigate-away is not an error, and there is nobody
+            // left to tell. It must not reach the Error sink - that is what emails the admin.
+            Logger.LogDebug(ex, "Artist message change stopped because the circuit went away.");
         }
         catch (Exception ex)
         {

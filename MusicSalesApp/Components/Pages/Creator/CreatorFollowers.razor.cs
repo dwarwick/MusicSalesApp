@@ -1,6 +1,7 @@
 #nullable enable
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Pages.Creator;
@@ -69,6 +70,13 @@ public partial class CreatorFollowersModel : BlazorBase
             {
                 await LoadPersonaAsync(_personas[0].Id);
             }
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // They left while the follower list was still loading. An ordinary navigate-away is not
+            // an error, and there is nobody left to tell. It must not reach the Error sink - that is
+            // what emails the admin.
+            Logger.LogDebug(ex, "Follower list load stopped because the circuit went away.");
         }
         catch (Exception ex)
         {
@@ -189,6 +197,12 @@ public partial class CreatorFollowersModel : BlazorBase
                 ArtistThankYouOutcome.ArtistUnavailable => "This persona is not currently active.",
                 _ => "We could not send that message.",
             };
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // They left mid-send. An ordinary navigate-away is not an error, and there is nobody
+            // left to tell. It must not reach the Error sink - that is what emails the admin.
+            Logger.LogDebug(ex, "Thank-you send stopped because the circuit went away.");
         }
         catch (Exception ex)
         {

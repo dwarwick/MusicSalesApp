@@ -160,9 +160,25 @@ public class ArtistFollowerMessageService : IArtistFollowerMessageService
     /// <inheritdoc />
     public async Task<int> GetRemainingDailyThankYousAsync(
         int creatorPersonaId,
+        int creatorId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Every other creator-facing method here takes a creatorId and checks it. This one did not,
+        // and it is the only reason to add the parameter now rather than when a caller appears: the
+        // signature is the trap. Wired to a page as it stood, creator A could pass creator B's
+        // persona id and read B's sending volume, with nothing in the shape of the call to suggest
+        // it was unguarded.
+        var owns = await context.CreatorPersonas
+            .AnyAsync(
+                persona => persona.Id == creatorPersonaId && persona.CreatorId == creatorId,
+                cancellationToken);
+
+        if (!owns)
+        {
+            return 0;
+        }
 
         var used = await CountThankYousInLastDayAsync(context, creatorPersonaId, cancellationToken);
         return Math.Max(0, DailyThankYouLimitPerPersona - used);
@@ -438,18 +454,34 @@ public class ArtistFollowerMessageService : IArtistFollowerMessageService
                 {
                     _logger.LogWarning("Failed to email artist message {MessageId}.", item.MessageId);
                 }
-
-                // Stamped whether or not the send succeeded. A permanent failure - a dead mailbox -
-                // would otherwise be retried every 15 minutes for the life of the row, and the
-                // listener has the message in-app regardless.
-                await context.ArtistFollowerMessages
-                    .Where(message => message.Id == item.MessageId)
-                    .ExecuteUpdateAsync(setters =>
-                        setters.SetProperty(message => message.EmailSentDateUtc, DateTime.UtcNow));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error emailing artist message {MessageId}.", item.MessageId);
+            }
+            finally
+            {
+                // Stamped in a finally, and stamped whatever happened. Either way is deliberate: a
+                // permanent failure - a dead mailbox - would otherwise be retried every 15 minutes
+                // for the life of the row, and the listener has the message in-app regardless.
+                //
+                // The finally is what makes "whatever happened" true. Inside the try, a stamp that
+                // threw AFTER the mail had gone left the row unstamped, so the identical email went
+                // out again every 15 minutes until an update happened to succeed.
+                try
+                {
+                    await context.ArtistFollowerMessages
+                        .Where(message => message.Id == item.MessageId)
+                        .ExecuteUpdateAsync(setters =>
+                            setters.SetProperty(message => message.EmailSentDateUtc, DateTime.UtcNow));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Could not stamp artist message {MessageId} as emailed; it may be re-sent.",
+                        item.MessageId);
+                }
             }
 
             if (index == sendable.Count - 1)

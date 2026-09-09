@@ -158,8 +158,12 @@ public class ArtistFollowConsentTests
     }
 
     [Test]
-    public async Task GetFollowAsOptions_DoesNotAskWhenThereIsOnlyOnePersona()
+    public async Task GetFollowAsOptions_StillAsksWhenThereIsOnlyOnePersona()
     {
+        // One persona IS a choice, because "Anonymous" is always on the list too. This used to
+        // require more than one persona, which skipped the dialog and passed the persona id
+        // straight through as the default - so a consenting creator with a single persona, the
+        // ordinary case, was named to every artist they followed without ever being asked.
         await SetConsentAsync(true);
 
         await using (var context = _harness.NewContext())
@@ -173,8 +177,41 @@ public class ArtistFollowConsentTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(options.NeedsChoice, Is.False, "One identity is not a choice.");
-            Assert.That(options.DefaultPersonaId, Is.EqualTo(_personaOneId));
+            Assert.That(options.Personas, Has.Count.EqualTo(1));
+            Assert.That(options.NeedsChoice, Is.True, "One identity plus anonymous is still a choice.");
+            Assert.That(
+                options.DefaultPersonaId,
+                Is.Null,
+                "Anonymous is the answer whenever we are not asking.");
+        });
+    }
+
+    [Test]
+    public async Task GetFollowAsOptions_AsksNothingOfSomeoneWithNoPersonas()
+    {
+        // Consent with nothing to be named by. There is no dialog to show and, since the
+        // display-name fallback is gone, nothing that could name them either.
+        await SetConsentAsync(true);
+
+        await using (var context = _harness.NewContext())
+        {
+            foreach (var persona in await context.CreatorPersonas
+                         .Where(p => p.Id == _personaOneId || p.Id == _personaTwoId)
+                         .ToListAsync())
+            {
+                persona.IsEnabled = false;
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        var options = await _followService.GetFollowAsOptionsAsync(_harness.ListenerUserId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(options.Personas, Is.Empty);
+            Assert.That(options.NeedsChoice, Is.False);
+            Assert.That(options.DefaultPersonaId, Is.Null);
         });
     }
 

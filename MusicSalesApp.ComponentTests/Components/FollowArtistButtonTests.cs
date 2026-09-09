@@ -171,6 +171,33 @@ public class FollowArtistButtonTests : BUnitTestBase
         });
     }
 
+    [Test]
+    public void FollowArtistButton_OpensTheLoginDialogOnTheVeryFirstClick()
+    {
+        // The signed-out branch had no test at all, which is how this shipped: the dialog was
+        // lazily added to the render tree and its @ref read back in the SAME handler. Inside an
+        // event handler StateHasChanged only queues a render and InvokeAsync completes
+        // synchronously, so the reference was still null, the guarded ShowAsync was skipped, and
+        // the first click on the bell did nothing. A second click worked, because by then the
+        // first had caused the render.
+        //
+        // One click. Anything that needs two is the bug coming back.
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<FollowArtistButton>(parameters => parameters
+            .Add(p => p.CreatorPersonaId, PersonaId)
+            .Add(p => p.PersonaName, "Alex Rivers"));
+
+        cut.WaitForState(() => cut.Markup.Contains("follow-artist-bell"), TimeSpan.FromSeconds(5));
+
+        cut.Find("button.follow-artist-bell").Click();
+
+        Assert.That(
+            cut.Markup,
+            Does.Contain("Log in to follow"),
+            "The first click has to open the dialog, not merely arrange for the second one to.");
+    }
+
     private void SetupFollowState(bool isFollowing, int followerCount = 0)
     {
         SetupAuthorizedUser(UserId);

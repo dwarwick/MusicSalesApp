@@ -362,6 +362,19 @@ public partial class ManageAccountModel : BlazorBase
 
         try
         {
+            // Re-read first. UserManager.UpdateAsync does Context.Update, which marks EVERY mapped
+            // property Modified and so writes the whole AspNetUsers row back from whatever this
+            // page happens to be holding - and this page holds the snapshot it loaded when it was
+            // opened, which may be hours old.
+            //
+            // The columns that page cannot see are the ones that suffer: the two phone push
+            // preferences have no control here at all, so a listener who turned release push on
+            // from their phone and then ticked an email box here had it silently reverted. The
+            // matching half of this fix rotates ConcurrencyStamp in
+            // ArtistNotificationPreferenceService, so anything that still slips between this read
+            // and the write below is caught by Identity rather than lost.
+            _currentUser = await UserManager.FindByIdAsync(_currentUser.Id.ToString()) ?? _currentUser;
+
             _currentUser.ReceiveNewSongEmails = _receiveNewSongEmails;
             _currentUser.ReceiveArtistReleaseEmails = _receiveArtistReleaseEmails;
             _currentUser.ReceiveArtistMessageEmails = _receiveArtistMessageEmails;
