@@ -55,6 +55,35 @@ public class ArtistNotificationPreferenceService : IArtistNotificationPreference
     }
 
     /// <inheritdoc />
+    public async Task<bool> SetEmailPreferencesAsync(
+        int userId,
+        bool receiveNewSongEmails,
+        bool receiveArtistReleaseEmails,
+        bool receiveArtistMessageEmails,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Three columns, named. Not a tracked entity and not SaveChanges, so there is no snapshot
+        // to be stale and no whole row to write back - which is the entire point.
+        //
+        // ConcurrencyStamp is deliberately NOT rotated here, unlike SetAsync above. Rotating says
+        // "the row you are holding is out of date", and that is only true of a writer who might
+        // clobber something; this one cannot clobber anything, so rotating would do nothing but
+        // break whatever other page happens to be open.
+        var updated = await context.Users
+            .Where(user => user.Id == userId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(user => user.ReceiveNewSongEmails, receiveNewSongEmails)
+                    .SetProperty(user => user.ReceiveArtistReleaseEmails, receiveArtistReleaseEmails)
+                    .SetProperty(user => user.ReceiveArtistMessageEmails, receiveArtistMessageEmails),
+                cancellationToken);
+
+        return updated > 0;
+    }
+
+    /// <inheritdoc />
     public async Task<bool> SetAsync(
         int userId,
         ArtistNotificationPreferences preferences,

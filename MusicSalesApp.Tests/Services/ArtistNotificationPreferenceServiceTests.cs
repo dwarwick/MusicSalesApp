@@ -150,6 +150,71 @@ public class ArtistNotificationPreferenceServiceTests
     }
 
     [Test]
+    public async Task SavingEmailPreferencesLeavesThePhonePreferencesAlone()
+    {
+        // The reported failure, in order: the listener sets release push from the phone, then ticks
+        // an email box on a /manage-account page that has been open since before that. The web save
+        // must write its own three columns and nothing else.
+        //
+        // It used to go through UserManager.UpdateAsync, which writes EVERY mapped column back from
+        // the page's snapshot, so the push preferences were silently reverted. Re-reading first did
+        // not help - the page's user is already tracked, so the query returns that same stale
+        // instance - and the write then failed with "Optimistic concurrency failure, object has
+        // been modified" instead.
+        await SetEverythingOnAsync();
+
+        var saved = await _service.SetEmailPreferencesAsync(
+            _harness.ListenerUserId,
+            receiveNewSongEmails: true,
+            receiveArtistReleaseEmails: false,
+            receiveArtistMessageEmails: true);
+
+        await using var context = _harness.NewContext();
+        var user = await context.Users.SingleAsync(row => row.Id == _harness.ListenerUserId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved, Is.True);
+
+            Assert.That(user.ReceiveNewSongEmails, Is.True);
+            Assert.That(user.ReceiveArtistReleaseEmails, Is.False, "The one that changed.");
+            Assert.That(user.ReceiveArtistMessageEmails, Is.True);
+
+            Assert.That(user.ReceiveArtistReleasePush, Is.True, "Set from the phone; the web must not touch it.");
+            Assert.That(user.ReceiveArtistMessagePush, Is.True);
+            Assert.That(user.ArtistPushFrequency, Is.EqualTo((int)ArtistPushFrequency.Daily));
+        });
+    }
+
+    [Test]
+    public async Task SavingEmailPreferencesDoesNotRotateTheConcurrencyStamp()
+    {
+        // The opposite of SetAsync above, and deliberately so. Rotating announces "the row you are
+        // holding is out of date", which is only worth saying when the writer could have clobbered
+        // something. This one writes three named columns and can clobber nothing, so rotating would
+        // do nothing but break whatever other page happens to be open.
+        string before;
+
+        await using (var context = _harness.NewContext())
+        {
+            before = (await context.Users.SingleAsync(row => row.Id == _harness.ListenerUserId)).ConcurrencyStamp!;
+        }
+
+        await _service.SetEmailPreferencesAsync(_harness.ListenerUserId, true, true, true);
+
+        await using var after = _harness.NewContext();
+        var stamp = (await after.Users.SingleAsync(row => row.Id == _harness.ListenerUserId)).ConcurrencyStamp;
+
+        Assert.That(stamp, Is.EqualTo(before));
+    }
+
+    [Test]
+    public async Task SavingEmailPreferencesReportsFailureForAnUnknownUser()
+    {
+        Assert.That(await _service.SetEmailPreferencesAsync(-1, true, true, true), Is.False);
+    }
+
+    [Test]
     public async Task NothingIsWrittenForAnUnknownUser()
     {
         Assert.That(await _service.SetAsync(-1, new ArtistNotificationPreferences()), Is.False);

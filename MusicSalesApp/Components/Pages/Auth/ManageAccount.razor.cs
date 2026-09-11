@@ -362,26 +362,30 @@ public partial class ManageAccountModel : BlazorBase
 
         try
         {
-            // Re-read first. UserManager.UpdateAsync does Context.Update, which marks EVERY mapped
-            // property Modified and so writes the whole AspNetUsers row back from whatever this
-            // page happens to be holding - and this page holds the snapshot it loaded when it was
-            // opened, which may be hours old.
+            // The three columns this card owns, and nothing else on the row.
             //
-            // The columns that page cannot see are the ones that suffer: the two phone push
-            // preferences have no control here at all, so a listener who turned release push on
-            // from their phone and then ticked an email box here had it silently reverted. The
-            // matching half of this fix rotates ConcurrencyStamp in
-            // ArtistNotificationPreferenceService, so anything that still slips between this read
-            // and the write below is caught by Identity rather than lost.
-            _currentUser = await UserManager.FindByIdAsync(_currentUser.Id.ToString()) ?? _currentUser;
+            // NOT UserManager.UpdateAsync, which does Context.Update and so writes every mapped
+            // property back from the snapshot this page loaded when it opened - silently reverting
+            // the two phone push preferences, which have no control here at all.
+            //
+            // Re-reading first does not fix that, and the attempt is what produced "Optimistic
+            // concurrency failure, object has been modified" on this very card: _currentUser is
+            // already tracked by the circuit's scoped DbContext, so querying for the same key hands
+            // back that tracked instance unchanged - stale ConcurrencyStamp and all - and the write
+            // then fails the concurrency check, every time, until the page is reloaded.
+            var saved = await ArtistNotificationPreferenceService.SetEmailPreferencesAsync(
+                _currentUser.Id,
+                _receiveNewSongEmails,
+                _receiveArtistReleaseEmails,
+                _receiveArtistMessageEmails);
 
-            _currentUser.ReceiveNewSongEmails = _receiveNewSongEmails;
-            _currentUser.ReceiveArtistReleaseEmails = _receiveArtistReleaseEmails;
-            _currentUser.ReceiveArtistMessageEmails = _receiveArtistMessageEmails;
-            var result = await UserManager.UpdateAsync(_currentUser);
-
-            if (result.Succeeded)
+            if (saved)
             {
+                // The in-memory copy is what the rest of the page reads, so it has to follow.
+                _currentUser.ReceiveNewSongEmails = _receiveNewSongEmails;
+                _currentUser.ReceiveArtistReleaseEmails = _receiveArtistReleaseEmails;
+                _currentUser.ReceiveArtistMessageEmails = _receiveArtistMessageEmails;
+
                 // Says which way it was saved. "Saved" alone leaves a reader who has just
                 // switched something OFF wondering whether it took the new value or the old.
                 _emailPreferencesStatus = _receiveNewSongEmails
@@ -392,7 +396,7 @@ public partial class ManageAccountModel : BlazorBase
             else
             {
                 _emailPreferencesFailed = true;
-                _emailPreferencesStatus = string.Join(", ", result.Errors.Select(e => e.Description));
+                _emailPreferencesStatus = "We could not save your email preferences.";
                 _errorMessage = _emailPreferencesStatus;
             }
         }
