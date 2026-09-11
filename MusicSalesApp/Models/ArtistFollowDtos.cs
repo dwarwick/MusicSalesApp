@@ -15,9 +15,10 @@ namespace MusicSalesApp.Models;
 /// <remarks>
 /// <para>
 /// <see cref="DisplayName"/> is a pseudonym ("Listener #4817") for an ordinary listener, and the
-/// follower's own public artist name when the follower is themselves an active creator - see
-/// <see cref="IsIdentifiedArtist"/>. Either way it is the ONLY thing about the person this record
-/// can carry: there is still no field able to hold an email, a username or a listener id.
+/// follower's own persona name only where that follower explicitly chose that persona for this
+/// follow - see <see cref="IsIdentifiedArtist"/>. Either way it is the ONLY thing about the person
+/// this record can carry: there is still no field able to hold an email, a username or a listener
+/// id.
 /// </para>
 /// </remarks>
 public sealed record ArtistFollowerSummaryDto(
@@ -104,17 +105,28 @@ public sealed record FollowAsOptionsDto(
     IReadOnlyList<FollowAsPersonaDto> Personas)
 {
     /// <summary>
-    /// True when the listener has a genuine choice to make. One persona needs no dialog, and
-    /// neither does no consent.
+    /// True when the listener has a choice to make: they have consented in general and have at
+    /// least one identity they could be named by.
     /// </summary>
-    public bool NeedsChoice => RevealsPersona && Personas.Count > 1;
+    /// <remarks>
+    /// One persona still counts. "Anonymous" is always an option on top of the persona list, so a
+    /// creator with a single persona has two answers available and this used to require more than
+    /// one - which skipped the dialog and named them, silently, to every artist they followed.
+    /// One persona is the ordinary case, so in practice consenting in general meant being named
+    /// always. Consent to be nameable is not consent to be named here.
+    /// </remarks>
+    public bool NeedsChoice => RevealsPersona && Personas.Count > 0;
 
     /// <summary>
-    /// The identity to use without asking: the only persona when there is exactly one, otherwise
-    /// null for anonymous.
+    /// The identity to use when no dialog is shown. Always null, which means anonymous.
     /// </summary>
-    public int? DefaultPersonaId =>
-        RevealsPersona && Personas.Count == 1 ? Personas[0].Id : null;
+    /// <remarks>
+    /// Kept as a member rather than deleted because it is the answer to a real question - "we are
+    /// not asking, so what do we send?" - and the safe answer must be stated somewhere rather than
+    /// left to each caller. There is now no case where the dialog is skipped AND a persona could
+    /// have been chosen: if there is an identity to offer, it gets offered.
+    /// </remarks>
+    public int? DefaultPersonaId => null;
 }
 
 /// <summary>One of the follower's own personas, as offered in the "Follow as" dialog.</summary>

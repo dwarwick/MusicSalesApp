@@ -593,21 +593,37 @@
     }
 }
 
-/* Creator followers page — the two stat tiles stack rather than squeeze on a phone. */
-.follower-stat-row {
-    gap: 12px;
-}
+/* ==========================================================================
+   FOLLOW SURFACES — phone layout
 
-.follower-stat-value {
-    font-size: 22px;
-}
+   In its own @media rather than appended to the end of the file, which is where these rules
+   started out: the last block above closes before them, so they were not inside any query at all
+   and applied at every width. App.razor links this sheet AFTER xl_app.css and the selectors have
+   equal specificity, so the phone values were winning on a 1920px desktop - .follow-row-main went
+   to min-width:100%, which forces the actions onto their own line everywhere.
 
-/* Followed artists / artist messages — the actions drop below the detail on a phone rather than
-   competing with it for a single row. */
-.follow-row {
-    gap: 10px;
-}
+   This is trap 1 in AGENTS.md, and xl_app.css carries the same NOTE at its own tail. Check which
+   @media a rule is actually inside before trusting the comment above it.
+   ========================================================================== */
 
-.follow-row-main {
-    min-width: 100%;
+@media (max-width: 768px) {
+
+    /* Creator followers page — the two stat tiles stack rather than squeeze on a phone. */
+    .follower-stat-row {
+        gap: 12px;
+    }
+
+    .follower-stat-value {
+        font-size: 22px;
+    }
+
+    /* Followed artists / artist messages — the actions drop below the detail on a phone rather
+       than competing with it for a single row. */
+    .follow-row {
+        gap: 10px;
+    }
+
+    .follow-row-main {
+        min-width: 100%;
+    }
 }

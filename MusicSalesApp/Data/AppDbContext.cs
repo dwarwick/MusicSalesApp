@@ -1069,6 +1069,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         builder.Entity<ArtistReleaseNotification>()
             .HasIndex(n => n.PushSentDateUtc);
 
+        // The hourly release job reads SongMetadata.FirstPublishedAtUtc twice as its leading
+        // predicate - once for the unstamped backstop, once for the seven-day window - and had no
+        // index to do it with, so both were full scans of the whole catalogue, every hour, forever.
+        // Invisible in the job log, which just says "Considered 0 release(s)", and it grows with
+        // the one table guaranteed to keep growing.
+        builder.Entity<SongMetadata>()
+            .HasIndex(song => song.FirstPublishedAtUtc);
+
         builder.Entity<ArtistFollowerMessage>()
             .HasIndex(m => m.PushSentDateUtc);
 

@@ -65,4 +65,17 @@ internal static class ArtistFollowQueryExtensions
     {
         return query.Where(PubliclyReleasedSongFilter);
     }
+
+    /// <summary>
+    /// The same rule, compiled, for callers holding one song rather than a query.
+    /// </summary>
+    /// <remarks>
+    /// Compiled from the very expression the queries use, so the in-memory answer and the SQL
+    /// answer cannot drift. <see cref="SongPublicationStampInterceptor"/> is what needs it: it has
+    /// to decide "has this song just become public?" about a tracked entity, before SaveChanges.
+    /// </remarks>
+    private static readonly Func<SongMetadata, bool> PubliclyReleasedSongPredicate =
+        PubliclyReleasedSongFilter.Compile();
+
+    public static bool IsPubliclyReleased(this SongMetadata song) => PubliclyReleasedSongPredicate(song);
 }

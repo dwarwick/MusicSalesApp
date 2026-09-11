@@ -342,11 +342,14 @@ later delivers the backlog rather than silently having dropped it.
 `AppSettingsService.PushNotificationsEnabledKey` ("Phone Notifications" on `/admin/settings`) is
 **off by default**, and an absent *or unparseable* row reads as off. It gates two things at once:
 
-- `ArtistPushDispatchService.DispatchPendingAsync` returns 0 before it looks at anything else;
-- the two phone checkboxes **and their hint label** disappear from `/manage-account`.
+- `ArtistPushDispatchService.DispatchPendingAsync` returns 0 before it looks at anything else.
 
-The label goes with the checkboxes deliberately. "Phone notifications need the StreamTunes app"
-sitting above nothing at all reads worse than either state on its own.
+That is the whole of it. This used to claim it also hid "the two phone checkboxes and their hint
+label" from `/manage-account`, which was never true in either direction — that page has no control
+for `ReceiveArtistReleasePush` or `ReceiveArtistMessagePush` at all, and
+`ManageAccountTests.ManageAccount_NeverOffersPhoneNotificationPreferences` asserts as much for both
+states of the flag. The only writer is `PUT api/mobile/follows/notification-preferences`, from the
+app's Config → Notifications screen.
 
 It exists because the apps carrying the registration code are not in the stores yet, so nothing can
 arrive on a phone regardless — and a preference that quietly does nothing is worse than no
@@ -354,6 +357,14 @@ preference. Two rules follow:
 
 > **Off leaves every row unstamped**, exactly like an unconfigured transport. Turning push on later
 > delivers what is still pending rather than having silently consumed it while the flag was off.
+
+> The listener's own `ReceiveArtist*Push` preference now works the same way, and did not before: it
+> was checked after the rows were loaded and then stamped them settled, so with both flags defaulting
+> off every notification was consumed within five minutes of creation and opting in later delivered
+> nothing. `ArtistPushDispatchService` now draws the line structurally — **a reversible gate is a
+> WHERE clause, a standing refusal is a stamp** — so the two cannot be confused again. Unfollowing,
+> muting, blocking, suspension, a withdrawn song and an artist who is no longer publicly active are
+> standing refusals and do settle the row.
 
 > **Device registration keeps working while it is off.** That is not an oversight — registering is
 > how you prove the round trip before switching delivery on.

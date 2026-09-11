@@ -9,6 +9,18 @@ namespace MusicSalesApp.Services;
 /// <inheritdoc />
 public class ArtistFollowService : IArtistFollowService
 {
+    /// <summary>
+    /// How many times a new follow will re-draw its pseudonym after losing the unique index to a
+    /// concurrent follower of the same artist.
+    /// </summary>
+    /// <remarks>
+    /// Three, because the allocator keeps its band under a third full, so each draw is far more
+    /// likely to land than not and the odds of losing three in a row are negligible. Exhausting
+    /// them rethrows rather than inventing an answer: at that point something other than a race is
+    /// wrong, and a 500 is the honest report.
+    /// </remarks>
+    private const int PseudonymAllocationAttempts = 3;
+
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly IArtistFollowerIdentityService _identityService;
     private readonly ILogger<ArtistFollowService> _logger;
@@ -101,6 +113,10 @@ public class ArtistFollowService : IArtistFollowService
             existing.UnfollowedDateUtc = null;
             existing.SourceSongMetadataId ??= sourceSongId;
 
+            // FollowedDateUtc is left alone on purpose - see the field. This is the one the
+            // release job reads, so a returning listener is not told about what they missed.
+            existing.ResumedFollowingDateUtc = DateTime.UtcNow;
+
             // Overwritten rather than kept: re-following is a fresh decision, and the listener may
             // have chosen a different identity - or none - this time.
             existing.FollowAsPersonaId = followAsId;
@@ -109,54 +125,73 @@ public class ArtistFollowService : IArtistFollowService
             return ArtistFollowOutcome.Followed;
         }
 
-        var usedNumbers = await context.ArtistFollowers
-            .Where(follow => follow.CreatorPersonaId == creatorPersonaId)
-            .Select(follow => follow.AnonymousListenerNumber)
-            .ToListAsync(cancellationToken);
-
-        var follower = new ArtistFollower
+        for (var attempt = 1; ; attempt++)
         {
-            CreatorPersonaId = creatorPersonaId,
-            ListenerUserId = listenerUserId,
-            FollowedDateUtc = DateTime.UtcNow,
-            SourceSongMetadataId = sourceSongId,
-            FollowAsPersonaId = followAsId,
-            IsActive = true,
-            AnonymousListenerNumber = _identityService.AllocateNumber(usedNumbers.ToHashSet()),
-        };
+            var usedNumbers = await context.ArtistFollowers
+                .Where(follow => follow.CreatorPersonaId == creatorPersonaId)
+                .Select(follow => follow.AnonymousListenerNumber)
+                .ToListAsync(cancellationToken);
 
-        context.ArtistFollowers.Add(follower);
-
-        try
-        {
-            await context.SaveChangesAsync(cancellationToken);
-            return ArtistFollowOutcome.Followed;
-        }
-        catch (DbUpdateException ex)
-        {
-            // Two clicks, two tabs, or a replayed offline intent racing each other. The unique
-            // index on (CreatorPersonaId, ListenerUserId) is what turns that into a losable race
-            // instead of a duplicate follow, and the loser's answer is simply "already following".
-            // The pseudonym index can lose the same way; re-reading covers both.
-            _logger.LogDebug(
-                ex,
-                "Concurrent follow insert for persona {PersonaId}; re-reading the winning row.",
-                creatorPersonaId);
-
-            context.Entry(follower).State = EntityState.Detached;
-
-            var winner = await context.ArtistFollowers
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    row => row.CreatorPersonaId == creatorPersonaId && row.ListenerUserId == listenerUserId,
-                    cancellationToken);
-
-            if (winner is null)
+            var follower = new ArtistFollower
             {
-                throw;
-            }
+                CreatorPersonaId = creatorPersonaId,
+                ListenerUserId = listenerUserId,
+                FollowedDateUtc = DateTime.UtcNow,
+                SourceSongMetadataId = sourceSongId,
+                FollowAsPersonaId = followAsId,
+                IsActive = true,
+                AnonymousListenerNumber = _identityService.AllocateNumber(usedNumbers.ToHashSet()),
+            };
 
-            return winner.IsActive ? ArtistFollowOutcome.AlreadyFollowing : ArtistFollowOutcome.NotFollowing;
+            context.ArtistFollowers.Add(follower);
+
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                return ArtistFollowOutcome.Followed;
+            }
+            catch (DbUpdateException ex)
+            {
+                // Two indexes can refuse this insert and they need different answers.
+                //
+                // (CreatorPersonaId, ListenerUserId) means two clicks, two tabs or a replayed
+                // offline intent raced each other. The winner's row is the row we wanted, so the
+                // loser's answer is simply "already following".
+                //
+                // (CreatorPersonaId, AnonymousListenerNumber) means two DIFFERENT listeners drew
+                // the same pseudonym from the same snapshot. There is no winning row to find, and
+                // rethrowing turned a retriable local collision into a 500 on a route whose whole
+                // contract is that domain outcomes are 400s - which the mobile client then retries
+                // forever, stalling its offline queue behind it. Drawing again is the answer.
+                context.Entry(follower).State = EntityState.Detached;
+
+                var winner = await context.ArtistFollowers
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        row => row.CreatorPersonaId == creatorPersonaId && row.ListenerUserId == listenerUserId,
+                        cancellationToken);
+
+                if (winner is not null)
+                {
+                    _logger.LogDebug(
+                        ex,
+                        "Concurrent follow insert for persona {PersonaId}; the other row stands.",
+                        creatorPersonaId);
+
+                    return winner.IsActive ? ArtistFollowOutcome.AlreadyFollowing : ArtistFollowOutcome.NotFollowing;
+                }
+
+                if (attempt >= PseudonymAllocationAttempts)
+                {
+                    throw;
+                }
+
+                _logger.LogWarning(
+                    ex,
+                    "Pseudonym collision following persona {PersonaId} on attempt {Attempt}; drawing again.",
+                    creatorPersonaId,
+                    attempt);
+            }
         }
     }
 
@@ -389,7 +424,9 @@ public class ArtistFollowService : IArtistFollowService
             return new FollowedArtistDto(
                 follow.Id,
                 follow.CreatorPersonaId,
-                follow.CreatorPersona?.Name ?? ArtistDisplayNames.UnknownArtist,
+                string.IsNullOrWhiteSpace(follow.CreatorPersona?.Name)
+                    ? ArtistDisplayNames.UnknownArtist
+                    : follow.CreatorPersona!.Name,
                 follow.CreatorPersona?.ImageBlobPath,
                 follow.FollowedDateUtc,
                 latest?.Id,

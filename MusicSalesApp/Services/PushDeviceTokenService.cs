@@ -106,11 +106,36 @@ public class PushDeviceTokenService : IPushDeviceTokenService
         }
         catch (DbUpdateException ex)
         {
-            // Two registrations for one token racing - the app registers on launch and again on an
-            // auth change, which can overlap. The unique index is the authority; the row the winner
-            // wrote is the row we wanted, so this is a success from the caller's point of view.
-            _logger.LogDebug(ex, "Concurrent push token registration; the existing row stands.");
-            return true;
+            // Ask what actually happened rather than assuming.
+            //
+            // The case worth surviving is two registrations for one token racing - the app
+            // registers on launch and again on an auth change, and those can overlap. The unique
+            // index refuses the loser, but the winner wrote the row we wanted, so from the caller's
+            // point of view it succeeded.
+            //
+            // Every OTHER thing DbUpdateException wraps - a foreign key violation because the
+            // account went away mid-call, a truncation, a deadlock victim, a timeout - wrote
+            // nothing. This used to return true for all of them, which told the phone it was
+            // registered when it was not; the client then stops retrying and the device is dark
+            // forever, looking exactly like the two server-side gates being off. That is the
+            // wrong-diagnosis trap the push documentation exists to prevent.
+            //
+            // Re-reading answers it without inspecting provider-specific error numbers, and matches
+            // how ArtistFollowService settles the same kind of race.
+            context.ChangeTracker.Clear();
+
+            var winner = await context.PushDeviceTokens
+                .AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Token == token, cancellationToken);
+
+            if (winner is not null)
+            {
+                _logger.LogDebug(ex, "Concurrent push token registration; the existing row stands.");
+                return true;
+            }
+
+            _logger.LogError(ex, "Push token registration failed; no row was written.");
+            return false;
         }
     }
 

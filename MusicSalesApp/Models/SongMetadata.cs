@@ -226,10 +226,18 @@ public class SongMetadata
     /// be pulled and restored - and only the first moment it became publicly visible is a release.
     /// </para>
     /// <para>
-    /// Stamped exactly once, by the release-notification job, and never re-stamped. That is what
-    /// makes "do not notify on a draft, a re-crop, or a metadata edit" fall out for free instead
-    /// of needing a rule per case. Existing rows were backfilled from CreatedAt by the migration
-    /// that added this column.
+    /// Stamped exactly once, and never re-stamped. That is what makes "do not notify on a draft, a
+    /// re-crop, or a metadata edit" fall out for free instead of needing a rule per case.
+    /// </para>
+    /// <para>
+    /// Written by <c>SongPublicationStampInterceptor</c>, at the moment the song starts satisfying
+    /// the publicly-released filter. NOT by the release-notification job, which only sweeps up what
+    /// reached the column without a tracked SaveChanges - stamping there ran up to an hour late,
+    /// and everything downstream then reasoned about a publication time that never happened.
+    /// </para>
+    /// <para>
+    /// Existing rows were backfilled from CreatedAt by the migration that added this column, which
+    /// stamped drafts too; CorrectFirstPublishedBackfill clears the ones that were never public.
     /// </para>
     /// </remarks>
     public DateTime? FirstPublishedAtUtc { get; set; }

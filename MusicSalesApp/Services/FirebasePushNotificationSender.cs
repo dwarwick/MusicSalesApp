@@ -194,22 +194,63 @@ public sealed class FirebasePushNotificationSender : IPushNotificationSender
     /// </remarks>
     private PushDeliveryResult ClassifyFailure(string token, HttpStatusCode status, string body)
     {
+        var result = Classify(token, status, body);
+
+        switch (result.Outcome)
+        {
+            case PushDeliveryOutcome.TransportFailure:
+                _logger.LogWarning("Firebase push deferred ({Status}): {Body}", status, Truncate(body));
+                break;
+
+            case PushDeliveryOutcome.PermanentFailure:
+                _logger.LogWarning("Firebase push refused ({Status}): {Body}", status, Truncate(body));
+                break;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Which of the four outcomes an FCM error is, with no side effects.
+    /// </summary>
+    /// <remarks>
+    /// Internal and static so it can be tested: this class builds a real
+    /// <c>GoogleCredential</c> in its constructor, so nothing can drive it end to end without
+    /// service-account credentials. Same seam, for the same reason, as
+    /// <see cref="GooglePlayVerificationService.ResolveCredentialsPath"/>.
+    ///
+    /// <para>
+    /// The status code alone is never enough. A 400 is a malformed payload (our bug, keep the
+    /// token) or an invalid registration token (their device, drop it); a 404 is a dead token or a
+    /// wrong project id. Only the body separates each pair, and getting either wrong deactivates
+    /// devices wholesale the first time something is misconfigured.
+    /// </para>
+    /// </remarks>
+    internal static PushDeliveryResult Classify(string token, HttpStatusCode status, string body)
+    {
         var errorCode = TryReadErrorCode(body);
 
-        // UNREGISTERED: the app was uninstalled or the token was replaced.
-        // 404 on the message resource means the same thing for a token send.
-        if (string.Equals(errorCode, "UNREGISTERED", StringComparison.OrdinalIgnoreCase)
-            || status == HttpStatusCode.NotFound)
+        // UNREGISTERED: the app was uninstalled or the token was replaced. This is the ONLY thing
+        // that retires a token on a 404, and the code has to come from the body.
+        if (string.Equals(errorCode, "UNREGISTERED", StringComparison.OrdinalIgnoreCase))
         {
-            return new PushDeliveryResult(token, PushDeliveryOutcome.TokenRejected, errorCode ?? "UNREGISTERED");
+            return new PushDeliveryResult(token, PushDeliveryOutcome.TokenRejected, "UNREGISTERED");
+        }
+
+        if (status == HttpStatusCode.NotFound)
+        {
+            // A 404 WITHOUT that code is the Google API frontend saying the project path does not
+            // exist - which is what a wrong Push:Firebase:ProjectId produces on every send, since
+            // IsConfigured only checks that the setting is non-empty. Reading it as a dead token
+            // deactivated every device in the batch and settled its backlog, one run after a typo.
+            return new PushDeliveryResult(token, PushDeliveryOutcome.TransportFailure, errorCode ?? "NOT_FOUND");
         }
 
         // INVALID_ARGUMENT covers a bad token AND a bad payload. The body names the offending
         // field, so only blame the token when the token is what it named.
         if (string.Equals(errorCode, "INVALID_ARGUMENT", StringComparison.OrdinalIgnoreCase))
         {
-            return body.Contains("\"field\": \"message.token\"", StringComparison.OrdinalIgnoreCase)
-                   || body.Contains("registration token", StringComparison.OrdinalIgnoreCase)
+            return MentionsTokenField(body)
                 ? new PushDeliveryResult(token, PushDeliveryOutcome.TokenRejected, "INVALID_ARGUMENT (token)")
                 : new PushDeliveryResult(token, PushDeliveryOutcome.PermanentFailure, $"INVALID_ARGUMENT: {Truncate(body)}");
         }
@@ -220,12 +261,66 @@ public sealed class FirebasePushNotificationSender : IPushNotificationSender
             || status == HttpStatusCode.Forbidden
             || (int)status >= 500)
         {
-            _logger.LogWarning("Firebase push deferred ({Status}): {Body}", status, Truncate(body));
             return new PushDeliveryResult(token, PushDeliveryOutcome.TransportFailure, status.ToString());
         }
 
-        _logger.LogWarning("Firebase push refused ({Status}): {Body}", status, Truncate(body));
         return new PushDeliveryResult(token, PushDeliveryOutcome.PermanentFailure, Truncate(body));
+    }
+
+    /// <summary>
+    /// Whether an INVALID_ARGUMENT body blames the token rather than the rest of the payload.
+    /// </summary>
+    /// <remarks>
+    /// Read out of <c>error.details[].fieldViolations[].field</c> rather than matched as a
+    /// substring. The substring this replaced included the space after the colon, so it was really
+    /// asserting that Google pretty-prints its error bodies; a compact one would have fallen
+    /// through to PermanentFailure, which neither retries nor retires - leaving a token that can
+    /// never succeed to be retried on every run forever. The text check is kept as a fallback for a
+    /// body that is not JSON at all.
+    /// </remarks>
+    private static bool MentionsTokenField(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+
+            if (document.RootElement.TryGetProperty("error", out var error)
+                && error.TryGetProperty("details", out var details)
+                && details.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var detail in details.EnumerateArray())
+                {
+                    if (!detail.TryGetProperty("fieldViolations", out var violations)
+                        || violations.ValueKind != JsonValueKind.Array)
+                    {
+                        continue;
+                    }
+
+                    foreach (var violation in violations.EnumerateArray())
+                    {
+                        if (violation.TryGetProperty("field", out var field)
+                            && field.ValueKind == JsonValueKind.String
+                            && (field.GetString() ?? string.Empty)
+                                .Contains("token", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Fall through to the text check below.
+        }
+
+        return body.Contains("message.token", StringComparison.OrdinalIgnoreCase)
+               || body.Contains("registration token", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? TryReadErrorCode(string body)

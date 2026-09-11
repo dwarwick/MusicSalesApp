@@ -1,5 +1,6 @@
 #nullable enable
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Components.Pages.Admin;
@@ -55,6 +56,12 @@ public partial class AdminArtistMessagesModel : BlazorBase
                     : "Report rejected. The message stays visible to the listener."
                 : "That report could not be resolved.";
         }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // They left mid-resolve. An ordinary navigate-away is not an error, and there is nobody
+            // left to tell. It must not reach the Error sink - that is what emails the admin.
+            Logger.LogDebug(ex, "Report resolve stopped because the circuit went away.");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to resolve artist message report {MessageId}.", messageId);
@@ -75,6 +82,13 @@ public partial class AdminArtistMessagesModel : BlazorBase
         try
         {
             _reports = (await ArtistMessageModerationService.GetReportedMessagesAsync(_includeResolved)).ToList();
+        }
+        catch (Exception ex) when (CircuitTeardown.IsExpected(ex))
+        {
+            // They left while the report queue was still loading. An ordinary navigate-away is not
+            // an error, and there is nobody left to tell. It must not reach the Error sink - that is
+            // what emails the admin.
+            Logger.LogDebug(ex, "Report queue load stopped because the circuit went away.");
         }
         catch (Exception ex)
         {

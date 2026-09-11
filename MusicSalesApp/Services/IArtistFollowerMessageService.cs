@@ -38,8 +38,14 @@ public interface IArtistFollowerMessageService
     /// Whether this creator has any thank-yous left today, used to disable the button before it is
     /// pressed rather than explaining a refusal afterwards.
     /// </summary>
+    /// <remarks>
+    /// Takes the creator id and verifies ownership, like every other creator-facing read here.
+    /// Answers 0 for a persona the caller does not own, which reads as "no thank-yous left" and so
+    /// disables the button - failing closed rather than disclosing another creator's volume.
+    /// </remarks>
     Task<int> GetRemainingDailyThankYousAsync(
         int creatorPersonaId,
+        int creatorId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

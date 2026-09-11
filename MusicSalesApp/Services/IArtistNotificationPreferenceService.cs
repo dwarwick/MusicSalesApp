@@ -22,6 +22,39 @@ public interface IArtistNotificationPreferenceService
         int userId,
         ArtistNotificationPreferences preferences,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes ONLY the three email preferences /manage-account owns, leaving every other column on
+    /// the row alone. False when there is no such user.
+    /// </summary>
+    /// <remarks>
+    /// Exists because the alternative does not work. That page used to save through
+    /// <c>UserManager.UpdateAsync</c>, which does <c>Context.Update</c> and so marks every mapped
+    /// property Modified - writing the whole AspNetUsers row back from the snapshot the page loaded
+    /// when it opened. The columns it cannot see are the ones that suffer: the two phone push
+    /// preferences have no control there, so setting release push from the phone and then ticking
+    /// an email box on the web silently reverted it.
+    ///
+    /// <para>
+    /// Re-reading before the write does NOT fix that, which is worth recording because it looks
+    /// like it should. The page's user is already tracked by the circuit's scoped DbContext, so a
+    /// query for the same key hands back that tracked instance with its existing values rather than
+    /// refreshing them - stale ConcurrencyStamp included. The write then fails the concurrency check
+    /// with "Optimistic concurrency failure, object has been modified", and keeps failing, because
+    /// the stale instance lives as long as the circuit does.
+    /// </para>
+    ///
+    /// <para>
+    /// Writing the three columns directly sidesteps both: nothing else on the row is touched, so
+    /// there is nothing to revert and no stamp to disagree about.
+    /// </para>
+    /// </remarks>
+    Task<bool> SetEmailPreferencesAsync(
+        int userId,
+        bool receiveNewSongEmails,
+        bool receiveArtistReleaseEmails,
+        bool receiveArtistMessageEmails,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

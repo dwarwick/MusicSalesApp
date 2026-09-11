@@ -69,9 +69,30 @@ public class ArtistFollower
     public bool IsActive { get; set; } = true;
 
     /// <summary>
-    /// When the listener last unfollowed, or null if they never have.
+    /// When the listener last unfollowed, or null if they are not currently away. Cleared on a
+    /// re-follow, so it answers "are they gone, and since when" rather than keeping a history.
     /// </summary>
     public DateTime? UnfollowedDateUtc { get; set; }
+
+    /// <summary>
+    /// When the listener most recently came BACK, or null if they have never left.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FollowedDateUtc"/> deliberately survives an unfollow, because the creator's
+    /// "Following Since" column is about the start of the relationship. That makes it the wrong
+    /// field for "were they following when this came out": a listener who followed in January,
+    /// left in February and came back in March would be told about a release from while they were
+    /// away, because January still predates it. This column is what the release job asks instead.
+    /// </remarks>
+    public DateTime? ResumedFollowingDateUtc { get; set; }
+
+    /// <summary>
+    /// The point from which this listener counts as following - the later of first following and
+    /// most recently coming back. Not mapped; the release job needs the same rule in SQL and
+    /// writes it out, and this is here so callers in memory cannot get it wrong either.
+    /// </summary>
+    [NotMapped]
+    public DateTime EffectiveFollowedDateUtc => ResumedFollowingDateUtc ?? FollowedDateUtc;
 
     /// <summary>
     /// Per-artist mute for new-release notifications. Lets a listener stay a follower while going

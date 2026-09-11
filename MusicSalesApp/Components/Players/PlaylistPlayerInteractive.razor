@@ -96,10 +96,20 @@ else
                         @*
                             /artist/{name} and /creator/{id} are the only artist pages this site
                             has, so this hero is where Follow belongs. It renders nothing when the
-                            page's tracks carry no persona - there is no artist entity to follow.
+                            page's tracks carry no persona - there is no artist entity to follow -
+                            and nothing on your own artist page.
+
+                            It also renders nothing on /creator/{id}, which is the case worth
+                            explaining. The bell reads the CURRENT TRACK's persona, which on
+                            /artist/{name} is the page's one artist and never moves. A creator page
+                            lists one creator's whole catalogue, which can span several personas, so
+                            there the target artist and the follower count changed as playback
+                            advanced - a listener who saw "1.2K followers" and clicked Follow got
+                            whichever persona happened to be playing, and the bell then reset to
+                            unfilled when the next track started under a different one. Following
+                            "this artist" is not a question that page can ask, so it does not.
                         *@
-                        @* Nothing to follow on your own artist page. *@
-                        <FollowArtistButton CreatorPersonaId="@(IsOwnArtistPage() ? 0 : persona?.Id ?? 0)"
+                        <FollowArtistButton CreatorPersonaId="@(FollowablePersonaId(persona))"
                                             PersonaName="@artistName"
                                             SourceSongMetadataId="@GetCurrentTrackMetadata()?.Id"
                                             ShowFollowerCount="true" />

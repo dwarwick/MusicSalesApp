@@ -62,6 +62,21 @@ public sealed class ArtistFollowTestHarness : IDisposable
 
     public AppDbContext NewContext() => new(Options);
 
+    /// <summary>
+    /// A context carrying SongPublicationStampInterceptor, the way Program.cs registers it on both
+    /// DbContext registrations.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="NewContext"/> on purpose: the seeding helpers set
+    /// FirstPublishedAtUtc by hand to stand in for back catalogue, and an interceptor watching
+    /// those writes would stamp them with the current time instead.
+    /// </remarks>
+    public AppDbContext NewContextWithPublicationStamp() =>
+        new(new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_connection)
+            .AddInterceptors(new SongPublicationStampInterceptor())
+            .Options);
+
     private void Seed(AppDbContext context)
     {
         // Sqlite enforces the foreign keys the InMemory provider ignores, so every referenced row

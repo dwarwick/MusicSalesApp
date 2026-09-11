@@ -33,30 +33,25 @@ public class ArtistFollowerDirectoryService : IArtistFollowerDirectoryService
     }
 
     /// <summary>
-    /// The public artist name of a follower who is themselves a creator, or null for an ordinary
-    /// listener - in which case the caller falls back to the pseudonym.
+    /// The name a follower chose to be seen under for this follow, or null - in which case the
+    /// caller falls back to the pseudonym.
     /// </summary>
     /// <remarks>
-    /// Persona first, then the creator display name, mirroring the first two links of
-    /// <c>SongMetadata.GetEffectiveArtistName()</c>.
+    /// <b>There is exactly one link in this chain, deliberately.</b> It used to mirror the first
+    /// two links of <c>SongMetadata.GetEffectiveArtistName()</c>, falling back to the creator's
+    /// display name - but that chain answers "what shall we credit this song to", where any
+    /// reasonable name beats none. This one answers "may we tell an artist who you are", where the
+    /// absence of a chosen name IS the answer. Falling back was how a follower who chose Anonymous
+    /// came to be named.
     ///
     /// <para>
-    /// <b>It stops there deliberately.</b> That chain has a third link - the creator's email with
-    /// the domain stripped - which is fine for a public song credit the account holder chose to
-    /// publish under, and completely wrong here: it would put a fragment of a follower's email
-    /// address in front of an artist, which is the one thing this whole feature promises never to
-    /// do. A creator with no persona and no display name stays a pseudonym.
+    /// The same reasoning already ruled out that chain's third link, the creator's email with the
+    /// domain stripped: it would put a fragment of a follower's email address in front of an
+    /// artist, which is the one thing this whole feature promises never to do.
     /// </para>
     /// </remarks>
-    private static string? ResolveFollowerArtistName(string? personaName, string? creatorDisplayName)
-    {
-        if (!string.IsNullOrWhiteSpace(personaName))
-        {
-            return personaName;
-        }
-
-        return string.IsNullOrWhiteSpace(creatorDisplayName) ? null : creatorDisplayName;
-    }
+    private static string? ResolveFollowerArtistName(string? personaName) =>
+        string.IsNullOrWhiteSpace(personaName) ? null : personaName;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<ArtistFollowerSummaryDto>?> GetFollowersAsync(
@@ -103,13 +98,22 @@ public class ArtistFollowerDirectoryService : IArtistFollowerDirectoryService
                     : follow.SourceSongMetadata.BlobPath,
 
                 // A follower who is themselves an artist is shown under the name they already
-                // publish as, rather than a pseudonym. Both of these are public today - a persona
-                // name appears on every song card, and a creator display name is what the artist
-                // chain falls back to - so neither discloses anything new about the account.
+                // publish as, rather than a pseudonym. A persona name appears on every song card,
+                // so it discloses nothing new about the account - but only the person it belongs to
+                // gets to decide that it appears HERE.
                 //
-                // Both are gated on the identity being publicly live RIGHT NOW: an inactive
-                // creator or a suspended account is not publishing under that name any more, and
-                // falls back to the pseudonym.
+                // This is the ONLY branch that can put a name on a follower. There used to be a
+                // second one, falling back to the creator's display name for a consenting creator
+                // with no enabled personas, and it was a leak: it never looked at FollowAsPersonaId,
+                // so it named a follower who had deliberately chosen Anonymous the moment they
+                // happened to disable their last persona - an identity change triggered by an
+                // action that had nothing to do with consent. It also named a creator with no
+                // personas at all, who is never shown the dialog and so never chose anything. A
+                // follower with no chosen persona is a pseudonym, full stop.
+                //
+                // It is gated on the identity being publicly live RIGHT NOW: an inactive creator or
+                // a suspended account is not publishing under that name any more, and falls back to
+                // the pseudonym.
                 // Every clause is required for a name to appear, and each one is a different way
                 // for the answer to be "stay anonymous":
                 //   - the follower picked this identity for THIS follow (FollowAsPersonaId)
@@ -125,19 +129,6 @@ public class ArtistFollowerDirectoryService : IArtistFollowerDirectoryService
                                       && persona.Creator.RevealPersonaToFollowedArtists
                                       && (persona.Creator.User == null || !persona.Creator.User.IsSuspended))
                     .Select(persona => persona.Name)
-                    .FirstOrDefault(),
-
-                // The no-persona case: a consenting creator who publishes under their display
-                // name. Guarded on having no personas at all, so a creator WITH personas who
-                // simply followed anonymously is not named by this back door.
-                FollowerCreatorDisplayName = context.Creators
-                    .Where(creator => creator.UserId == follow.ListenerUserId
-                                      && creator.IsActive
-                                      && creator.RevealPersonaToFollowedArtists
-                                      && (creator.User == null || !creator.User.IsSuspended)
-                                      && !context.CreatorPersonas.Any(persona =>
-                                             persona.CreatorId == creator.Id && persona.IsEnabled))
-                    .Select(creator => creator.DisplayName)
                     .FirstOrDefault(),
             })
             .ToListAsync(cancellationToken);
@@ -167,8 +158,7 @@ public class ArtistFollowerDirectoryService : IArtistFollowerDirectoryService
         {
             var lastMessage = lastMessageByFollower.GetValueOrDefault(follow.Id);
 
-            var artistName = ResolveFollowerArtistName(
-                follow.FollowerPersonaName, follow.FollowerCreatorDisplayName);
+            var artistName = ResolveFollowerArtistName(follow.FollowerPersonaName);
 
             return new ArtistFollowerSummaryDto(
                 follow.Id,

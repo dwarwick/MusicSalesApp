@@ -146,8 +146,12 @@ public class ArtistPushDispatchServiceTests
     }
 
     [Test]
-    public async Task Dispatch_SkipsAListenerWhoTurnedPushOffButStopsReconsideringThem()
+    public async Task Dispatch_LeavesARowPendingForAListenerWhoHasPushOff()
     {
+        // The documented contract, in both repos: the per-listener preference is a reversible gate,
+        // so it must NOT consume the notification. This used to stamp the row, and since both push
+        // preferences default off for every account, that meant every row was settled within five
+        // minutes of being created - opting in later delivered nothing that had already happened.
         await FollowWithDeviceAsync();
 
         await using (var context = _harness.NewContext())
@@ -169,9 +173,93 @@ public class ArtistPushDispatchServiceTests
         {
             Assert.That(delivered, Is.Zero);
             Assert.That(_sender.Sent, Is.Empty);
+            Assert.That(
+                notification.PushSentDateUtc,
+                Is.Null,
+                "Switching push on later has to deliver this, not find it already settled.");
+        });
+    }
 
-            // Stamped anyway, or the job re-examines this row every five minutes forever.
-            Assert.That(notification.PushSentDateUtc, Is.Not.Null);
+    [Test]
+    public async Task Dispatch_DeliversTheBacklogWhenTheListenerOptsInLater()
+    {
+        // The other half of the same rule, end to end: the row survives a run made while push was
+        // off, and goes out on the first run after it is switched on.
+        await FollowWithDeviceAsync();
+
+        await using (var off = _harness.NewContext())
+        {
+            var user = await off.Users.SingleAsync(u => u.Id == _harness.ListenerUserId);
+            user.ReceiveArtistReleasePush = false;
+            await off.SaveChangesAsync();
+        }
+
+        _harness.AddSong("Ocean Road");
+        await _releaseService.CreatePendingNotificationsAsync();
+        await _service.DispatchPendingAsync();
+
+        await using (var on = _harness.NewContext())
+        {
+            var user = await on.Users.SingleAsync(u => u.Id == _harness.ListenerUserId);
+            user.ReceiveArtistReleasePush = true;
+            await on.SaveChangesAsync();
+        }
+
+        var delivered = await _service.DispatchPendingAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(delivered, Is.EqualTo(1));
+            Assert.That(_sender.Sent, Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task Dispatch_SettlesAndDoesNotSendOnceTheListenerHasBlockedTheArtist()
+    {
+        // A standing refusal, so the opposite of the two above: the listener has said stop, and
+        // unblocking must not then deliver what happened while they were blocked.
+        //
+        // The release path never re-read the follow at all - it hardcoded Muted and IsBlocked to
+        // false - so a push went out up to a day after a block that the UI promised would stop it.
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        await _releaseService.CreatePendingNotificationsAsync();
+
+        await _followService.SetBlockedAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        var delivered = await _service.DispatchPendingAsync();
+
+        await using var verify = _harness.NewContext();
+        var notification = await verify.ArtistReleaseNotifications.SingleAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(delivered, Is.Zero);
+            Assert.That(_sender.Sent, Is.Empty);
+            Assert.That(notification.PushSentDateUtc, Is.Not.Null, "Blocking settles it, it does not defer it.");
+        });
+    }
+
+    [Test]
+    public async Task Dispatch_DoesNotSendAReleaseTheListenerHasMuted()
+    {
+        await FollowWithDeviceAsync();
+        _harness.AddSong("Ocean Road");
+        await _releaseService.CreatePendingNotificationsAsync();
+
+        await _followService.SetArtistNotificationPreferencesAsync(
+            _harness.PersonaId,
+            _harness.ListenerUserId,
+            releaseNotificationsEnabled: false,
+            artistMessagesEnabled: null);
+
+        var delivered = await _service.DispatchPendingAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(delivered, Is.Zero);
+            Assert.That(_sender.Sent, Is.Empty);
         });
     }
 
@@ -180,6 +268,17 @@ public class ArtistPushDispatchServiceTests
     {
         // Wants push, has no phone. There is nothing to wait for, so the row must not sit pending.
         await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
+
+        // Said explicitly, because both preferences default off and an opted-out row is now left
+        // pending rather than settled - so without this the assertion below would pass or fail for
+        // the wrong reason entirely.
+        await using (var optIn = _harness.NewContext())
+        {
+            var user = await optIn.Users.SingleAsync(u => u.Id == _harness.ListenerUserId);
+            user.ReceiveArtistReleasePush = true;
+            await optIn.SaveChangesAsync();
+        }
+
         _harness.AddSong("Ocean Road");
         await _releaseService.CreatePendingNotificationsAsync();
 

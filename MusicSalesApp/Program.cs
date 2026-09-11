@@ -106,12 +106,19 @@ try
 
     builder.Services.Configure<MobileAppInstallOptions>(builder.Configuration.GetSection("MobileAppInstall"));
 
+    // Stateless, so one instance serves both registrations below. It has to be on BOTH: songs are
+    // published through the scoped context and through factory-created ones alike, and a song that
+    // went public through the registration without it would never be stamped.
+    var songPublicationStamp = new SongPublicationStampInterceptor();
+
     builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+            .AddInterceptors(songPublicationStamp));
 
     // Add DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
     builder.Services.AddDbContextFactory<AppDbContext>(options =>
-        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")), ServiceLifetime.Scoped);
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+            .AddInterceptors(songPublicationStamp), ServiceLifetime.Scoped);
 
     builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
     {

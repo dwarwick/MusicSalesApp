@@ -286,9 +286,11 @@ public class ArtistFollowerDirectoryServiceTests
     }
 
     [Test]
-    public async Task GetFollowers_FallsBackToTheCreatorDisplayNameWhenThereIsNoPersona()
+    public async Task GetFollowers_NeverFallsBackToTheCreatorDisplayName()
     {
-        // The same chain a song credit uses: persona first, then the creator display name.
+        // A consenting creator with no persona is never shown the "Follow as" dialog, so they have
+        // chosen nothing - and this used to name them anyway, off the account-level consent flag
+        // alone. It never looked at FollowAsPersonaId.
         await MakeListenerAConsentingArtistAsync(personaName: null, creatorDisplayName: "Jane");
         await _followService.SetFollowStateAsync(_harness.PersonaId, _harness.ListenerUserId, true);
 
@@ -296,8 +298,41 @@ public class ArtistFollowerDirectoryServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(followers![0].DisplayName, Is.EqualTo("Jane"));
-            Assert.That(followers[0].IsIdentifiedArtist, Is.True);
+            Assert.That(followers![0].DisplayName, Does.StartWith("Listener #"));
+            Assert.That(followers[0].IsIdentifiedArtist, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task GetFollowers_KeepsAnAnonymousFollowAnonymousAfterTheLastPersonaIsDisabled()
+    {
+        // The leak this closes, in the order it happened: a creator with consent on deliberately
+        // picks Anonymous, then months later disables their last persona for unrelated reasons -
+        // and the row flipped from "Listener #4817" to their real name, because the fallback was
+        // gated on "has no enabled personas" and evaluated at READ time.
+        await MakeListenerAConsentingArtistAsync(personaName: "Jane Echo", creatorDisplayName: "Jane");
+
+        await _followService.SetFollowStateAsync(
+            _harness.PersonaId, _harness.ListenerUserId, true, null, followAsPersonaId: null);
+
+        await using (var context = _harness.NewContext())
+        {
+            foreach (var persona in await context.CreatorPersonas
+                         .Where(p => p.Creator.UserId == _harness.ListenerUserId)
+                         .ToListAsync())
+            {
+                persona.IsEnabled = false;
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        var followers = await _service.GetFollowersAsync(_harness.PersonaId, _harness.CreatorId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(followers![0].DisplayName, Does.StartWith("Listener #"));
+            Assert.That(followers[0].IsIdentifiedArtist, Is.False);
         });
     }
 

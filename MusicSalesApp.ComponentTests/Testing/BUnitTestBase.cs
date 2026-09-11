@@ -163,6 +163,17 @@ public abstract class BUnitTestBase
         MockArtistFollowerAnalyticsService = new Mock<IArtistFollowerAnalyticsService>();
         MockArtistMessageModerationService = new Mock<IArtistMessageModerationService>();
         MockArtistNotificationPreferenceService = new Mock<IArtistNotificationPreferenceService>();
+
+        // Manage Account saves its email preferences through this rather than UserManager, so the
+        // default has to be "it saved" or every test touching that card reads as a failed save.
+        MockArtistNotificationPreferenceService
+            .Setup(service => service.SetEmailPreferencesAsync(
+                It.IsAny<int>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
         MockAdminNotificationService = new Mock<IAdminNotificationService>();
         MockAdminMessageService = new Mock<IAdminMessageService>();
         MockAdminMessageHubClient = new Mock<IAdminMessageHubClient>();

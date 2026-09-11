@@ -41,7 +41,7 @@
             <NotAuthorized>
                 <button type="button"
                         class="follow-artist-bell"
-                        @onclick="ShowLoginDialogAsync"
+                        @onclick="ShowLoginDialog"
                         @onclick:stopPropagation="true"
                         title="@($"Follow {PersonaName}")"
                         aria-label="@($"Follow {PersonaName}")">
@@ -105,7 +105,14 @@
             </DialogButtons>
         </SfDialog>
 
-        <SfDialog @ref="_loginDialog" Width="400px" IsModal="true" Visible="false" CssClass="settings-dialog">
+        @*
+            Bound, not @ref'd. Lazily rendering a dialog and then calling ShowAsync on its reference
+            in the same handler cannot work: inside an event handler StateHasChanged only queues a
+            render and InvokeAsync completes synchronously, so the reference is still null and the
+            first click was swallowed. Binding a flag needs no reference at all, which is what the
+            "Follow as" dialog above already does.
+        *@
+        <SfDialog @bind-Visible="_showLoginDialog" Width="400px" IsModal="true" CssClass="settings-dialog">
         <DialogTemplates>
             <Header>Log in to follow</Header>
             <Content>
@@ -113,8 +120,8 @@
             </Content>
         </DialogTemplates>
         <DialogButtons>
-            <DialogButton Content="Go to Login" IsPrimary="true" OnClick="NavigateToLoginAsync" />
-                <DialogButton Content="Cancel" OnClick="CloseLoginDialogAsync" />
+            <DialogButton Content="Go to Login" IsPrimary="true" OnClick="NavigateToLogin" />
+                <DialogButton Content="Cancel" OnClick="CloseLoginDialog" />
             </DialogButtons>
         </SfDialog>
     }

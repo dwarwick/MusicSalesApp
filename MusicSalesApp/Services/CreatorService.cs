@@ -281,12 +281,19 @@ public class CreatorService : ICreatorService
 
         var wasRevealing = creator.RevealPersonaToFollowedArtists;
         creator.RevealPersonaToFollowedArtists = reveal;
-        await context.SaveChangesAsync(cancellationToken);
 
         if (wasRevealing && !reveal)
         {
-            await RotateAnonymousNumbersAsync(context, creator.UserId, cancellationToken);
+            RotateAnonymousNumbers(
+                await LoadRevealedFollowsAsync(context, creator.UserId, cancellationToken));
         }
+
+        // ONE save, so the flag and the renumbering land together or neither does. They used to be
+        // two, with no transaction: the flag committed first, then a rotation that can genuinely
+        // throw - the pseudonym index can refuse a number a concurrent follow has just taken - left
+        // the page saying "We could not save that" while the withdrawal had in fact taken effect,
+        // and left the stale numbers the rotation exists to break.
+        await context.SaveChangesAsync(cancellationToken);
 
         return true;
     }
@@ -311,18 +318,24 @@ public class CreatorService : ICreatorService
     /// support apart for this person. That is the trade the listener asked for by withdrawing.
     /// </para>
     /// </remarks>
-    private static async Task RotateAnonymousNumbersAsync(
+    /// <remarks>
+    /// Reads only the follows that could actually have shown a name - the ones carrying a chosen
+    /// persona. Rotating every follow renumbered relationships that were ALWAYS anonymous, which
+    /// costs the followed artist their view of repeat support and buys the listener nothing: there
+    /// was no name in those rows to break continuity with.
+    /// </remarks>
+    private static async Task<List<(ArtistFollower Follow, HashSet<int> Taken)>> LoadRevealedFollowsAsync(
         AppDbContext context,
         int listenerUserId,
         CancellationToken cancellationToken)
     {
         var follows = await context.ArtistFollowers
-            .Where(follow => follow.ListenerUserId == listenerUserId)
+            .Where(follow => follow.ListenerUserId == listenerUserId && follow.FollowAsPersonaId != null)
             .ToListAsync(cancellationToken);
 
         if (follows.Count == 0)
         {
-            return;
+            return [];
         }
 
         // Numbers are unique per persona, so each follow is renumbered against its own artist's
@@ -338,14 +351,24 @@ public class CreatorService : ICreatorService
                 group => group.Key,
                 group => group.Select(row => row.AnonymousListenerNumber).ToHashSet());
 
+        return follows
+            .Select(follow => (
+                follow,
+                takenByPersona.TryGetValue(follow.CreatorPersonaId, out var set) ? set : []))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Applies the new numbers in memory. The caller saves, so this cannot commit half a
+    /// withdrawal.
+    /// </summary>
+    private static void RotateAnonymousNumbers(
+        List<(ArtistFollower Follow, HashSet<int> Taken)> follows)
+    {
         var identityService = new ArtistFollowerIdentityService();
 
-        foreach (var follow in follows)
+        foreach (var (follow, taken) in follows)
         {
-            var taken = takenByPersona.TryGetValue(follow.CreatorPersonaId, out var set)
-                ? set
-                : [];
-
             var replacement = identityService.AllocateNumber(taken);
             taken.Add(replacement);
 
@@ -357,8 +380,6 @@ public class CreatorService : ICreatorService
             // deliberate re-follow rather than silently restoring names.
             follow.FollowAsPersonaId = null;
         }
-
-        await context.SaveChangesAsync(cancellationToken);
     }
 
     /// <inheritdoc />

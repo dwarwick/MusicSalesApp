@@ -570,6 +570,32 @@ namespace MusicSalesApp.Components.Players
 
         protected bool IsArtistTreatment() => _isArtistMode || _isCreatorMode;
 
+        /// <summary>
+        /// The persona the hero Follow bell should target, or 0 for "offer nothing".
+        /// </summary>
+        /// <remarks>
+        /// Zero means absent, which is the answer in three different situations: the tracks carry
+        /// no persona at all, the page is your own artist page, or the page is /creator/{id}.
+        ///
+        /// <para>
+        /// The last is the subtle one. This bell follows the CURRENT TRACK's persona, which on
+        /// /artist/{name} is the page's single artist and cannot change. A creator page lists one
+        /// creator's catalogue across however many personas they publish under, so there the bell's
+        /// target and its follower count moved as playback advanced - with nothing on screen to
+        /// explain why the count changed or why a bell the listener had just filled came back
+        /// unfilled. Per-card bells on the track list remain the way to follow from that page.
+        /// </para>
+        /// </remarks>
+        protected int FollowablePersonaId(CreatorPersona persona)
+        {
+            if (_isCreatorMode || IsOwnArtistPage())
+            {
+                return 0;
+            }
+
+            return persona?.Id ?? 0;
+        }
+
         /// <summary>The chip above the title, naming what kind of listing this is.</summary>
         protected string GetModeLabel()
         {
