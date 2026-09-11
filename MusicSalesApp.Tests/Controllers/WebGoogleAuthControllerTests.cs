@@ -120,9 +120,60 @@ public class WebGoogleAuthControllerTests
 
         var challenge = result as ChallengeResult;
         Assert.That(challenge, Is.Not.Null);
-        Assert.That(challenge!.AuthenticationSchemes, Does.Contain(ExternalLoginProviders.Google));
+        Assert.That(challenge!.AuthenticationSchemes, Does.Contain(GoogleAuthSchemes.Web));
         Assert.That(redirectUrl, Is.Not.Empty);
         Assert.That(redirectUrl, Does.Not.Contain(ExternalAuthFormFields.RegistrationIntentToken));
+    }
+
+    [Test]
+    public void StartLogin_ChallengesTheWebScheme_ButStillRecordsGoogleAsTheLoginProvider()
+    {
+        // The regression test for the scheme split, and the reason it exists.
+        //
+        // The scheme only picks the handler - and so the callback path and what happens when
+        // sign-in fails. The PROVIDER is what SignInManager stores in the auth properties and
+        // GetExternalLoginInfoAsync hands back as info.LoginProvider, which is the key in
+        // AspNetUserLogins. If the scheme name ever leaks into that argument, FindByLoginAsync
+        // starts missing every account that has signed in with Google before, and the callback
+        // silently creates a duplicate account instead of recognising a returning user.
+        _mockSignInManager.Setup(x => x.ConfigureExternalAuthenticationProperties(
+                ExternalLoginProviders.Google,
+                It.IsAny<string>(),
+                null))
+            .Returns(new AuthenticationProperties());
+
+        var result = _controller.StartLogin(AppPageRoutes.CreatorSettings);
+
+        var challenge = result as ChallengeResult;
+        Assert.Multiple(() =>
+        {
+            Assert.That(challenge, Is.Not.Null);
+            Assert.That(challenge!.AuthenticationSchemes, Does.Contain(GoogleAuthSchemes.Web));
+            Assert.That(challenge.AuthenticationSchemes, Does.Not.Contain(ExternalLoginProviders.Google));
+        });
+
+        // The two names are different strings, so the assertion above is only half the story:
+        // this is what proves the stored provider did not move with the scheme.
+        _mockSignInManager.Verify(
+            x => x.ConfigureExternalAuthenticationProperties(
+                ExternalLoginProviders.Google,
+                It.IsAny<string>(),
+                null),
+            Times.Once);
+    }
+
+    [Test]
+    public void WebAndMobileSchemes_AreDistinct_AndMobileKeepsTheOriginalName()
+    {
+        // Mobile deliberately keeps both the old scheme name and the old callback path, so already
+        // released MAUI builds and the redirect URI already registered with Google keep working.
+        Assert.Multiple(() =>
+        {
+            Assert.That(GoogleAuthSchemes.Web, Is.Not.EqualTo(GoogleAuthSchemes.Mobile));
+            Assert.That(GoogleAuthSchemes.Mobile, Is.EqualTo(ExternalLoginProviders.Google));
+            Assert.That(GoogleAuthSchemes.MobileCallbackPath, Is.EqualTo("/signin-google-mobile"));
+            Assert.That(GoogleAuthSchemes.WebCallbackPath, Is.Not.EqualTo(GoogleAuthSchemes.MobileCallbackPath));
+        });
     }
 
     [Test]

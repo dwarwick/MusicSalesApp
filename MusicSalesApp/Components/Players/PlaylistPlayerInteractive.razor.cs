@@ -102,6 +102,12 @@ namespace MusicSalesApp.Components.Players
         private DotNetObjectReference<PlaylistPlayerInteractiveModel> _dotNetRef;
         private bool invokedJs = false;
 
+        /// <summary>
+        /// Set once <see cref="DisposeAsync"/> has begun, so work still in flight can stop rather
+        /// than reach for a module that is being torn down underneath it.
+        /// </summary>
+        private bool _disposed;
+
         private bool _hasLoadedData = false;
         protected bool _tipReturnHandled;
         protected bool IsProcessingTipReturn => !string.IsNullOrEmpty(TipStatus) && !_tipReturnHandled;
@@ -402,31 +408,62 @@ namespace MusicSalesApp.Components.Players
             }
 
             // Initialize JS after data is loaded and the content (including audio element) is rendered
-            if (!invokedJs && !_loading && !IsProcessingTipReturn && _playlistInfo != null && _playlistInfo.Tracks.Any())
+            try
             {
-                invokedJs = true;
-                _dotNetRef = DotNetObjectReference.Create(this);
-                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/PlaylistPlayerInteractive.razor.js");
-
-                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds(), GetTrackLengthSeconds(_currentTrackIndex) ?? 0);
-                await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
-                await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
-
-                // Load saved volume from localStorage
-                var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
-                _volume = savedVolume;
-                _previousVolume = savedVolume;
-
-                // Ensure an initial track source is set for the audio element
-                if (!string.IsNullOrWhiteSpace(_streamUrl))
+                if (!invokedJs && !_loading && !IsProcessingTipReturn && _playlistInfo != null && _playlistInfo.Tracks.Any())
                 {
-                    await _jsModule.InvokeVoidAsync("setTrackSource", _audioElement, _streamUrl);
+                    invokedJs = true;
+                    _dotNetRef = DotNetObjectReference.Create(this);
+
+                    // Held in a local for the rest of the block. Five browser round trips follow, and
+                    // DisposeAsync nulls the field the moment the visitor leaves - so re-reading it
+                    // between awaits would trade this race for a NullReferenceException.
+                    var module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/PlaylistPlayerInteractive.razor.js");
+                    if (_disposed)
+                    {
+                        // DisposeAsync has already run, so it never saw this module. Release it here
+                        // or the import leaks for the life of the circuit - the component is gone,
+                        // but the circuit that owns the browser-side reference map is not.
+                        await module.DisposeAsync();
+                        return;
+                    }
+
+                    _jsModule = module;
+
+                    await module.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds(), GetTrackLengthSeconds(_currentTrackIndex) ?? 0);
+                    await module.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
+                    await module.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
+                    if (_disposed) return;
+
+                    // Load saved volume from localStorage
+                    var savedVolume = await module.InvokeAsync<double>("getSavedVolume");
+                    _volume = savedVolume;
+                    _previousVolume = savedVolume;
+
+                    // Ensure an initial track source is set for the audio element
+                    if (!string.IsNullOrWhiteSpace(_streamUrl))
+                    {
+                        await module.InvokeVoidAsync("setTrackSource", _audioElement, _streamUrl);
+                    }
+
+                    await InvokeAsync(StateHasChanged);
                 }
 
-                await InvokeAsync(StateHasChanged);
+                await RefreshCurrentTrackLyricsAsync();
             }
-
-            await RefreshCurrentTrackLyricsAsync();
+            catch (Exception ex) when (_disposed || CircuitTeardown.IsExpected(ex))
+            {
+                // Once disposal has run, any failure from this block is teardown, whatever type it
+                // arrives as - which is what the _disposed arm buys over enumerating exception types.
+                // CircuitTeardown.IsExpected deliberately does not match ObjectDisposedException
+                // naming JSObjectReference, because outside this race that is a genuine bug.
+                Logger.LogDebug(ex, "Playlist player initialisation stopped because the component went away.");
+            }
+            catch (Exception ex)
+            {
+                // Unguarded, this reached CircuitHost and destroyed the circuit on 2026-09-05 21:43.
+                Logger.LogError(ex, "Playlist player initialisation failed.");
+            }
         }
 
         /// <summary>
@@ -589,6 +626,10 @@ namespace MusicSalesApp.Components.Players
 
         public async ValueTask DisposeAsync()
         {
+            // Set first, so anything still awaiting in OnAfterRenderAsync stops instead of reaching
+            // for the module disposed below.
+            _disposed = true;
+
             // Unsubscribe from stream count updates (local)
             if (_streamCountUpdatedHandler != null)
             {
@@ -613,6 +654,10 @@ namespace MusicSalesApp.Components.Players
                     // outlive the bars - and in a Blazor SPA nothing unloads the page to collect them.
                     await _jsModule.InvokeVoidAsync("disposeBarDrags", _progressBarContainer, _volumeBarContainer);
                     await _jsModule.DisposeAsync();
+
+                    // Nulled, not just disposed: every `if (_jsModule != null)` guard in this file is
+                    // worthless against a disposed-but-non-null reference.
+                    _jsModule = null;
                 }
             }
             catch (Exception ex) when (CircuitTeardown.IsExpected(ex))

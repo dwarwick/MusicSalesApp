@@ -984,14 +984,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxImageFileSize, initialUploadItem, initialUploadProgress);
             }
         }
-        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        catch (Exception ex) when (ex is InvalidDataException or IOException
+            || BrowserFileTransfer.IsFileNoLongerReadable(ex))
         {
             // IOException is caught alongside the incomplete-transfer case as a backstop. The size
             // check above should mean OpenReadStream never trips its own limit, but anything else
             // that faults mid-stream - a dropped circuit, a full temp disk - used to escape this
             // handler entirely and kill the page rather than reporting a failed batch.
+            //
+            // NotReadableError is here for exactly that reason: it arrives as
+            // InvalidOperationException, so it matched neither this filter nor the JSException one
+            // below, and would have escaped the handler and destroyed the circuit.
             Logger.LogWarning(ex, "UploadFiles: File transfer was incomplete.");
-            _validationErrorMessage = "No files were uploaded. The upload was interrupted before it finished — please try again.";
+            _validationErrorMessage = BrowserFileTransfer.IsFileNoLongerReadable(ex)
+                ? BrowserFileTransfer.UserMessage
+                : "No files were uploaded. The upload was interrupted before it finished — please try again.";
             _isUploading = false;
             _initialUploadItems.Clear();
             _initialUploadStatusMessage = string.Empty;
@@ -1677,6 +1684,27 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// reporting a problem - which would punish a mis-click by destroying a good pairing.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Reports a cover-art failure on the row it belongs to, falling back to the page-level alert.
+    ///
+    /// <para>
+    /// The fallback matters: <c>_rowCoverArtTargetItem</c> is cleared when a new batch is selected,
+    /// so the row can be gone by the time the failure arrives. Without this the dialog simply
+    /// appeared to do nothing.
+    /// </para>
+    /// </summary>
+    private void SetCoverArtFailure(UploadPairItem item, string message)
+    {
+        if (item is not null)
+        {
+            item.CoverArtError = message;
+        }
+        else
+        {
+            _validationErrorMessage = message;
+        }
+    }
+
     protected async Task HandleRowCoverArtSelected(InputFileChangeEventArgs e)
     {
         // Same guard, and the same reason, as HandleFileSelected: a second change event invalidates
@@ -1698,14 +1726,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // references, and everything below either reads this file or reports why it did not.
             await ApplyBrowsedCoverArtAsync(item, e.File);
         }
+        catch (Exception ex) when (BrowserFileTransfer.IsFileNoLongerReadable(ex))
+        {
+            // The browser revoked the file handle after the change event. Not a server fault, so
+            // Warning rather than Error - at Error this emailed the admin on 2026-09-07 - and the
+            // message has to say re-select, because retrying the same dead handle fails identically.
+            Logger.LogWarning(ex, "UploadFiles: the browser could not read the chosen cover art.");
+            SetCoverArtFailure(item, BrowserFileTransfer.UserMessage);
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "UploadFiles: could not attach browsed cover art to a review row.");
-
-            if (item is not null)
-            {
-                item.CoverArtError = "That image could not be added. Please try again.";
-            }
+            SetCoverArtFailure(item, "That image could not be added. Please try again.");
         }
         finally
         {
@@ -1760,13 +1792,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
         }
 
+        // Registered before the buffering, not just before the decode: GetTempFileName creates the
+        // file on disk, so a transfer that fails midway leaves it behind unless cleanup already
+        // knows about it. A file that turns out not to be an image is covered by the same ordering.
         var tempPath = Path.GetTempFileName();
+        _pendingTempFiles.Add(tempPath);
+
         await BufferBrowserFileToTempFileAsync(
             file, tempPath, _maxImageFileSize, progressItem: null, new InitialUploadProgressState());
-
-        // Registered before the decode, so a file that turns out not to be an image is still cleaned
-        // up with the batch rather than left behind on the server.
-        _pendingTempFiles.Add(tempPath);
 
         await using (var probe = new FileStream(
             tempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))

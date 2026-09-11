@@ -5,6 +5,7 @@ using Hangfire.Dashboard;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -185,13 +186,77 @@ try
     var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
     if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
     {
-        authenticationBuilder.AddGoogle(ExternalLoginProviders.Google, options =>
+        // Two schemes, one Google client. They differ only in callback path and in where a failure
+        // is sent - see GoogleAuthSchemes for why the split exists at all.
+        //
+        // Note the provider name recorded against the user is NOT the scheme name: it comes from
+        // SignInManager.ConfigureExternalAuthenticationProperties, which both start endpoints call
+        // with ExternalLoginProviders.Google. That is what keeps every existing AspNetUserLogins
+        // row keyed "Google" valid after the split.
+        void ConfigureGoogle(GoogleOptions options, string callbackPath)
         {
             options.ClientId = googleClientId;
             options.ClientSecret = googleClientSecret;
             options.SignInScheme = IdentityConstants.ExternalScheme;
             options.SaveTokens = true;
-            options.CallbackPath = "/signin-google-mobile";
+            options.CallbackPath = callbackPath;
+
+            // Always, not the SameAsRequest default. The correlation cookie is SameSite=None, and a
+            // SameSite=None cookie without Secure is dropped by every current browser - so if
+            // X-Forwarded-Proto ever fails to arrive, sign-in breaks for everyone with exactly the
+            // "oauth state was missing or invalid" error this handler now reports.
+            options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+        }
+
+        authenticationBuilder.AddGoogle(GoogleAuthSchemes.Mobile, options =>
+        {
+            ConfigureGoogle(options, GoogleAuthSchemes.MobileCallbackPath);
+
+            options.Events.OnRemoteFailure = context =>
+            {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("MusicSalesApp.Authentication.Google");
+
+                // Warning, not Error: an expired correlation cookie or a re-opened callback URL is
+                // routine and user-triggered. At Error this emailed the admin on 2026-09-05.
+                logger.LogWarning(context.Failure, "Google sign-in could not be completed (mobile).");
+
+                // Back through the deep link, so WebAuthenticator in the app closes with an error
+                // instead of stranding the visitor on a web page it cannot use. Properties is null
+                // when the state itself failed to unprotect, which is why the callback is rebuilt
+                // from configuration rather than read from the request.
+                var deepLink = builder.Configuration[AppSettingKeys.MobileExternalAuthCallbackUrl]
+                    ?? "streamtunes://auth";
+
+                context.Response.Redirect(QueryHelpers.AddQueryString(
+                    deepLink,
+                    MobileExternalAuthQueryKeys.Error,
+                    "Google sign-in could not be completed. Please try again."));
+                context.HandleResponse();
+                return Task.CompletedTask;
+            };
+        });
+
+        authenticationBuilder.AddGoogle(GoogleAuthSchemes.Web, options =>
+        {
+            ConfigureGoogle(options, GoogleAuthSchemes.WebCallbackPath);
+
+            options.Events.OnRemoteFailure = context =>
+            {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("MusicSalesApp.Authentication.Google");
+
+                logger.LogWarning(context.Failure, "Google sign-in could not be completed (web).");
+
+                context.Response.Redirect(QueryHelpers.AddQueryString(
+                    AppPageRoutes.Login,
+                    ExternalAuthFormFields.Error,
+                    "Your Google sign-in could not be completed. It may have taken too long. Please try again."));
+                context.HandleResponse();
+                return Task.CompletedTask;
+            };
         });
     }
 
@@ -451,6 +516,11 @@ try
     
     // Register TaxBanditsService with HttpClient
     builder.Services.AddHttpClient<ITaxBanditsService, TaxBanditsService>();
+
+    // Shared by CreatorController and the /submittaxform page. The page cannot reach the endpoint
+    // over HTTP: it renders InteractiveServer, so its circuit has no HttpContext to forward the
+    // auth cookie from, and every self-call came back 401.
+    builder.Services.AddScoped<ITaxFormTokenService, TaxFormTokenService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>

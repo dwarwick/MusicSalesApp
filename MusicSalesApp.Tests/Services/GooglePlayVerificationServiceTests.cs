@@ -1,3 +1,5 @@
+using System.Net;
+using Google;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Tests.Services;
@@ -70,5 +72,54 @@ public class GooglePlayVerificationServiceTests
             "The caller does not have permission.");
 
         Assert.That(result, Is.EqualTo("Google Play API access was denied. Check the service account permissions in Play Console."));
+    }
+
+    [Test]
+    public void IsPurchaseNoLongerAvailable_IsTrue_ForGone()
+    {
+        // 410 with reason subscriptionPurchaseNoLongerAvailable is Google answering "that
+        // subscription lapsed so long ago I no longer keep it" - an answer, not an outage.
+        var gone = new GoogleApiException("androidpublisher", "expired for too long")
+        {
+            HttpStatusCode = HttpStatusCode.Gone
+        };
+
+        Assert.That(GooglePlayVerificationService.IsPurchaseNoLongerAvailable(gone), Is.True);
+    }
+
+    [Test]
+    public void IsPurchaseNoLongerAvailable_IsFalse_ForFailuresThatMustStayVisible()
+    {
+        // The point of matching only Gone. A revoked service account or a disabled API is a real
+        // outage that has to keep reaching the admin, and NotFound has its own handler already.
+        Assert.Multiple(() =>
+        {
+            foreach (var status in new[]
+                     {
+                         HttpStatusCode.NotFound,
+                         HttpStatusCode.Forbidden,
+                         HttpStatusCode.Unauthorized,
+                         HttpStatusCode.BadRequest,
+                         HttpStatusCode.InternalServerError,
+                         HttpStatusCode.ServiceUnavailable
+                     })
+            {
+                var exception = new GoogleApiException("androidpublisher", status.ToString())
+                {
+                    HttpStatusCode = status
+                };
+
+                Assert.That(
+                    GooglePlayVerificationService.IsPurchaseNoLongerAvailable(exception),
+                    Is.False,
+                    $"{status} must not be treated as a lapsed purchase");
+            }
+        });
+    }
+
+    [Test]
+    public void IsPurchaseNoLongerAvailable_IsFalse_ForNull()
+    {
+        Assert.That(GooglePlayVerificationService.IsPurchaseNoLongerAvailable(null), Is.False);
     }
 }
