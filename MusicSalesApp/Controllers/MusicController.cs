@@ -791,6 +791,12 @@ namespace MusicSalesApp.Controllers
                 await _reportedSongService.ReportSongAsync(user.Id, songMetadataId, request.Reason);
                 return Ok(new { message = "Report submitted successfully" });
             }
+            // Before the catch-all below, which answers 404: a self-report is a refusal, and the
+            // client has to be able to tell "we won't" from "it isn't there".
+            catch (SelfReportNotAllowedException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
             catch (InvalidOperationException ex) when (ex.Message.Contains("already reported"))
             {
                 return Conflict(new { error = ex.Message });

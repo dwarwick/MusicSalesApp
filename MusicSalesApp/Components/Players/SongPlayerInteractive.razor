@@ -140,7 +140,7 @@ else
                         <FollowArtistButton CreatorPersonaId="@(_isCreatorOfSong ? 0 : GetPersona()?.Id ?? 0)"
                                             PersonaName="@GetArtistDisplayName()"
                                             SourceSongMetadataId="GetSongMetadataId()" />
-                        <ReportButton SongMetadataId="GetSongMetadataId()" />
+                        <ReportButton SongMetadataId="GetSongMetadataId()" IsOwnSong="_isCreatorOfSong" />
                         @if (CanShowTipButton())
                         {
                             <button class="tip-heart-button" @onclick="ShowTipDialog" title="Tip Creator">

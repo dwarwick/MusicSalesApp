@@ -1,12 +1,17 @@
 @inherits ReportButtonModel
 
+@* No flag on your own music. The server refuses a self-report, so a button here could only ever
+   produce an error where there should not have been a control in the first place. *@
 <AuthorizeView Roles="User">
     <Authorized>
-        <SfButton CssClass="report-button" OnClick="ShowReportDialog" title="Report this song">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="action-icon">
-                <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6z"/>
-            </svg>
-        </SfButton>
+        @if (!IsOwnSong)
+        {
+            <SfButton CssClass="report-button" OnClick="ShowReportDialog" title="Report this song">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                    <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6z"/>
+                </svg>
+            </SfButton>
+        }
     </Authorized>
 </AuthorizeView>
 

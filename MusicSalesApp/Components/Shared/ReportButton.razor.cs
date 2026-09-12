@@ -1,6 +1,7 @@
 #nullable enable
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Services;
 using Syncfusion.Blazor.Popups;
 
 namespace MusicSalesApp.Components.Shared;
@@ -9,6 +10,19 @@ public partial class ReportButtonModel : BlazorBase
 {
     [Microsoft.AspNetCore.Components.Parameter]
     public int SongMetadataId { get; set; }
+
+    /// <summary>
+    /// Whether the song belongs to the person looking at it. When true the button is not rendered:
+    /// the server refuses a self-report either way, so offering it would only produce an error
+    /// message where there should not have been a control.
+    /// </summary>
+    /// <remarks>
+    /// Passed in rather than worked out here. Each surface already knows - the library from the
+    /// creator-user-id map it builds for the stream guard, the player from the auth context it
+    /// loads once - and asking again per card would be a query per row.
+    /// </remarks>
+    [Microsoft.AspNetCore.Components.Parameter]
+    public bool IsOwnSong { get; set; }
 
     protected SfDialog _reportDialog = default!;
     protected bool _isSubmitting;
@@ -43,6 +57,12 @@ public partial class ReportButtonModel : BlazorBase
 
             await ReportedSongService.ReportSongAsync(userId.Value, SongMetadataId, reason);
             _submitted = true;
+        }
+        catch (SelfReportNotAllowedException)
+        {
+            // The button is hidden on your own songs, so this is only reachable from a page that
+            // was already open when the song changed hands. Saying so beats a generic failure.
+            _errorMessage = "You cannot report your own song.";
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("already reported"))
         {
