@@ -9,6 +9,25 @@
 
 <h3>Reported Songs</h3>
 
+@* The two buttons used to read "Accept" and "Reject", which is ambiguous the moment you stop and
+   think about it: you are accepting the *report*, not the song, so Accept was the harsher outcome.
+   The labels now name the report, and the note and the confirm dialogs say in plain words what
+   each decision does. *@
+<p class="text-muted">
+    Songs a listener has reported for breaking the rules.
+    <strong>Uphold report</strong> means you agree the song is in violation: the song is disabled,
+    removed from every playlist, and the creator is emailed.
+    <strong>Dismiss report</strong> means you reviewed it and the song is fine: nothing about the
+    song changes, and the creator is emailed to say so.
+    Either way the admin address is notified, every other report of the same thing about that song
+    is closed with it, and a decision can be reversed later if the creator appeals.
+</p>
+
+@if (!string.IsNullOrEmpty(_statusMessage))
+{
+    <div class="alert alert-info" role="status">@_statusMessage</div>
+}
+
 @if (_loading)
 {
     <div class="text-center my-5">
@@ -50,29 +69,54 @@ else
                     }
                 </Template>
             </GridColumn>
-            <GridColumn Field="@nameof(ReportedSongViewModel.ResolutionStatus)" HeaderText="Resolution" Width="130">
+            <GridColumn Field="@nameof(ReportedSongViewModel.ResolutionStatus)" HeaderText="Your Decision" Width="200">
                 <Template>
                     @{
                         var item = (context as ReportedSongViewModel)!;
                         var badgeClass = item.ResolutionStatus switch
                         {
-                            "Accepted" => "bg-danger",
-                            "Rejected" => "bg-info",
+                            ReportDecisions.Upheld => "bg-danger",
+                            ReportDecisions.Dismissed => "bg-info",
                             _ => "bg-warning text-dark"
                         };
-                        <span class="badge @badgeClass">@item.ResolutionStatus</span>
+                        var badgeTitle = item.ResolutionStatus switch
+                        {
+                            ReportDecisions.Upheld => "You agreed the song is in violation, and it was disabled.",
+                            ReportDecisions.Dismissed => "You found nothing wrong with the song.",
+                            _ => "Not reviewed yet."
+                        };
+                        <span class="badge @badgeClass" title="@badgeTitle">@item.ResolutionStatus</span>
                     }
                 </Template>
             </GridColumn>
-            <GridColumn Field="@nameof(ReportedSongViewModel.ResolutionDateTime)" HeaderText="Resolved" Width="170" Format="yyyy-MM-dd HH:mm"></GridColumn>
-            <GridColumn HeaderText="Action" Width="160" AllowFiltering="false" AllowSorting="false">
+            <GridColumn Field="@nameof(ReportedSongViewModel.ResolutionDateTime)" HeaderText="Decided" Width="170" Format="yyyy-MM-dd HH:mm"></GridColumn>
+            <GridColumn HeaderText="Action" Width="260" AllowFiltering="false" AllowSorting="false">
                 <Template>
                     @{
                         var item = (context as ReportedSongViewModel)!;
-                        @if (item.ResolutionStatus == "Pending")
+                        @if (item.ResolutionStatus == ReportDecisions.Pending)
                         {
-                            <SfButton CssClass="e-btn e-small e-danger" OnClick="() => ResolveReport(item.Id, true)">Accept</SfButton>
-                            <SfButton CssClass="e-btn e-small e-info ms-1" OnClick="() => ResolveReport(item.Id, false)">Reject</SfButton>
+                            <SfButton CssClass="e-btn e-small e-danger"
+                                      Disabled="@(_busyReportId == item.Id)"
+                                      OnClick="() => PromptResolve(item, true)"
+                                      title="The song is in violation - disable it">
+                                Uphold report
+                            </SfButton>
+                            <SfButton CssClass="e-btn e-small e-info ms-1"
+                                      Disabled="@(_busyReportId == item.Id)"
+                                      OnClick="() => PromptResolve(item, false)"
+                                      title="The song is fine - leave it alone">
+                                Dismiss report
+                            </SfButton>
+                        }
+                        else
+                        {
+                            <SfButton CssClass="e-btn e-small"
+                                      Disabled="@(_busyReportId == item.Id)"
+                                      OnClick="() => PromptReverse(item)"
+                                      title="Change this decision - for an appeal that succeeds">
+                                Reverse decision
+                            </SfButton>
                         }
                     }
                 </Template>
@@ -80,3 +124,106 @@ else
         </GridColumns>
     </SfGrid>
 }
+
+@* Both decisions act on the song and mail the creator, so the one being taken is restated in full
+   before it is carried out - including the part that surprises people, which way round "uphold"
+   points. *@
+<SfDialog @bind-Visible="_showConfirmDialog" Width="480px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>
+            @(_pendingAccept ? "Uphold this report?" : "Dismiss this report?")
+        </Header>
+        <Content>
+            <p>
+                <strong>@_pendingSongTitle</strong>, reported for &ldquo;@_pendingReason&rdquo;.
+            </p>
+            @if (_pendingAccept)
+            {
+                <p>
+                    You <strong>agree the song is in violation</strong>. This will:
+                </p>
+                <ul>
+                    <li>Disable the song, so it can't be played on the site or in the apps</li>
+                    <li>Remove it from every listener's playlists</li>
+                    <li>Email the creator to tell them, and why</li>
+                    <li>Email the admin address</li>
+                    <li>Close every other report of <em>@_pendingReason</em> about this song</li>
+                </ul>
+            }
+            else
+            {
+                <p>
+                    You reviewed the report and the <strong>song is not in violation</strong>. This will:
+                </p>
+                <ul>
+                    <li>Leave the song exactly as it is</li>
+                    <li>Email the creator to say no action was taken</li>
+                    <li>Email the admin address</li>
+                    <li>Close every other report of <em>@_pendingReason</em> about this song</li>
+                </ul>
+            }
+            <p class="text-muted">
+                Reports of anything else about this song stay open &mdash; they are a different
+                claim and get their own decision. You can reverse this later if the creator appeals.
+            </p>
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="ConfirmResolveAsync" CssClass="@(_pendingAccept ? "e-btn e-small e-danger" : "e-btn e-small e-info")">
+                @(_pendingAccept ? "Uphold report" : "Dismiss report")
+            </SfButton>
+            <SfButton OnClick="CancelResolve" CssClass="e-btn e-small ms-1">Cancel</SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+@* Reversing flips the decision and undoes what it did to the song. The reason is required because
+   it is the whole of what the creator is told - a song reappearing with no explanation reads to
+   them as a fault in the site. *@
+<SfDialog @bind-Visible="_showReverseDialog" Width="480px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Reverse this decision?</Header>
+        <Content>
+            <p>
+                <strong>@_pendingSongTitle</strong>, reported for &ldquo;@_pendingReason&rdquo;.
+            </p>
+            @if (_reverseWasUpheld)
+            {
+                <p>
+                    The report was <strong>upheld</strong>. Reversing it records that the song is
+                    <strong>not</strong> in violation, re-enables it so listeners can play it again,
+                    and emails the creator. Use this when an appeal succeeds.
+                </p>
+                <p class="text-muted">
+                    Listeners who had the song in a playlist lost it when it was disabled; re-enabling
+                    does not put it back for them.
+                </p>
+            }
+            else
+            {
+                <p>
+                    The report was <strong>dismissed</strong>. Reversing it records that the song
+                    <strong>is</strong> in violation, disables it, removes it from every playlist,
+                    and emails the creator.
+                </p>
+            }
+            <div class="mb-2">
+                <label class="form-label" for="reverse-reason">Reason shown to the creator</label>
+                <SfTextBox @bind-Value="_reverseReason"
+                           ID="reverse-reason"
+                           Multiline="true"
+                           Placeholder="e.g. The creator provided a valid licence for the sample."
+                           HtmlAttributes="@(new Dictionary<string, object> { { "maxlength", ReverseReasonMaxLength } })" />
+            </div>
+            @if (!string.IsNullOrEmpty(_reverseValidationError))
+            {
+                <div class="alert alert-danger py-2" role="alert">@_reverseValidationError</div>
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="ConfirmReverseAsync" CssClass="@(_reverseWasUpheld ? "e-btn e-small e-info" : "e-btn e-small e-danger")">
+                @(_reverseWasUpheld ? "Reverse - song is fine" : "Reverse - song is in violation")
+            </SfButton>
+            <SfButton OnClick="CancelReverse" CssClass="e-btn e-small ms-1">Cancel</SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
